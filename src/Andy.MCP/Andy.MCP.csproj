@@ -1,0 +1,28 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <PackageId>Andy.Model</PackageId>
+    <Title>Andy Model</Title>
+    <Authors>Rivoli.AI</Authors>
+    <Company>Rivoli.AI</Company>
+    <Copyright>Copyright © 2026 Rivoli AI</Copyright>
+    <PackageProjectUrl>https://github.com/rivoli-ai/andy-mcp</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/rivoli-ai/andy-mcp</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <Description>Andy.MCP — model context protocol library</Description>
+    <PackageIcon>andy_mcp_icon.png</PackageIcon>
+    <PackageTags>ai;model context protocol;conversation;context;tools</PackageTags>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <PackageLicenseExpression>Apache-2.0</PackageLicenseExpression>
+    <PackageRequireLicenseAcceptance>false</PackageRequireLicenseAcceptance>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="../../assets/andy_mcp_icon.png" Pack="true" PackagePath="/" />
+    <None Include="../../README.md" Pack="true" PackagePath="/" />
+  </ItemGroup>
+
+</Project>
