@@ -4,8 +4,8 @@
     <TargetFramework>net8.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
-    <PackageId>Andy.Model</PackageId>
-    <Title>Andy Model</Title>
+    <PackageId>Andy.MCP</PackageId>
+    <Title>Andy MCP</Title>
     <Authors>Rivoli.AI</Authors>
     <Company>Rivoli.AI</Company>
     <Copyright>Copyright © 2026 Rivoli AI</Copyright>
