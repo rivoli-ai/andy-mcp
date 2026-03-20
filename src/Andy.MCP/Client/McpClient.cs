@@ -15,6 +15,41 @@ public sealed record McpClientOptions
     public Implementation ClientInfo { get; init; } = new("Andy.MCP", "0.1.0");
     public ClientCapabilities Capabilities { get; init; } = new();
     public TimeSpan RequestTimeout { get; init; } = TimeSpan.FromSeconds(30);
+
+    /// <summary>
+    /// Root provider for the roots capability. If set, roots capability is declared.
+    /// </summary>
+    public IRootProvider? RootProvider { get; init; }
+
+    /// <summary>
+    /// Sampling handler for the sampling capability. If set, sampling capability is declared.
+    /// </summary>
+    public ISamplingHandler? SamplingHandler { get; init; }
+
+    /// <summary>
+    /// Elicitation handler for the elicitation capability. If set, elicitation capability is declared.
+    /// </summary>
+    public IElicitationHandler? ElicitationHandler { get; init; }
+
+    /// <summary>
+    /// Build capabilities based on configured handlers.
+    /// </summary>
+    internal ClientCapabilities BuildCapabilities()
+    {
+        return new ClientCapabilities
+        {
+            Roots = RootProvider is not null
+                ? new RootsCapability { ListChanged = true }
+                : Capabilities.Roots,
+            Sampling = SamplingHandler is not null
+                ? new EmptyCapability()
+                : Capabilities.Sampling,
+            Elicitation = ElicitationHandler is not null
+                ? new EmptyCapability()
+                : Capabilities.Elicitation,
+            Experimental = Capabilities.Experimental
+        };
+    }
 }
 
 /// <summary>
@@ -89,13 +124,23 @@ public sealed class McpClient : IAsyncDisposable
         // Start message processing loop
         _messageLoop = Task.Run(() => MessageLoopAsync(_cts.Token), _cts.Token);
 
+        // Wire up root provider change notifications
+        if (_options.RootProvider is not null)
+        {
+            _options.RootProvider.RootsChanged += async (_, _) =>
+            {
+                try { await SendNotificationAsync(McpMethods.NotificationsRootsListChanged); }
+                catch (Exception ex) { _logger.LogWarning(ex, "Failed to send roots/list_changed"); }
+            };
+        }
+
         // Send initialize request
         var initResult = await SendRequestAsync<InitializeResult>(
             McpMethods.Initialize,
             new InitializeParams
             {
                 ProtocolVersion = McpSession.LatestProtocolVersion,
-                Capabilities = _options.Capabilities,
+                Capabilities = _options.BuildCapabilities(),
                 ClientInfo = _options.ClientInfo
             },
             cancellationToken);
@@ -361,14 +406,54 @@ public sealed class McpClient : IAsyncDisposable
 
     private void HandleServerRequest(JsonRpcRequest request)
     {
-        // Server-initiated requests (sampling, elicitation, roots)
-        // For now, respond with METHOD_NOT_FOUND
         _ = Task.Run(async () =>
         {
-            var response = JsonRpcResponse.Failure(request.Id,
-                JsonRpcError.MethodNotFound($"Client does not handle '{request.Method}'"));
-            await _transport.SendAsync(response);
+            try
+            {
+                var response = await DispatchServerRequestAsync(request);
+                await _transport.SendAsync(response);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Error handling server request '{Method}'", request.Method);
+                await _transport.SendAsync(JsonRpcResponse.Failure(request.Id,
+                    JsonRpcError.InternalError(ex.Message)));
+            }
         });
+    }
+
+    private async Task<JsonRpcResponse> DispatchServerRequestAsync(JsonRpcRequest request)
+    {
+        switch (request.Method)
+        {
+            case McpMethods.RootsList:
+                if (_options.RootProvider is null)
+                    return JsonRpcResponse.Failure(request.Id, JsonRpcError.MethodNotFound("Roots not supported"));
+
+                var roots = _options.RootProvider.GetRoots();
+                return JsonRpcResponse.Success(request.Id,
+                    McpJsonDefaults.ToElement(new ListRootsResult { Roots = roots }));
+
+            case McpMethods.SamplingCreateMessage:
+                if (_options.SamplingHandler is null)
+                    return JsonRpcResponse.Failure(request.Id, JsonRpcError.MethodNotFound("Sampling not supported"));
+
+                var samplingReq = request.GetParams<CreateMessageRequest>()!;
+                var samplingResult = await _options.SamplingHandler.HandleAsync(samplingReq, _cts?.Token ?? CancellationToken.None);
+                return JsonRpcResponse.Success(request.Id, McpJsonDefaults.ToElement(samplingResult));
+
+            case McpMethods.ElicitationCreate:
+                if (_options.ElicitationHandler is null)
+                    return JsonRpcResponse.Failure(request.Id, JsonRpcError.MethodNotFound("Elicitation not supported"));
+
+                var elicitReq = request.GetParams<ElicitRequest>()!;
+                var elicitResult = await _options.ElicitationHandler.HandleAsync(elicitReq, _cts?.Token ?? CancellationToken.None);
+                return JsonRpcResponse.Success(request.Id, McpJsonDefaults.ToElement(elicitResult));
+
+            default:
+                return JsonRpcResponse.Failure(request.Id,
+                    JsonRpcError.MethodNotFound($"Client does not handle '{request.Method}'"));
+        }
     }
 
     #endregion
