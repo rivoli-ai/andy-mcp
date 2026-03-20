@@ -278,6 +278,9 @@ public sealed class McpClient : IAsyncDisposable
     private async Task<T> SendRequestAsync<T>(string method, object? @params, CancellationToken ct)
     {
         var id = NextId();
+        using var activity = McpDiagnostics.StartClientRequest(
+            method, id, _session.RemoteInfo?.Name, _session.ProtocolVersion);
+
         var request = new JsonRpcRequest
         {
             Id = id,
@@ -293,13 +296,22 @@ public sealed class McpClient : IAsyncDisposable
 
             if (response.IsError)
             {
-                throw new McpException(response.Error!.Code, response.Error.Message, response.Error.Data);
+                var ex = new McpException(response.Error!.Code, response.Error.Message, response.Error.Data);
+                McpDiagnostics.SetError(activity, ex, response.Error.Code);
+                throw ex;
             }
+
+            McpDiagnostics.SetSuccess(activity);
 
             if (response.Result is null)
                 return default!;
 
             return JsonSerializer.Deserialize<T>(response.Result.Value, McpJsonDefaults.Options)!;
+        }
+        catch (Exception ex) when (activity is not null && ex is not McpException)
+        {
+            McpDiagnostics.SetError(activity, ex);
+            throw;
         }
         finally
         {

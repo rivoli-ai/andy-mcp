@@ -167,9 +167,28 @@ public sealed class McpServer : IAsyncDisposable
 
     private async Task<JsonRpcResponse> HandleRequestAsync(JsonRpcRequest request, CancellationToken ct)
     {
+        using var activity = McpDiagnostics.StartServerRequest(request.Method, request.Id);
+
+        // Add feature-specific attributes
+        if (request.Method == McpMethods.ToolsCall)
+        {
+            var toolName = request.Params?.TryGetProperty("name", out var n) == true ? n.GetString() : null;
+            activity?.SetTag("mcp.tool.name", toolName);
+        }
+        else if (request.Method == McpMethods.ResourcesRead)
+        {
+            var uri = request.Params?.TryGetProperty("uri", out var u) == true ? u.GetString() : null;
+            activity?.SetTag("mcp.resource.uri", uri);
+        }
+        else if (request.Method == McpMethods.PromptsGet)
+        {
+            var name = request.Params?.TryGetProperty("name", out var pn) == true ? pn.GetString() : null;
+            activity?.SetTag("mcp.prompt.name", name);
+        }
+
         try
         {
-            return request.Method switch
+            var response = request.Method switch
             {
                 McpMethods.Initialize => HandleInitialize(request),
                 McpMethods.Ping => JsonRpcResponse.Success(request.Id),
@@ -187,13 +206,22 @@ public sealed class McpServer : IAsyncDisposable
                 _ => JsonRpcResponse.Failure(request.Id,
                     JsonRpcError.MethodNotFound($"Unknown method: '{request.Method}'"))
             };
+
+            if (response.IsError)
+                McpDiagnostics.SetError(activity, errorCode: response.Error?.Code);
+            else
+                McpDiagnostics.SetSuccess(activity);
+
+            return response;
         }
         catch (McpPaginationException ex)
         {
+            McpDiagnostics.SetError(activity, ex);
             return JsonRpcResponse.Failure(request.Id, JsonRpcError.InvalidParams(ex.Message));
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
+            McpDiagnostics.SetError(activity, ex);
             _logger.LogError(ex, "Error handling request {Method}", request.Method);
             return JsonRpcResponse.Failure(request.Id, JsonRpcError.InternalError(ex.Message));
         }
