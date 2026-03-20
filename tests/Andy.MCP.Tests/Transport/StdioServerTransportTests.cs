@@ -178,16 +178,17 @@ public class StdioServerTransportTests
     [Fact]
     public async Task IsConnected_ReflectsState()
     {
-        using var input = new StringReader("");
+        var blockingReader = new BlockingReader();
         using var output = new StringWriter();
 
-        await using var transport = new StdioServerTransport(input, output);
+        await using var transport = new StdioServerTransport(blockingReader, output);
 
         Assert.False(transport.IsConnected);
         await transport.StartAsync();
         Assert.True(transport.IsConnected);
 
-        // Wait for stdin EOF to close
+        // Release stdin (EOF) → should disconnect
+        blockingReader.Release();
         await Task.Delay(100);
         Assert.False(transport.IsConnected);
     }
