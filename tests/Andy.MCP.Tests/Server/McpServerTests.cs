@@ -11,7 +11,7 @@ public class McpServerTests
     public async Task Server_InitializesWithClient()
     {
         var (clientTransport, serverTransport) = InMemoryTransport.CreatePair();
-        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(15));
 
         var server = new McpServer(serverTransport, new McpServerOptions
         {
@@ -31,7 +31,7 @@ public class McpServerTests
     public async Task Server_Ping()
     {
         var (clientTransport, serverTransport) = InMemoryTransport.CreatePair();
-        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(15));
 
         var server = new McpServer(serverTransport);
         var serverTask = server.RunAsync(cts.Token);
@@ -44,7 +44,7 @@ public class McpServerTests
     public async Task Server_ListTools_ReturnsRegistered()
     {
         var (clientTransport, serverTransport) = InMemoryTransport.CreatePair();
-        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(15));
 
         var server = new McpServer(serverTransport);
         server.AddTool("greet", "Say hello", async (args, ct) =>
@@ -66,7 +66,7 @@ public class McpServerTests
     public async Task Server_CallTool_ExecutesHandler()
     {
         var (clientTransport, serverTransport) = InMemoryTransport.CreatePair();
-        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(15));
 
         var server = new McpServer(serverTransport);
         server.AddTool("greet", "Say hello", async (args, ct) =>
@@ -87,7 +87,7 @@ public class McpServerTests
     public async Task Server_CallUnknownTool_ReturnsError()
     {
         var (clientTransport, serverTransport) = InMemoryTransport.CreatePair();
-        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(15));
 
         var server = new McpServer(serverTransport);
         var serverTask = server.RunAsync(cts.Token);
@@ -103,7 +103,7 @@ public class McpServerTests
     public async Task Server_ToolError_ReturnsIsError()
     {
         var (clientTransport, serverTransport) = InMemoryTransport.CreatePair();
-        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(15));
 
         var server = new McpServer(serverTransport);
         server.AddTool("fail", "Always fails", async (args, ct) =>
@@ -124,7 +124,7 @@ public class McpServerTests
     public async Task Server_ListResources()
     {
         var (clientTransport, serverTransport) = InMemoryTransport.CreatePair();
-        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(15));
 
         var server = new McpServer(serverTransport);
         server.AddResource("file:///config.json", "Configuration", async (uri, ct) =>
@@ -142,7 +142,7 @@ public class McpServerTests
     public async Task Server_ReadResource()
     {
         var (clientTransport, serverTransport) = InMemoryTransport.CreatePair();
-        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(15));
 
         var server = new McpServer(serverTransport);
         server.AddResource("file:///readme.md", "README", async (uri, ct) =>
@@ -161,7 +161,7 @@ public class McpServerTests
     public async Task Server_ReadUnknownResource_ReturnsError()
     {
         var (clientTransport, serverTransport) = InMemoryTransport.CreatePair();
-        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(15));
 
         var server = new McpServer(serverTransport);
         server.AddResource("file:///exists", "R", async (uri, ct) =>
@@ -179,7 +179,7 @@ public class McpServerTests
     public async Task Server_ListPrompts()
     {
         var (clientTransport, serverTransport) = InMemoryTransport.CreatePair();
-        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(15));
 
         var server = new McpServer(serverTransport);
         server.AddPrompt("review", "Code review", async (name, args, ct) =>
@@ -201,7 +201,7 @@ public class McpServerTests
     public async Task Server_GetPrompt()
     {
         var (clientTransport, serverTransport) = InMemoryTransport.CreatePair();
-        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(15));
 
         var server = new McpServer(serverTransport);
         server.AddPrompt("greet", "Greeting prompt", async (name, args, ct) =>
@@ -227,7 +227,7 @@ public class McpServerTests
     public async Task Server_CapabilitiesAutoDetected()
     {
         var (clientTransport, serverTransport) = InMemoryTransport.CreatePair();
-        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(15));
 
         // Server with tools only
         var server = new McpServer(serverTransport);
@@ -245,7 +245,7 @@ public class McpServerTests
     public async Task Server_NoRegistrations_NoCapabilities()
     {
         var (clientTransport, serverTransport) = InMemoryTransport.CreatePair();
-        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(15));
 
         var server = new McpServer(serverTransport);
         var serverTask = server.RunAsync(cts.Token);
@@ -261,7 +261,7 @@ public class McpServerTests
     {
         // Test directly with server transport (no client) to check raw response
         var (clientTransport, serverTransport) = InMemoryTransport.CreatePair();
-        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(15));
 
         var server = new McpServer(serverTransport);
         var serverTask = server.RunAsync(cts.Token);

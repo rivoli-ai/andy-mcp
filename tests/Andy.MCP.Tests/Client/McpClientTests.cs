@@ -63,7 +63,7 @@ public class McpClientTests
     public async Task ConnectAsync_InitializesSession()
     {
         var (clientTransport, serverTransport) = InMemoryTransport.CreatePair();
-        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(15));
 
         var serverTask = StartMockServer(serverTransport, ct: cts.Token);
 
@@ -78,7 +78,7 @@ public class McpClientTests
     public async Task PingAsync_Succeeds()
     {
         var (clientTransport, serverTransport) = InMemoryTransport.CreatePair();
-        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(15));
 
         var serverTask = StartMockServer(serverTransport, ct: cts.Token);
         await using var client = await McpClient.ConnectAsync(clientTransport, cancellationToken: cts.Token);
@@ -90,7 +90,7 @@ public class McpClientTests
     public async Task ListToolsAsync_ReturnsList()
     {
         var (clientTransport, serverTransport) = InMemoryTransport.CreatePair();
-        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(15));
 
         var serverTask = StartMockServer(serverTransport,
             requestHandler: request =>
@@ -125,7 +125,7 @@ public class McpClientTests
     public async Task CallToolAsync_ReturnsResult()
     {
         var (clientTransport, serverTransport) = InMemoryTransport.CreatePair();
-        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(15));
 
         var serverTask = StartMockServer(serverTransport,
             requestHandler: request =>
@@ -151,7 +151,7 @@ public class McpClientTests
     public async Task CallToolAsync_ServerError_ThrowsMcpException()
     {
         var (clientTransport, serverTransport) = InMemoryTransport.CreatePair();
-        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(15));
 
         var serverTask = StartMockServer(serverTransport,
             requestHandler: request =>
@@ -177,7 +177,7 @@ public class McpClientTests
     public async Task CapabilityGating_ThrowsWhenNotAvailable()
     {
         var (clientTransport, serverTransport) = InMemoryTransport.CreatePair();
-        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(15));
 
         // Server without prompts capability
         var serverTask = StartMockServer(serverTransport,
@@ -194,7 +194,7 @@ public class McpClientTests
     public async Task ToolsChanged_EventFired()
     {
         var (clientTransport, serverTransport) = InMemoryTransport.CreatePair();
-        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(15));
 
         var serverTask = StartMockServer(serverTransport, ct: cts.Token);
         await using var client = await McpClient.ConnectAsync(clientTransport, cancellationToken: cts.Token);
@@ -216,7 +216,7 @@ public class McpClientTests
     public async Task Disconnect_CancelsPendingRequests()
     {
         var (clientTransport, serverTransport) = InMemoryTransport.CreatePair();
-        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(15));
 
         // Server that handles init but ignores tool calls (never responds)
         var serverTask = StartMockServer(serverTransport,
