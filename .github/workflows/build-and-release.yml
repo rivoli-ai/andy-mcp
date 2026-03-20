@@ -52,6 +52,12 @@ jobs:
           --output ./artifacts \
           -p:PackageVersion=$VERSION
 
+        dotnet pack src/Andy.MCP.AspNetCore/Andy.MCP.AspNetCore.csproj \
+          --configuration Release \
+          --no-build \
+          --output ./artifacts \
+          -p:PackageVersion=$VERSION
+
     - name: Upload artifacts
       uses: actions/upload-artifact@v4
       with:

@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <PackageId>Andy.MCP.AspNetCore</PackageId>
+    <Title>Andy MCP ASP.NET Core</Title>
+    <Description>ASP.NET Core Streamable HTTP server transport for Andy.MCP</Description>
+    <Authors>Rivoli.AI</Authors>
+    <PackageLicenseExpression>Apache-2.0</PackageLicenseExpression>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+    <ProjectReference Include="..\Andy.MCP\Andy.MCP.csproj" />
+  </ItemGroup>
+
+</Project>

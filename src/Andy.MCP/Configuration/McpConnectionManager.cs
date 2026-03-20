@@ -172,7 +172,10 @@ public sealed class McpConnectionManager : IMcpConnectionManager
                 WorkingDirectory = config.WorkingDirectory,
                 EnvironmentVariables = config.Environment
             }),
-            "http" => throw new NotSupportedException($"HTTP transport not yet implemented. Server: '{config.Name}'"),
+            "http" => new StreamableHttpClientTransport(new StreamableHttpClientTransportOptions
+            {
+                Endpoint = new Uri(config.Url ?? throw new InvalidOperationException($"Server '{config.Name}': 'Url' is required for http transport.")),
+            }),
             "gateway" => throw new NotSupportedException($"Gateway transport not yet implemented. Server: '{config.Name}'"),
             _ => throw new InvalidOperationException($"Unknown transport type '{config.Transport}' for server '{config.Name}'.")
         };

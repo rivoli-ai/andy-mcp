@@ -1,4 +1,4 @@
-
+﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 17
 VisualStudioVersion = 17.0.31903.59
@@ -14,6 +14,8 @@ EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "examples", "examples", "{918920FB-00BB-4260-A96D-C33A95144F04}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Andy.MCP.Examples", "examples\Andy.MCP.Examples\Andy.MCP.Examples.csproj", "{A98D04E0-8181-4194-B1DF-58C96BB9AB7B}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Andy.MCP.AspNetCore", "src\Andy.MCP.AspNetCore\Andy.MCP.AspNetCore.csproj", "{9E22884F-A94A-4869-9457-21CEE0401F28}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -36,10 +38,15 @@ Global
 		{A98D04E0-8181-4194-B1DF-58C96BB9AB7B}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{A98D04E0-8181-4194-B1DF-58C96BB9AB7B}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{A98D04E0-8181-4194-B1DF-58C96BB9AB7B}.Release|Any CPU.Build.0 = Release|Any CPU
+		{9E22884F-A94A-4869-9457-21CEE0401F28}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{9E22884F-A94A-4869-9457-21CEE0401F28}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{9E22884F-A94A-4869-9457-21CEE0401F28}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{9E22884F-A94A-4869-9457-21CEE0401F28}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(NestedProjects) = preSolution
 		{68C3543C-D450-4EA9-B9EA-7516D15C77F4} = {2838767D-20F6-4707-B028-C06C3C46F98C}
 		{89D40D25-11AC-4DF0-9DF5-F376195FF9AB} = {6782F2AB-E1AD-4704-8C5E-BC2D1B698701}
 		{A98D04E0-8181-4194-B1DF-58C96BB9AB7B} = {918920FB-00BB-4260-A96D-C33A95144F04}
+		{9E22884F-A94A-4869-9457-21CEE0401F28} = {2838767D-20F6-4707-B028-C06C3C46F98C}
 	EndGlobalSection
 EndGlobal
