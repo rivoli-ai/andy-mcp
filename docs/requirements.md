@@ -132,8 +132,8 @@ https://modelcontextprotocol.io/specification/2025-06-18
 
 | Feature | Story | Status |
 |---------|-------|--------|
-| OpenTelemetry distributed tracing | #36 | Open |
-| Attribute-based tool/resource/prompt registration | #37 | Open |
+| OpenTelemetry distributed tracing | #36 | Implemented |
+| Attribute-based tool/resource/prompt registration | #37 | Implemented |
 | Andy Engine IToolRegistry/IToolExecutor adapters | #19 | Open |
 | Andy MCP Gateway discovery and proxy | #20 | Open |
 | Andy Containers MCP server deployment | #21 | Open |

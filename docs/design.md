@@ -142,7 +142,7 @@ The server handles this by:
 - `McpSession`: State transitions via `Interlocked.CompareExchange`
 - Transports: `Channel<T>` for write queuing, ensuring message ordering
 
-## Planned: OpenTelemetry (#36)
+## OpenTelemetry (#36)
 
 Built-in distributed tracing via `System.Diagnostics.ActivitySource`:
 - `ActivitySource` named `"Andy.MCP"` — zero cost when no listener
@@ -151,7 +151,7 @@ Built-in distributed tracing via `System.Diagnostics.ActivitySource`:
 - Error status on exceptions and protocol errors
 - No hard OpenTelemetry SDK dependency — consumers opt in with `.AddSource("Andy.MCP")`
 
-## Planned: Attribute-Based Registration (#37)
+## Attribute-Based Registration (#37)
 
 Declarative registration via `[McpTool]`, `[McpResource]`, `[McpPrompt]` attributes:
 - Auto-generates JSON Schema from method parameters (types, nullability, defaults)

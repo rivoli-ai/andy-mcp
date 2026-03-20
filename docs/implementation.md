@@ -58,7 +58,7 @@ andy-mcp/
 │       ├── StreamableHttpServerTransport.cs  # HTTP handler + sessions
 │       └── McpEndpointExtensions.cs     # MapMcp() endpoint mapping
 ├── tests/
-│   └── Andy.MCP.Tests/                   # 416 tests
+│   └── Andy.MCP.Tests/                   # 450 tests
 │       ├── Protocol/                     # Type serialization, parsing
 │       ├── Transport/                    # SSE, stdio, HTTP transport
 │       ├── Client/                       # McpClient, client features
@@ -91,14 +91,13 @@ andy-mcp/
 | Phase 4: Client Features | #12 Roots, #13 Sampling, #14 Elicitation | 17 |
 | Phase 5: Security & Auth | #16 OAuth, #17 DRC, #18 Security | 49 |
 | Conformance & Examples | #32 Everything Server, #33 Conformance, #34 Examples, #35 Protocol completeness | 56 |
-| **Total** | **24 stories** | **416 tests** |
+| OpenTelemetry & Attributes | #36 Tracing, #37 Attribute registration | 34 |
+| **Total** | **33 stories closed** | **450 tests** |
 
 ### Open
 
 | Story | Phase | Description |
 |-------|-------|-------------|
-| #36 | Core | OpenTelemetry distributed tracing |
-| #37 | Server | Attribute-based tool/resource/prompt registration |
 | #19 | Phase 6 | Andy Engine IToolRegistry/IToolExecutor adapters |
 | #20 | Phase 6 | Andy MCP Gateway discovery, proxy, health |
 | #21 | Phase 6 | Andy Containers MCP server deployment |
@@ -146,6 +145,14 @@ andy-mcp/
 
 `McpClientOptions` (config), `ImplementationConfig`, `McpServerConfig`, `ReconnectPolicyConfig`, `IMcpConnectionManager`, `McpConnectionManager`, `McpHostedService`, `ServiceCollectionExtensions`, `McpClientOptionsExtensions`
 
+### Diagnostics (1 type)
+
+`McpDiagnostics` (static `ActivitySource` named `"Andy.MCP"` for OpenTelemetry tracing)
+
+### Attribute Registration (5 types)
+
+`McpToolAttribute`, `McpParamAttribute`, `McpResourceAttribute`, `McpPromptAttribute`, `AttributeDiscovery` (static extension methods: `AddToolsFromType<T>()`, `AddToolsFromAssembly()`)
+
 ### ASP.NET Core Types (4 types)
 
 `StreamableHttpHandler`, `StreamableHttpSession`, `StreamableHttpServerOptions`, `McpEndpointExtensions`
@@ -179,6 +186,8 @@ andy-mcp/
 | `Configuration/McpConnectionManagerTests.cs` | Multi-server lifecycle | 10 |
 | `Configuration/ServiceCollectionExtensionsTests.cs` | DI registration | 4 |
 | `Conformance/ConformanceTests.cs` | End-to-end Everything Server | 33 |
+| `Protocol/McpDiagnosticsTests.cs` | OpenTelemetry tracing | 12 |
+| `Server/AttributeRegistrationTests.cs` | Attribute-based registration | 22 |
 
 ## Comparison with Official C# SDK
 
@@ -187,7 +196,7 @@ andy-mcp/
 | Protocol types | Complete | Complete (aligned via #35) |
 | Content types | 7 types | 7 types (matching) |
 | Transports | stdio, HTTP, SSE | stdio, HTTP, SSE |
-| Server API | DI + `[McpServerTool]` attributes | Fluent `AddTool()` API (attribute-based planned: #37) |
+| Server API | DI + `[McpServerTool]` attributes | Fluent `AddTool()` + `[McpTool]` attributes (#37) |
 | Client API | `McpClientFactory.CreateAsync()` | `McpClient.ConnectAsync()` |
 | Auth | OAuth samples | Full OAuth/DRC/PKCE/SSRF |
 | Testing | 800+ lines integration | 416 tests, Everything Server |
