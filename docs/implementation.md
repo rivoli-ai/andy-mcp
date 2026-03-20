@@ -93,13 +93,15 @@ andy-mcp/
 | Conformance & Examples | #32 Everything Server, #33 Conformance, #34 Examples, #35 Protocol completeness | 56 |
 | **Total** | **24 stories** | **416 tests** |
 
-### Open (Phase 6: Ecosystem Integration)
+### Open
 
-| Story | Description |
-|-------|-------------|
-| #19 | Andy Engine IToolRegistry/IToolExecutor adapters |
-| #20 | Andy MCP Gateway discovery, proxy, health |
-| #21 | Andy Containers MCP server deployment |
+| Story | Phase | Description |
+|-------|-------|-------------|
+| #36 | Core | OpenTelemetry distributed tracing |
+| #37 | Server | Attribute-based tool/resource/prompt registration |
+| #19 | Phase 6 | Andy Engine IToolRegistry/IToolExecutor adapters |
+| #20 | Phase 6 | Andy MCP Gateway discovery, proxy, health |
+| #21 | Phase 6 | Andy Containers MCP server deployment |
 
 ## NuGet Packages
 
@@ -185,13 +187,13 @@ andy-mcp/
 | Protocol types | Complete | Complete (aligned via #35) |
 | Content types | 7 types | 7 types (matching) |
 | Transports | stdio, HTTP, SSE | stdio, HTTP, SSE |
-| Server API | DI + `[McpServerTool]` attributes | Fluent `AddTool()` API |
+| Server API | DI + `[McpServerTool]` attributes | Fluent `AddTool()` API (attribute-based planned: #37) |
 | Client API | `McpClientFactory.CreateAsync()` | `McpClient.ConnectAsync()` |
 | Auth | OAuth samples | Full OAuth/DRC/PKCE/SSRF |
 | Testing | 800+ lines integration | 416 tests, Everything Server |
 | ASP.NET Core | Separate package | Separate package |
-| OpenTelemetry | Built-in | Not implemented |
-| Attribute registration | `[McpServerTool]` | Not implemented (fluent only) |
+| OpenTelemetry | Built-in | Planned (#36) |
+| Attribute registration | `[McpServerTool]` | Planned (#37) |
 | Tasks (experimental) | Supported | Not implemented |
 
 ## CI/CD

@@ -128,6 +128,16 @@ https://modelcontextprotocol.io/specification/2025-06-18
 | Andy MCP Gateway discovery and proxy | Open (#20) |
 | Andy Containers deployment | Open (#21) |
 
+## Planned Features
+
+| Feature | Story | Status |
+|---------|-------|--------|
+| OpenTelemetry distributed tracing | #36 | Open |
+| Attribute-based tool/resource/prompt registration | #37 | Open |
+| Andy Engine IToolRegistry/IToolExecutor adapters | #19 | Open |
+| Andy MCP Gateway discovery and proxy | #20 | Open |
+| Andy Containers MCP server deployment | #21 | Open |
+
 ## Non-Functional Requirements
 
 - Target framework: .NET 8.0

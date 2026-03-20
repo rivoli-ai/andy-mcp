@@ -142,6 +142,25 @@ The server handles this by:
 - `McpSession`: State transitions via `Interlocked.CompareExchange`
 - Transports: `Channel<T>` for write queuing, ensuring message ordering
 
+## Planned: OpenTelemetry (#36)
+
+Built-in distributed tracing via `System.Diagnostics.ActivitySource`:
+- `ActivitySource` named `"Andy.MCP"` — zero cost when no listener
+- Client spans on every `SendRequestAsync` with method, request ID, server name
+- Server spans on every `HandleRequestAsync` with tool/resource/prompt name
+- Error status on exceptions and protocol errors
+- No hard OpenTelemetry SDK dependency — consumers opt in with `.AddSource("Andy.MCP")`
+
+## Planned: Attribute-Based Registration (#37)
+
+Declarative registration via `[McpTool]`, `[McpResource]`, `[McpPrompt]` attributes:
+- Auto-generates JSON Schema from method parameters (types, nullability, defaults)
+- `CancellationToken` and `IProgress<McpProgress>` excluded from schema, injected by framework
+- PascalCase method names auto-converted to snake_case
+- Return type auto-wrapping (`Task<string>` → `CallToolResult.Text()`)
+- Coexists with fluent `AddTool()` API
+- Discovery via `AddToolsFromType<T>()` or `AddToolsFromAssembly()`
+
 ## Extensibility Points
 
 | Extension Point | Interface/Type |
