@@ -215,6 +215,23 @@ public sealed class McpClient : IAsyncDisposable
         return all;
     }
 
+    public async Task<IReadOnlyList<ResourceTemplate>> ListResourceTemplatesAsync(CancellationToken ct = default)
+    {
+        _session.RequireServerCapability("resources");
+        var result = await SendRequestAsync<ResourceTemplatesListResult>(McpMethods.ResourcesTemplatesList, new PaginatedRequest(), ct);
+        var all = new List<ResourceTemplate>(result.ResourceTemplates);
+
+        var cursor = result.NextCursor;
+        while (cursor is not null)
+        {
+            result = await SendRequestAsync<ResourceTemplatesListResult>(McpMethods.ResourcesTemplatesList, new PaginatedRequest { Cursor = cursor }, ct);
+            all.AddRange(result.ResourceTemplates);
+            cursor = result.NextCursor;
+        }
+
+        return all;
+    }
+
     public async Task<ReadResourceResult> ReadResourceAsync(string uri, CancellationToken ct = default)
     {
         _session.RequireServerCapability("resources");
@@ -518,6 +535,12 @@ public sealed record ResourcesListResult : PaginatedResult
 {
     [System.Text.Json.Serialization.JsonPropertyName("resources")]
     public IReadOnlyList<Resource> Resources { get; init; } = [];
+}
+
+public sealed record ResourceTemplatesListResult : PaginatedResult
+{
+    [System.Text.Json.Serialization.JsonPropertyName("resourceTemplates")]
+    public IReadOnlyList<ResourceTemplate> ResourceTemplates { get; init; } = [];
 }
 
 public sealed record PromptsListResult : PaginatedResult

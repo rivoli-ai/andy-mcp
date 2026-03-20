@@ -18,6 +18,7 @@ public sealed class McpServer : IAsyncDisposable
     private readonly McpSession _session = new();
     private readonly Dictionary<string, ToolHandler> _tools = new();
     private readonly Dictionary<string, ResourceHandler> _resources = new();
+    private readonly List<ResourceTemplate> _resourceTemplates = new();
     private readonly Dictionary<string, PromptHandler> _prompts = new();
     private readonly List<CompletionRegistration> _completions = new();
     private readonly ResourceSubscriptionManager _subscriptions = new();
@@ -69,6 +70,18 @@ public sealed class McpServer : IAsyncDisposable
             Resource = new Resource { Uri = uri, Name = name, Description = description, MimeType = mimeType },
             Handler = handler
         };
+        return this;
+    }
+
+    public McpServer AddResourceTemplate(string uriTemplate, string name, string? description = null, string? mimeType = null)
+    {
+        _resourceTemplates.Add(new ResourceTemplate
+        {
+            UriTemplate = uriTemplate,
+            Name = name,
+            Description = description,
+            MimeType = mimeType
+        });
         return this;
     }
 
@@ -164,6 +177,7 @@ public sealed class McpServer : IAsyncDisposable
                 McpMethods.ToolsCall => await HandleToolsCallAsync(request, ct),
                 McpMethods.ResourcesList => HandleResourcesList(request),
                 McpMethods.ResourcesRead => await HandleResourcesReadAsync(request, ct),
+                McpMethods.ResourcesTemplatesList => HandleResourcesTemplatesList(request),
                 McpMethods.ResourcesSubscribe => HandleResourcesSubscribe(request),
                 McpMethods.ResourcesUnsubscribe => HandleResourcesUnsubscribe(request),
                 McpMethods.PromptsList => HandlePromptsList(request),
@@ -269,6 +283,15 @@ public sealed class McpServer : IAsyncDisposable
 
         var contents = await handler.Handler(uri, ct);
         var result = new ReadResourceResult { Contents = [contents] };
+        return JsonRpcResponse.Success(request.Id, McpJsonDefaults.ToElement(result));
+    }
+
+    private JsonRpcResponse HandleResourcesTemplatesList(JsonRpcRequest request)
+    {
+        var paginatedReq = request.GetParams<PaginatedRequest>() ?? new PaginatedRequest();
+        var page = _pagination.GetPage(_resourceTemplates, paginatedReq.Cursor);
+
+        var result = new { resourceTemplates = page.Items, nextCursor = page.NextCursor };
         return JsonRpcResponse.Success(request.Id, McpJsonDefaults.ToElement(result));
     }
 
