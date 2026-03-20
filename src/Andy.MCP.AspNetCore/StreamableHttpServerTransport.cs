@@ -42,6 +42,8 @@ public sealed class StreamableHttpHandler
 
     /// <param name="sessionHandler">Called when a new session is created. Receives the session's transport
     /// and should run the MCP server logic (e.g., McpServer.RunAsync).</param>
+    /// <param name="options">Optional configuration for the Streamable HTTP transport.</param>
+    /// <param name="logger">Optional logger instance.</param>
     public StreamableHttpHandler(
         Func<IServerTransport, Task> sessionHandler,
         StreamableHttpServerOptions? options = null,

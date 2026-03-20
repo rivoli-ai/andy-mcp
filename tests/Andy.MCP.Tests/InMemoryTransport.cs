@@ -81,7 +81,9 @@ public sealed class InMemoryServerTransport : IServerTransport
     private volatile bool _connected;
 
     public bool IsConnected => _connected;
+#pragma warning disable CS0067 // Event is never used
     public event EventHandler<TransportDisconnectedEventArgs>? Disconnected;
+#pragma warning restore CS0067
 
     internal InMemoryServerTransport(ChannelReader<JsonRpcMessage> incoming, ChannelWriter<JsonRpcMessage> outgoing)
     {

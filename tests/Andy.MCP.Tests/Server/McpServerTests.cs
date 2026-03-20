@@ -47,10 +47,10 @@ public class McpServerTests
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(15));
 
         var server = new McpServer(serverTransport);
-        server.AddTool("greet", "Say hello", async (args, ct) =>
-            CallToolResult.Text("Hello!"));
-        server.AddTool("add", "Add numbers", async (args, ct) =>
-            CallToolResult.Text("42"));
+        server.AddTool("greet", "Say hello", (args, ct) =>
+            Task.FromResult(CallToolResult.Text("Hello!")));
+        server.AddTool("add", "Add numbers", (args, ct) =>
+            Task.FromResult(CallToolResult.Text("42")));
 
         var serverTask = server.RunAsync(cts.Token);
         await using var client = await McpClient.ConnectAsync(clientTransport, cancellationToken: cts.Token);
@@ -69,10 +69,10 @@ public class McpServerTests
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(15));
 
         var server = new McpServer(serverTransport);
-        server.AddTool("greet", "Say hello", async (args, ct) =>
+        server.AddTool("greet", "Say hello", (args, ct) =>
         {
             var name = args?.GetProperty("name").GetString() ?? "World";
-            return CallToolResult.Text($"Hello, {name}!");
+            return Task.FromResult(CallToolResult.Text($"Hello, {name}!"));
         });
 
         var serverTask = server.RunAsync(cts.Token);
@@ -106,7 +106,7 @@ public class McpServerTests
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(15));
 
         var server = new McpServer(serverTransport);
-        server.AddTool("fail", "Always fails", async (args, ct) =>
+        server.AddTool("fail", "Always fails", (args, ct) =>
         {
             throw new InvalidOperationException("Something went wrong");
         });
@@ -127,8 +127,8 @@ public class McpServerTests
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(15));
 
         var server = new McpServer(serverTransport);
-        server.AddResource("file:///config.json", "Configuration", async (uri, ct) =>
-            new TextResourceContents { Uri = uri, Text = "{}", MimeType = "application/json" });
+        server.AddResource("file:///config.json", "Configuration", (uri, ct) =>
+            Task.FromResult<ResourceContents>(new TextResourceContents { Uri = uri, Text = "{}", MimeType = "application/json" }));
 
         var serverTask = server.RunAsync(cts.Token);
         await using var client = await McpClient.ConnectAsync(clientTransport, cancellationToken: cts.Token);
@@ -145,8 +145,8 @@ public class McpServerTests
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(15));
 
         var server = new McpServer(serverTransport);
-        server.AddResource("file:///readme.md", "README", async (uri, ct) =>
-            new TextResourceContents { Uri = uri, Text = "# Hello", MimeType = "text/markdown" });
+        server.AddResource("file:///readme.md", "README", (uri, ct) =>
+            Task.FromResult<ResourceContents>(new TextResourceContents { Uri = uri, Text = "# Hello", MimeType = "text/markdown" }));
 
         var serverTask = server.RunAsync(cts.Token);
         await using var client = await McpClient.ConnectAsync(clientTransport, cancellationToken: cts.Token);
@@ -164,8 +164,8 @@ public class McpServerTests
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(15));
 
         var server = new McpServer(serverTransport);
-        server.AddResource("file:///exists", "R", async (uri, ct) =>
-            new TextResourceContents { Uri = uri, Text = "ok" });
+        server.AddResource("file:///exists", "R", (uri, ct) =>
+            Task.FromResult<ResourceContents>(new TextResourceContents { Uri = uri, Text = "ok" }));
 
         var serverTask = server.RunAsync(cts.Token);
         await using var client = await McpClient.ConnectAsync(clientTransport, cancellationToken: cts.Token);
@@ -182,12 +182,12 @@ public class McpServerTests
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(15));
 
         var server = new McpServer(serverTransport);
-        server.AddPrompt("review", "Code review", async (name, args, ct) =>
-            new GetPromptResult
+        server.AddPrompt("review", "Code review", (name, args, ct) =>
+            Task.FromResult(new GetPromptResult
             {
                 Description = "Code review prompt",
                 Messages = [new PromptMessage { Role = Role.User, Content = new TextContent { Text = "Review this code" } }]
-            });
+            }));
 
         var serverTask = server.RunAsync(cts.Token);
         await using var client = await McpClient.ConnectAsync(clientTransport, cancellationToken: cts.Token);
@@ -204,15 +204,15 @@ public class McpServerTests
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(15));
 
         var server = new McpServer(serverTransport);
-        server.AddPrompt("greet", "Greeting prompt", async (name, args, ct) =>
-            new GetPromptResult
+        server.AddPrompt("greet", "Greeting prompt", (name, args, ct) =>
+            Task.FromResult(new GetPromptResult
             {
                 Messages = [new PromptMessage
                 {
                     Role = Role.User,
                     Content = new TextContent { Text = $"Hello {args?["name"] ?? "World"}!" }
                 }]
-            });
+            }));
 
         var serverTask = server.RunAsync(cts.Token);
         await using var client = await McpClient.ConnectAsync(clientTransport, cancellationToken: cts.Token);
@@ -231,7 +231,7 @@ public class McpServerTests
 
         // Server with tools only
         var server = new McpServer(serverTransport);
-        server.AddTool("test", "Test tool", async (_, ct) => CallToolResult.Text("ok"));
+        server.AddTool("test", "Test tool", (_, ct) => Task.FromResult(CallToolResult.Text("ok")));
 
         var serverTask = server.RunAsync(cts.Token);
         await using var client = await McpClient.ConnectAsync(clientTransport, cancellationToken: cts.Token);

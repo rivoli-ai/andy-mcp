@@ -146,7 +146,6 @@ public class RootsTests
         return Task.Run(async () =>
         {
             await st.StartAsync(ct);
-            bool initialized = false;
             await foreach (var msg in st.Messages.WithCancellation(ct))
             {
                 if (msg is JsonRpcRequest { Method: McpMethods.Initialize } req)

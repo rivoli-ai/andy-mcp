@@ -21,7 +21,7 @@ public class ToolValidationTests
                 properties = new { name = new { type = "string" } },
                 required = new[] { "name" }
             }),
-            async (args, c) => CallToolResult.Text($"Hello, {args?.GetProperty("name").GetString()}!"));
+            (args, c) => Task.FromResult(CallToolResult.Text($"Hello, {args?.GetProperty("name").GetString()}!")));
 
         var serverTask = server.RunAsync(cts.Token);
         await using var client = await McpClient.ConnectAsync(ct, cancellationToken: cts.Token);
@@ -47,7 +47,7 @@ public class ToolValidationTests
                 properties = new { a = new { type = "number" }, b = new { type = "number" } },
                 required = new[] { "a", "b" }
             }),
-            async (args, c) => CallToolResult.Text("42"));
+            (args, c) => Task.FromResult(CallToolResult.Text("42")));
 
         var serverTask = server.RunAsync(cts.Token);
         await using var client = await McpClient.ConnectAsync(ct, cancellationToken: cts.Token);
@@ -72,7 +72,7 @@ public class ToolValidationTests
                 properties = new { name = new { type = "string" } },
                 required = new[] { "name" }
             }),
-            async (args, c) => CallToolResult.Text($"Hello, {args?.GetProperty("name").GetString()}!"));
+            (args, c) => Task.FromResult(CallToolResult.Text($"Hello, {args?.GetProperty("name").GetString()}!")));
 
         var serverTask = server.RunAsync(cts.Token);
         await using var client = await McpClient.ConnectAsync(ct, cancellationToken: cts.Token);
@@ -86,7 +86,7 @@ public class ToolValidationTests
 public class ResourceSubscriptionTests
 {
     [Fact]
-    public async Task SubscribeAndUnsubscribe()
+    public void SubscribeAndUnsubscribe()
     {
         var mgr = new ResourceSubscriptionManager();
 
@@ -98,7 +98,7 @@ public class ResourceSubscriptionTests
     }
 
     [Fact]
-    public async Task MultipleSubscribers()
+    public void MultipleSubscribers()
     {
         var mgr = new ResourceSubscriptionManager();
 
@@ -114,7 +114,7 @@ public class ResourceSubscriptionTests
     }
 
     [Fact]
-    public async Task RemoveSession_CleansUpAll()
+    public void RemoveSession_CleansUpAll()
     {
         var mgr = new ResourceSubscriptionManager();
 
@@ -129,7 +129,7 @@ public class ResourceSubscriptionTests
     }
 
     [Fact]
-    public async Task GetSubscribedUris()
+    public void GetSubscribedUris()
     {
         var mgr = new ResourceSubscriptionManager();
 
@@ -148,8 +148,8 @@ public class ResourceSubscriptionTests
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(15));
 
         var server = new McpServer(st);
-        server.AddResource("file:///config.json", "Config", async (uri, c) =>
-            new TextResourceContents { Uri = uri, Text = "{}" });
+        server.AddResource("file:///config.json", "Config", (uri, c) =>
+            Task.FromResult<ResourceContents>(new TextResourceContents { Uri = uri, Text = "{}" }));
 
         var serverTask = server.RunAsync(cts.Token);
         await using var client = await McpClient.ConnectAsync(ct, cancellationToken: cts.Token);
@@ -168,15 +168,15 @@ public class CompletionTests
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(15));
 
         var server = new McpServer(st);
-        server.AddPrompt("review", "Code review", async (name, args, c) =>
-            new GetPromptResult { Messages = [] });
+        server.AddPrompt("review", "Code review", (name, args, c) =>
+            Task.FromResult(new GetPromptResult { Messages = [] }));
         server.AddCompletion("ref/prompt", "review", "language",
-            async (value, context, c) => new CompletionValues
+            (value, context, c) => Task.FromResult(new CompletionValues
             {
                 Values = new[] { "csharp", "python", "javascript" }
                     .Where(v => v.StartsWith(value, StringComparison.OrdinalIgnoreCase))
                     .ToList()
-            });
+            }));
 
         var serverTask = server.RunAsync(cts.Token);
         await using var client = await McpClient.ConnectAsync(ct, cancellationToken: cts.Token);

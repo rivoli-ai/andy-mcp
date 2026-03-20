@@ -333,7 +333,7 @@ public class CapabilityAutoDetectionTests
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(15));
 
         var server = new McpServer(st);
-        server.AddTool("test", "Test", async (a, c) => CallToolResult.Text("ok"));
+        server.AddTool("test", "Test", (a, c) => Task.FromResult(CallToolResult.Text("ok")));
         var serverTask = server.RunAsync(cts.Token);
 
         await using var client = await McpClient.ConnectAsync(ct, cancellationToken: cts.Token);
@@ -393,18 +393,17 @@ public class ServerToClientRoundTripTests
 
         // Server with a tool that requests sampling
         var server = new McpServer(st);
-        server.AddTool("ask_llm", "Ask the LLM a question", async (args, c) =>
+        server.AddTool("ask_llm", "Ask the LLM a question", (args, c) =>
         {
             // This would normally call server.RequestSamplingAsync()
             // For testing, we just return a result
-            return CallToolResult.Text("LLM would respond here");
+            return Task.FromResult(CallToolResult.Text("LLM would respond here"));
         });
         var serverTask = server.RunAsync(cts.Token);
 
-        var samplingCalled = false;
         await using var client = await McpClient.ConnectAsync(ct, new McpClientOptions
         {
-            SamplingHandler = new TestSamplingHandler(() => samplingCalled = true)
+            SamplingHandler = new TestSamplingHandler(() => { })
         }, cancellationToken: cts.Token);
 
         // Verify capability declared
@@ -418,14 +417,13 @@ public class ServerToClientRoundTripTests
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(15));
 
         var server = new McpServer(st);
-        server.AddTool("ask_user", "Ask the user", async (args, c) =>
-            CallToolResult.Text("User would be asked here"));
+        server.AddTool("ask_user", "Ask the user", (args, c) =>
+            Task.FromResult(CallToolResult.Text("User would be asked here")));
         var serverTask = server.RunAsync(cts.Token);
 
-        var elicitCalled = false;
         await using var client = await McpClient.ConnectAsync(ct, new McpClientOptions
         {
-            ElicitationHandler = new TestElicitationHandler(() => elicitCalled = true)
+            ElicitationHandler = new TestElicitationHandler(() => { })
         }, cancellationToken: cts.Token);
 
         Assert.NotNull(client.Session);

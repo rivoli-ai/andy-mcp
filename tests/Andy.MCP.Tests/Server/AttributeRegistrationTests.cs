@@ -10,69 +10,69 @@ namespace Andy.MCP.Tests.Server;
 public class SampleTools
 {
     [McpTool(Description = "Greet someone")]
-    public async Task<CallToolResult> Greet(
+    public Task<CallToolResult> Greet(
         [McpParam(Description = "Person to greet", Required = true)] string name,
         [McpParam(Description = "Greeting style")] string style = "friendly",
         CancellationToken cancellationToken = default)
     {
-        return CallToolResult.Text($"Hello, {name}! ({style})");
+        return Task.FromResult(CallToolResult.Text($"Hello, {name}! ({style})"));
     }
 
     [McpTool(Name = "add_numbers", Description = "Add two numbers")]
-    public async Task<CallToolResult> AddNumbers(
+    public Task<CallToolResult> AddNumbers(
         [McpParam(Required = true)] double a,
         [McpParam(Required = true)] double b)
     {
-        return CallToolResult.Text((a + b).ToString());
+        return Task.FromResult(CallToolResult.Text((a + b).ToString()));
     }
 
     [McpTool(Description = "Returns a string directly")]
-    public async Task<string> GetMessage()
+    public Task<string> GetMessage()
     {
-        return "Direct string result";
+        return Task.FromResult("Direct string result");
     }
 
     [McpTool(Description = "Read-only tool", ReadOnly = true, Destructive = false, Idempotent = true)]
-    public async Task<CallToolResult> ReadOnlyTool()
+    public Task<CallToolResult> ReadOnlyTool()
     {
-        return CallToolResult.Text("read-only");
+        return Task.FromResult(CallToolResult.Text("read-only"));
     }
 }
 
 public class StaticTools
 {
     [McpTool(Description = "A static tool")]
-    public static async Task<CallToolResult> StaticGreet(
+    public static Task<CallToolResult> StaticGreet(
         [McpParam(Required = true)] string name)
     {
-        return CallToolResult.Text($"Static hello, {name}!");
+        return Task.FromResult(CallToolResult.Text($"Static hello, {name}!"));
     }
 }
 
 public class SampleResources
 {
     [McpResource(Uri = "config://app", Name = "App Config", Description = "Application configuration", MimeType = "application/json")]
-    public async Task<ResourceContents> GetConfig(string uri, CancellationToken ct)
+    public Task<ResourceContents> GetConfig(string uri, CancellationToken ct)
     {
-        return new TextResourceContents { Uri = uri, Text = "{\"version\": 1}", MimeType = "application/json" };
+        return Task.FromResult<ResourceContents>(new TextResourceContents { Uri = uri, Text = "{\"version\": 1}", MimeType = "application/json" });
     }
 }
 
 public class SamplePrompts
 {
     [McpPrompt(Description = "Review code")]
-    public async Task<GetPromptResult> CodeReview(
+    public Task<GetPromptResult> CodeReview(
         [McpParam(Description = "Programming language", Required = true)] string language,
         [McpParam(Description = "Review style")] string? style = null)
     {
-        return new GetPromptResult
+        return Task.FromResult(new GetPromptResult
         {
             Messages = [new PromptMessage
             {
                 Role = Role.User,
                 Content = new TextContent { Text = $"Review {language} code. Style: {style ?? "thorough"}" }
             }]
-        };
+        });
     }
 }
 
@@ -332,8 +332,8 @@ public class PromptRegistrationTests
         Assert.Equal("code_review", prompts[0].Name);
         Assert.NotNull(prompts[0].Arguments);
         Assert.Equal(2, prompts[0].Arguments!.Count);
-        Assert.Equal("language", prompts[0].Arguments[0].Name);
-        Assert.True(prompts[0].Arguments[0].Required);
+        Assert.Equal("language", prompts[0].Arguments![0].Name);
+        Assert.True(prompts[0].Arguments![0].Required);
     }
 
     [Fact]
@@ -364,7 +364,7 @@ public class MixedRegistrationTests
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(15));
 
         var server = new McpServer(st);
-        server.AddTool("manual_tool", "A manual tool", async (a, c) => CallToolResult.Text("manual"));
+        server.AddTool("manual_tool", "A manual tool", (a, c) => Task.FromResult(CallToolResult.Text("manual")));
         server.AddToolsFromType<SampleTools>();
         var serverTask = server.RunAsync(cts.Token);
 

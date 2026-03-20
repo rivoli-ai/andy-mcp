@@ -39,10 +39,10 @@ public static class EverythingServer
                 properties = new { message = new { type = "string" } },
                 required = new[] { "message" }
             }),
-            async (args, ct) =>
+            (args, ct) =>
             {
                 var msg = args?.GetProperty("message").GetString() ?? "";
-                return CallToolResult.Text(msg);
+                return Task.FromResult(CallToolResult.Text(msg));
             });
 
         // Add two numbers
@@ -53,38 +53,38 @@ public static class EverythingServer
                 properties = new { a = new { type = "number" }, b = new { type = "number" } },
                 required = new[] { "a", "b" }
             }),
-            async (args, ct) =>
+            (args, ct) =>
             {
                 var a = args!.Value.GetProperty("a").GetDouble();
                 var b = args!.Value.GetProperty("b").GetDouble();
-                return CallToolResult.Text((a + b).ToString());
+                return Task.FromResult(CallToolResult.Text((a + b).ToString()));
             });
 
         // Tool returning image content
-        server.AddTool("get_image", "Returns a tiny test image", async (args, ct) =>
+        server.AddTool("get_image", "Returns a tiny test image", (args, ct) =>
         {
             // 1x1 red PNG
             var pngBytes = Convert.FromBase64String("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8/5+hHgAHggJ/PchI7wAAAABJRU5ErkJggg==");
-            return new CallToolResult
+            return Task.FromResult(new CallToolResult
             {
                 Content = [ImageContent.FromBytes(pngBytes, "image/png")]
-            };
+            });
         });
 
         // Tool returning audio content
-        server.AddTool("get_audio", "Returns test audio data", async (args, ct) =>
+        server.AddTool("get_audio", "Returns test audio data", (args, ct) =>
         {
             var audioBytes = new byte[] { 0x52, 0x49, 0x46, 0x46 }; // RIFF header stub
-            return new CallToolResult
+            return Task.FromResult(new CallToolResult
             {
                 Content = [AudioContent.FromBytes(audioBytes, "audio/wav")]
-            };
+            });
         });
 
         // Tool returning mixed content types
-        server.AddTool("multi_content", "Returns multiple content types", async (args, ct) =>
+        server.AddTool("multi_content", "Returns multiple content types", (args, ct) =>
         {
-            return new CallToolResult
+            return Task.FromResult(new CallToolResult
             {
                 Content =
                 [
@@ -92,7 +92,7 @@ public static class EverythingServer
                     ImageContent.FromBytes([0xFF, 0xD8], "image/jpeg"),
                     new ResourceLink { Uri = "file:///readme.md", Name = "README" }
                 ]
-            };
+            });
         });
 
         // Long-running tool with progress
@@ -108,7 +108,7 @@ public static class EverythingServer
         });
 
         // Tool that always errors
-        server.AddTool("error_tool", "Always throws an error", async (args, ct) =>
+        server.AddTool("error_tool", "Always throws an error", (args, ct) =>
         {
             throw new InvalidOperationException("This tool always fails");
         });
@@ -116,7 +116,7 @@ public static class EverythingServer
         // Tool with annotations
         server.AddTool("annotated_tool", "A read-only tool",
             McpJsonDefaults.ToElement(new { type = "object", properties = new { } }),
-            async (args, ct) => CallToolResult.Text("read-only result"),
+            (args, ct) => Task.FromResult(CallToolResult.Text("read-only result")),
             annotations: new ToolAnnotations
             {
                 ReadOnlyHint = true,
@@ -129,23 +129,23 @@ public static class EverythingServer
     private static void RegisterResources(McpServer server)
     {
         server.AddResource("file:///readme.md", "README",
-            async (uri, ct) => new TextResourceContents
+            (uri, ct) => Task.FromResult<ResourceContents>(new TextResourceContents
             {
                 Uri = uri, Text = "# Everything Server\nA reference MCP server.", MimeType = "text/markdown"
-            },
+            }),
             description: "Project README", mimeType: "text/markdown");
 
         server.AddResource("file:///logo.png", "Logo",
-            async (uri, ct) => BlobResourceContents.FromBytes(uri,
+            (uri, ct) => Task.FromResult<ResourceContents>(BlobResourceContents.FromBytes(uri,
                 Convert.FromBase64String("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8/5+hHgAHggJ/PchI7wAAAABJRU5ErkJggg=="),
-                "image/png"),
+                "image/png")),
             description: "Project logo", mimeType: "image/png");
 
         server.AddResource("file:///dynamic", "Dynamic Resource",
-            async (uri, ct) => new TextResourceContents
+            (uri, ct) => Task.FromResult<ResourceContents>(new TextResourceContents
             {
                 Uri = uri, Text = $"Generated at {DateTimeOffset.UtcNow:O}", MimeType = "text/plain"
-            });
+            }));
 
         // Resource template
         server.AddResourceTemplate("file:///config/{key}", "Configuration",
@@ -155,7 +155,7 @@ public static class EverythingServer
     private static void RegisterPrompts(McpServer server)
     {
         server.AddPrompt("simple_greeting", "A simple greeting",
-            async (name, args, ct) => new GetPromptResult
+            (name, args, ct) => Task.FromResult(new GetPromptResult
             {
                 Description = "A friendly greeting",
                 Messages = [new PromptMessage
@@ -163,14 +163,14 @@ public static class EverythingServer
                     Role = Role.User,
                     Content = new TextContent { Text = "Hello! Please greet me warmly." }
                 }]
-            });
+            }));
 
         server.AddPrompt("code_review", "Code review prompt",
-            async (name, args, ct) =>
+            (name, args, ct) =>
             {
                 var lang = args?["language"] ?? "unknown";
                 var style = args is not null && args.TryGetValue("style", out var s) ? s : "thorough";
-                return new GetPromptResult
+                return Task.FromResult(new GetPromptResult
                 {
                     Description = $"Code review in {lang}",
                     Messages = [new PromptMessage
@@ -178,7 +178,7 @@ public static class EverythingServer
                         Role = Role.User,
                         Content = new TextContent { Text = $"Review this {lang} code. Style: {style}." }
                     }]
-                };
+                });
             },
             arguments:
             [
@@ -187,7 +187,7 @@ public static class EverythingServer
             ]);
 
         server.AddPrompt("multi_turn", "Multi-turn conversation",
-            async (name, args, ct) => new GetPromptResult
+            (name, args, ct) => Task.FromResult(new GetPromptResult
             {
                 Description = "A multi-turn example",
                 Messages =
@@ -196,19 +196,19 @@ public static class EverythingServer
                     new PromptMessage { Role = Role.Assistant, Content = new TextContent { Text = "2+2 = 4" } },
                     new PromptMessage { Role = Role.User, Content = new TextContent { Text = "And 3+3?" } }
                 ]
-            });
+            }));
     }
 
     private static void RegisterCompletions(McpServer server)
     {
         server.AddCompletion("ref/prompt", "code_review", "language",
-            async (value, context, ct) =>
+            (value, context, ct) =>
             {
                 var languages = new[] { "csharp", "python", "javascript", "typescript", "go", "rust", "java" };
                 var filtered = languages
                     .Where(l => l.StartsWith(value, StringComparison.OrdinalIgnoreCase))
                     .ToList();
-                return new CompletionValues { Values = filtered };
+                return Task.FromResult(new CompletionValues { Values = filtered });
             });
     }
 }

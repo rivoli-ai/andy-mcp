@@ -110,7 +110,7 @@ public class McpDiagnosticsTests
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(15));
 
         var server = new McpServer(st);
-        server.AddTool("test", "Test tool", async (a, c) => CallToolResult.Text("ok"));
+        server.AddTool("test", "Test tool", (a, c) => Task.FromResult(CallToolResult.Text("ok")));
         var serverTask = server.RunAsync(cts.Token);
 
         await using var client = await McpClient.ConnectAsync(ct, cancellationToken: cts.Token);
@@ -141,7 +141,7 @@ public class McpDiagnosticsTests
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(15));
 
         var server = new McpServer(st);
-        server.AddTool("my_tool", "A tool", async (a, c) => CallToolResult.Text("done"));
+        server.AddTool("my_tool", "A tool", (a, c) => Task.FromResult(CallToolResult.Text("done")));
         var serverTask = server.RunAsync(cts.Token);
 
         await using var client = await McpClient.ConnectAsync(ct, cancellationToken: cts.Token);
@@ -162,7 +162,7 @@ public class McpDiagnosticsTests
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(15));
 
         var server = new McpServer(st);
-        server.AddTool("tool", "t", async (a, c) => CallToolResult.Text("ok"));
+        server.AddTool("tool", "t", (a, c) => Task.FromResult(CallToolResult.Text("ok")));
         var serverTask = server.RunAsync(cts.Token);
 
         await using var client = await McpClient.ConnectAsync(ct, cancellationToken: cts.Token);
@@ -188,7 +188,7 @@ public class McpDiagnosticsTests
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(15));
 
         var server = new McpServer(st);
-        server.AddTool("concurrent_echo", "e", async (a, c) => CallToolResult.Text("ok"));
+        server.AddTool("concurrent_echo", "e", (a, c) => Task.FromResult(CallToolResult.Text("ok")));
         var serverTask = server.RunAsync(cts.Token);
 
         await using var client = await McpClient.ConnectAsync(ct, cancellationToken: cts.Token);

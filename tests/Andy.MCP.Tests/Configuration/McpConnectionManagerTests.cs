@@ -47,7 +47,7 @@ public class McpConnectionManagerTests
     }
 
     [Fact]
-    public async Task AddServer_DuplicateName_Throws()
+    public void AddServer_DuplicateName_Throws()
     {
         var options = new McpClientOptions();
         // We can't easily test AddServerAsync without a real server,
