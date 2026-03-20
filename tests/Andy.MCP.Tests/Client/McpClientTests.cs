@@ -186,8 +186,8 @@ public class McpClientTests
 
         await using var client = await McpClient.ConnectAsync(clientTransport, cancellationToken: cts.Token);
 
-        Assert.Throws<McpCapabilityNotAvailableException>(() =>
-            client.ListPromptsAsync(cts.Token).GetAwaiter().GetResult());
+        await Assert.ThrowsAsync<McpCapabilityNotAvailableException>(() =>
+            client.ListPromptsAsync(cts.Token));
     }
 
     [Fact]

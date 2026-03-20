@@ -140,7 +140,7 @@ public sealed class PendingRequest : IDisposable
             _timeoutCts.Token.Register(() =>
             {
                 _tcs.TrySetException(new TimeoutException($"Request '{id}' timed out after {timeout.Value}."));
-                _cts.Cancel();
+                try { _cts.Cancel(); } catch (ObjectDisposedException) { }
             });
         }
     }
@@ -161,8 +161,12 @@ public sealed class PendingRequest : IDisposable
     internal void Cancel(string? reason)
     {
         _tcs.TrySetCanceled();
-        if (!_cts.IsCancellationRequested)
-            _cts.Cancel();
+        try
+        {
+            if (!_disposed && !_cts.IsCancellationRequested)
+                _cts.Cancel();
+        }
+        catch (ObjectDisposedException) { }
     }
 
     internal void ReportProgress(double progress, double? total, string? message)

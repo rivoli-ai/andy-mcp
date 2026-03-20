@@ -95,8 +95,8 @@ public class McpServerTests
 
         // Server has no tools capability since none registered
         // The client will throw McpCapabilityNotAvailableException
-        Assert.Throws<McpCapabilityNotAvailableException>(() =>
-            client.CallToolAsync("nonexistent", ct: cts.Token).GetAwaiter().GetResult());
+        await Assert.ThrowsAsync<McpCapabilityNotAvailableException>(() =>
+            client.CallToolAsync("nonexistent", ct: cts.Token));
     }
 
     [Fact]
