@@ -24,7 +24,6 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\examples\Andy.MCP.Examples\Andy.MCP.Examples.csproj" />
     <ProjectReference Include="..\..\src\Andy.MCP\Andy.MCP.csproj" />
   </ItemGroup>
 
