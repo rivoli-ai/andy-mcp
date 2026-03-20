@@ -8,7 +8,7 @@ namespace Andy.MCP.Server;
 
 /// <summary>
 /// High-level MCP server that handles lifecycle, dispatches requests to registered
-/// tools/resources/prompts, and manages capabilities automatically.
+/// tools/resources/prompts/completions, manages capabilities, subscriptions, and logging.
 /// </summary>
 public sealed class McpServer : IAsyncDisposable
 {
@@ -19,12 +19,17 @@ public sealed class McpServer : IAsyncDisposable
     private readonly Dictionary<string, ToolHandler> _tools = new();
     private readonly Dictionary<string, ResourceHandler> _resources = new();
     private readonly Dictionary<string, PromptHandler> _prompts = new();
+    private readonly List<CompletionRegistration> _completions = new();
+    private readonly ResourceSubscriptionManager _subscriptions = new();
     private readonly PaginationHelper _pagination;
+    private McpLogLevel _logLevel = McpLogLevel.Warning;
+    private bool _loggingEnabled;
     private CancellationTokenSource? _cts;
     private Task? _messageLoop;
     private bool _disposed;
 
     public McpSession Session => _session;
+    public ResourceSubscriptionManager Subscriptions => _subscriptions;
 
     public McpServer(IServerTransport transport, McpServerOptions? options = null, ILogger? logger = null)
     {
@@ -37,11 +42,12 @@ public sealed class McpServer : IAsyncDisposable
     #region Registration
 
     public McpServer AddTool(string name, string description, JsonElement inputSchema,
-        Func<JsonElement?, CancellationToken, Task<CallToolResult>> handler)
+        Func<JsonElement?, CancellationToken, Task<CallToolResult>> handler,
+        ToolAnnotations? annotations = null)
     {
         _tools[name] = new ToolHandler
         {
-            Tool = new Tool { Name = name, Description = description, InputSchema = inputSchema },
+            Tool = new Tool { Name = name, Description = description, InputSchema = inputSchema, Annotations = annotations },
             Handler = handler
         };
         return this;
@@ -55,24 +61,45 @@ public sealed class McpServer : IAsyncDisposable
     }
 
     public McpServer AddResource(string uri, string name,
-        Func<string, CancellationToken, Task<ResourceContents>> handler)
+        Func<string, CancellationToken, Task<ResourceContents>> handler,
+        string? description = null, string? mimeType = null)
     {
         _resources[uri] = new ResourceHandler
         {
-            Resource = new Resource { Uri = uri, Name = name },
+            Resource = new Resource { Uri = uri, Name = name, Description = description, MimeType = mimeType },
             Handler = handler
         };
         return this;
     }
 
     public McpServer AddPrompt(string name, string description,
-        Func<string, IDictionary<string, string>?, CancellationToken, Task<GetPromptResult>> handler)
+        Func<string, IDictionary<string, string>?, CancellationToken, Task<GetPromptResult>> handler,
+        IReadOnlyList<PromptArgument>? arguments = null)
     {
         _prompts[name] = new PromptHandler
         {
-            Prompt = new Prompt { Name = name, Description = description },
+            Prompt = new Prompt { Name = name, Description = description, Arguments = arguments },
             Handler = handler
         };
+        return this;
+    }
+
+    public McpServer AddCompletion(string refType, string refName, string argumentName,
+        Func<string, IDictionary<string, string>?, CancellationToken, Task<CompletionValues>> handler)
+    {
+        _completions.Add(new CompletionRegistration
+        {
+            RefType = refType,
+            RefName = refName,
+            ArgumentName = argumentName,
+            Handler = handler
+        });
+        return this;
+    }
+
+    public McpServer WithLogging()
+    {
+        _loggingEnabled = true;
         return this;
     }
 
@@ -137,8 +164,12 @@ public sealed class McpServer : IAsyncDisposable
                 McpMethods.ToolsCall => await HandleToolsCallAsync(request, ct),
                 McpMethods.ResourcesList => HandleResourcesList(request),
                 McpMethods.ResourcesRead => await HandleResourcesReadAsync(request, ct),
+                McpMethods.ResourcesSubscribe => HandleResourcesSubscribe(request),
+                McpMethods.ResourcesUnsubscribe => HandleResourcesUnsubscribe(request),
                 McpMethods.PromptsList => HandlePromptsList(request),
                 McpMethods.PromptsGet => await HandlePromptsGetAsync(request, ct),
+                McpMethods.CompletionComplete => await HandleCompletionAsync(request, ct),
+                McpMethods.LoggingSetLevel => HandleSetLogLevel(request),
                 _ => JsonRpcResponse.Failure(request.Id,
                     JsonRpcError.MethodNotFound($"Unknown method: '{request.Method}'"))
             };
@@ -164,7 +195,6 @@ public sealed class McpServer : IAsyncDisposable
         var agreedVersion = McpSession.NegotiateVersion(clientParams.ProtocolVersion)!;
 
         var capabilities = BuildCapabilities();
-
         _session.CompleteInitializationAsServer(clientParams, agreedVersion);
 
         var result = new InitializeResult
@@ -196,6 +226,14 @@ public sealed class McpServer : IAsyncDisposable
         {
             return JsonRpcResponse.Failure(request.Id,
                 JsonRpcError.InvalidParams($"Unknown tool: '{callReq.Name}'"));
+        }
+
+        // Validate input against schema
+        var validationErrors = JsonSchemaValidator.Validate(callReq.Arguments, handler.Tool.InputSchema);
+        if (validationErrors.Count > 0)
+        {
+            return JsonRpcResponse.Failure(request.Id,
+                JsonRpcError.InvalidParams($"Input validation failed: {string.Join("; ", validationErrors)}"));
         }
 
         try
@@ -234,6 +272,26 @@ public sealed class McpServer : IAsyncDisposable
         return JsonRpcResponse.Success(request.Id, McpJsonDefaults.ToElement(result));
     }
 
+    private JsonRpcResponse HandleResourcesSubscribe(JsonRpcRequest request)
+    {
+        var uri = request.Params?.GetProperty("uri").GetString();
+        if (uri is null)
+            return JsonRpcResponse.Failure(request.Id, JsonRpcError.InvalidParams("Missing 'uri' parameter"));
+
+        _subscriptions.Subscribe(uri);
+        return JsonRpcResponse.Success(request.Id);
+    }
+
+    private JsonRpcResponse HandleResourcesUnsubscribe(JsonRpcRequest request)
+    {
+        var uri = request.Params?.GetProperty("uri").GetString();
+        if (uri is null)
+            return JsonRpcResponse.Failure(request.Id, JsonRpcError.InvalidParams("Missing 'uri' parameter"));
+
+        _subscriptions.Unsubscribe(uri);
+        return JsonRpcResponse.Success(request.Id);
+    }
+
     private JsonRpcResponse HandlePromptsList(JsonRpcRequest request)
     {
         var paginatedReq = request.GetParams<PaginatedRequest>() ?? new PaginatedRequest();
@@ -261,6 +319,60 @@ public sealed class McpServer : IAsyncDisposable
         return JsonRpcResponse.Success(request.Id, McpJsonDefaults.ToElement(result));
     }
 
+    private async Task<JsonRpcResponse> HandleCompletionAsync(JsonRpcRequest request, CancellationToken ct)
+    {
+        var completionReq = request.GetParams<CompletionRequest>();
+        if (completionReq is null)
+            return JsonRpcResponse.Failure(request.Id, JsonRpcError.InvalidParams("Missing completion params"));
+
+        var refName = completionReq.Ref.Name ?? completionReq.Ref.Uri;
+        var registration = _completions.FirstOrDefault(c =>
+            c.RefType == completionReq.Ref.Type &&
+            c.RefName == refName &&
+            c.ArgumentName == completionReq.Argument.Name);
+
+        if (registration is null)
+        {
+            var result = new CompletionResult
+            {
+                Completion = new CompletionData { Values = [], HasMore = false }
+            };
+            return JsonRpcResponse.Success(request.Id, McpJsonDefaults.ToElement(result));
+        }
+
+        var values = await registration.Handler(
+            completionReq.Argument.Value,
+            completionReq.Context?.Arguments as IDictionary<string, string>,
+            ct);
+
+        // Enforce max 100 values
+        var truncated = values.Values.Count > 100
+            ? values.Values.Take(100).ToList()
+            : values.Values;
+
+        var completionResult = new CompletionResult
+        {
+            Completion = new CompletionData
+            {
+                Values = truncated,
+                Total = values.Total ?? (values.Values.Count > 100 ? values.Values.Count : null),
+                HasMore = values.HasMore || values.Values.Count > 100
+            }
+        };
+        return JsonRpcResponse.Success(request.Id, McpJsonDefaults.ToElement(completionResult));
+    }
+
+    private JsonRpcResponse HandleSetLogLevel(JsonRpcRequest request)
+    {
+        var p = request.GetParams<SetLogLevelParams>();
+        if (p is null)
+            return JsonRpcResponse.Failure(request.Id, JsonRpcError.InvalidParams("Missing 'level' parameter"));
+
+        _logLevel = p.Level;
+        _logger.LogDebug("Log level set to {Level}", _logLevel);
+        return JsonRpcResponse.Success(request.Id);
+    }
+
     #endregion
 
     private void HandleNotification(JsonRpcNotification notification)
@@ -282,26 +394,68 @@ public sealed class McpServer : IAsyncDisposable
     private ServerCapabilities BuildCapabilities() => new()
     {
         Tools = _tools.Count > 0 ? new ListChangedCapability { ListChanged = true } : null,
-        Resources = _resources.Count > 0 ? new ResourcesCapability { Subscribe = false, ListChanged = true } : null,
+        Resources = _resources.Count > 0 ? new ResourcesCapability { Subscribe = true, ListChanged = true } : null,
         Prompts = _prompts.Count > 0 ? new ListChangedCapability { ListChanged = true } : null,
+        Completions = _completions.Count > 0 ? new EmptyCapability() : null,
+        Logging = _loggingEnabled ? new EmptyCapability() : null,
     };
 
-    /// <summary>
-    /// Send a notification to all connected clients.
-    /// </summary>
+    #region Notifications
+
     public async Task NotifyToolsChangedAsync()
     {
         await _transport.SendAsync(new JsonRpcNotification { Method = McpMethods.NotificationsToolsListChanged });
     }
 
+    public async Task NotifyResourcesChangedAsync()
+    {
+        await _transport.SendAsync(new JsonRpcNotification { Method = McpMethods.NotificationsResourcesListChanged });
+    }
+
     public async Task NotifyResourceUpdatedAsync(string uri)
     {
+        if (_subscriptions.HasSubscribers(uri))
+        {
+            await _transport.SendAsync(new JsonRpcNotification
+            {
+                Method = McpMethods.NotificationsResourcesUpdated,
+                Params = McpJsonDefaults.ToElement(new { uri })
+            });
+        }
+    }
+
+    public async Task NotifyPromptsChangedAsync()
+    {
+        await _transport.SendAsync(new JsonRpcNotification { Method = McpMethods.NotificationsPromptsListChanged });
+    }
+
+    /// <summary>
+    /// Send a log message to the client. Filtered by the client's set log level.
+    /// </summary>
+    public async Task LogAsync(McpLogLevel level, JsonElement data, string? loggerName = null)
+    {
+        if (!_loggingEnabled) return;
+        if ((int)level > (int)_logLevel) return; // Filter: only send at or above set level
+
         await _transport.SendAsync(new JsonRpcNotification
         {
-            Method = McpMethods.NotificationsResourcesUpdated,
-            Params = McpJsonDefaults.ToElement(new { uri })
+            Method = McpMethods.NotificationsMessage,
+            Params = McpJsonDefaults.ToElement(new LogMessageParams
+            {
+                Level = level,
+                Logger = loggerName,
+                Data = data
+            })
         });
     }
+
+    /// <summary>
+    /// Convenience: send a text log message.
+    /// </summary>
+    public Task LogAsync(McpLogLevel level, string message, string? loggerName = null) =>
+        LogAsync(level, McpJsonDefaults.ToElement(message), loggerName);
+
+    #endregion
 
     public async ValueTask DisposeAsync()
     {
