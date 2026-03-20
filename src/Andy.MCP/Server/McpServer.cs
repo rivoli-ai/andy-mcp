@@ -26,7 +26,6 @@ public sealed class McpServer : IAsyncDisposable
     private McpLogLevel _logLevel = McpLogLevel.Warning;
     private bool _loggingEnabled;
     private CancellationTokenSource? _cts;
-    private Task? _messageLoop;
     private bool _disposed;
 
     public McpSession Session => _session;
@@ -513,7 +512,6 @@ public sealed class McpServer : IAsyncDisposable
         if (_disposed) return;
         _disposed = true;
         _cts?.Cancel();
-        try { if (_messageLoop is not null) await _messageLoop; } catch { }
         await _transport.DisposeAsync();
         _cts?.Dispose();
     }

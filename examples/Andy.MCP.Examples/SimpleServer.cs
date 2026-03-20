@@ -32,10 +32,10 @@ public static class SimpleServer
                 },
                 required = new[] { "name" }
             }),
-            async (args, ct) =>
+            (args, ct) =>
             {
                 var name = args?.GetProperty("name").GetString() ?? "World";
-                return CallToolResult.Text($"Hello, {name}! Welcome to MCP.");
+                return Task.FromResult(CallToolResult.Text($"Hello, {name}! Welcome to MCP."));
             });
 
         // Register a calculator tool
@@ -51,7 +51,7 @@ public static class SimpleServer
                 },
                 required = new[] { "operation", "a", "b" }
             }),
-            async (args, ct) =>
+            (args, ct) =>
             {
                 var op = args!.Value.GetProperty("operation").GetString()!;
                 var a = args.Value.GetProperty("a").GetDouble();
@@ -66,25 +66,25 @@ public static class SimpleServer
                     _ => throw new ArgumentException($"Unknown operation: {op}")
                 };
 
-                return CallToolResult.Text($"{a} {op} {b} = {result}");
+                return Task.FromResult(CallToolResult.Text($"{a} {op} {b} = {result}"));
             });
 
         // Register a resource
         server.AddResource("info://server", "Server Info",
-            async (uri, ct) => new TextResourceContents
+            (uri, ct) => Task.FromResult<ResourceContents>(new TextResourceContents
             {
                 Uri = uri,
                 Text = "SimpleServer v1.0.0 — An example MCP server built with Andy.MCP",
                 MimeType = "text/plain"
-            },
+            }),
             description: "Information about this server");
 
         // Register a prompt
         server.AddPrompt("explain", "Explain a concept",
-            async (name, args, ct) =>
+            (name, args, ct) =>
             {
                 var topic = args?["topic"] ?? "MCP";
-                return new GetPromptResult
+                return Task.FromResult(new GetPromptResult
                 {
                     Description = $"Explain {topic}",
                     Messages =
@@ -98,7 +98,7 @@ public static class SimpleServer
                             }
                         }
                     ]
-                };
+                });
             },
             arguments: [new PromptArgument { Name = "topic", Description = "Topic to explain", Required = true }]);
 

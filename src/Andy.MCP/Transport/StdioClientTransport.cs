@@ -75,7 +75,7 @@ public sealed class StdioClientTransport : IClientTransport
         });
     }
 
-    public async Task ConnectAsync(CancellationToken cancellationToken = default)
+    public Task ConnectAsync(CancellationToken cancellationToken = default)
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
         if (_connected) throw new InvalidOperationException("Transport is already connected.");
@@ -117,6 +117,8 @@ public sealed class StdioClientTransport : IClientTransport
         _readLoop = Task.Run(() => ReadLoopAsync(_cts.Token), _cts.Token);
         _writeLoop = Task.Run(() => WriteLoopAsync(_cts.Token), _cts.Token);
         _stderrLoop = Task.Run(() => StderrLoopAsync(_cts.Token), _cts.Token);
+
+        return Task.CompletedTask;
     }
 
     public async Task SendAsync(JsonRpcMessage message, CancellationToken cancellationToken = default)

@@ -163,6 +163,7 @@ public static class PaginationExtensions
     /// Iterate through all pages by auto-following nextCursor until exhausted.
     /// </summary>
     /// <param name="fetcher">A function that takes an optional cursor and returns a page of items + nextCursor.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
     public static async IAsyncEnumerable<T> PaginateAllAsync<T>(
         Func<string?, CancellationToken, Task<(IReadOnlyList<T> items, string? nextCursor)>> fetcher,
         [EnumeratorCancellation] CancellationToken cancellationToken = default)

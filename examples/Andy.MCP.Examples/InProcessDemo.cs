@@ -40,32 +40,32 @@ public static class InProcessDemo
                 properties = new { name = new { type = "string" } },
                 required = new[] { "name" }
             }),
-            async (args, ct) =>
+            (args, ct) =>
             {
                 var name = args?.GetProperty("name").GetString() ?? "World";
-                return CallToolResult.Text($"Hello, {name}!");
+                return Task.FromResult(CallToolResult.Text($"Hello, {name}!"));
             });
 
-        server.AddTool("time", "Get current time", async (args, ct) =>
-            CallToolResult.Text($"Current time: {DateTime.Now:HH:mm:ss}"));
+        server.AddTool("time", "Get current time", (args, ct) =>
+            Task.FromResult(CallToolResult.Text($"Current time: {DateTime.Now:HH:mm:ss}")));
 
         server.AddResource("demo://greeting", "Greeting",
-            async (uri, ct) => new TextResourceContents
+            (uri, ct) => Task.FromResult<ResourceContents>(new TextResourceContents
             {
                 Uri = uri,
                 Text = "Welcome to Andy.MCP!",
                 MimeType = "text/plain"
-            });
+            }));
 
         server.AddPrompt("haiku", "Write a haiku",
-            async (name, args, ct) => new GetPromptResult
+            (name, args, ct) => Task.FromResult(new GetPromptResult
             {
                 Messages = [new PromptMessage
                 {
                     Role = Role.User,
                     Content = new TextContent { Text = "Write a haiku about programming." }
                 }]
-            });
+            }));
 
         server.WithLogging();
 
@@ -146,7 +146,9 @@ internal sealed class StdioClientTransportFromStreams : IClientTransport
     private volatile bool _connected;
 
     public bool IsConnected => _connected;
+#pragma warning disable CS0067 // Event never used — required by ITransport interface
     public event EventHandler<TransportDisconnectedEventArgs>? Disconnected;
+#pragma warning restore CS0067
 
     public StdioClientTransportFromStreams(Stream input, Stream output)
     {

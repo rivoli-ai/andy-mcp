@@ -59,7 +59,12 @@ public sealed class StreamableHttpClientTransport : IClientTransport
     private volatile bool _disposed;
 
     public bool IsConnected => _connected;
-    public event EventHandler<TransportDisconnectedEventArgs>? Disconnected;
+    public event EventHandler<TransportDisconnectedEventArgs>? Disconnected
+    {
+        add => _disconnected += value;
+        remove => _disconnected -= value;
+    }
+    private EventHandler<TransportDisconnectedEventArgs>? _disconnected;
 
     public StreamableHttpClientTransport(StreamableHttpClientTransportOptions options, ILogger? logger = null)
     {
