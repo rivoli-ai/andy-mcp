@@ -107,6 +107,26 @@ public sealed record CreateMessageRequest
 
     [JsonPropertyName("maxTokens")]
     public required int MaxTokens { get; init; }
+
+    [JsonPropertyName("temperature")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public float? Temperature { get; init; }
+
+    [JsonPropertyName("stopSequences")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public IReadOnlyList<string>? StopSequences { get; init; }
+
+    [JsonPropertyName("metadata")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public JsonElement? Metadata { get; init; }
+
+    [JsonPropertyName("tools")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public IReadOnlyList<Tool>? Tools { get; init; }
+
+    [JsonPropertyName("toolChoice")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public ToolChoice? ToolChoice { get; init; }
 }
 
 public sealed record SamplingMessage
@@ -115,7 +135,11 @@ public sealed record SamplingMessage
     public required Role Role { get; init; }
 
     [JsonPropertyName("content")]
-    public required Content Content { get; init; }
+    public required IReadOnlyList<Content> Content { get; init; }
+
+    [JsonPropertyName("_meta")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public JsonElement? Meta { get; init; }
 }
 
 public sealed record ModelPreferences
@@ -149,7 +173,7 @@ public sealed record CreateMessageResult
     public required Role Role { get; init; }
 
     [JsonPropertyName("content")]
-    public required Content Content { get; init; }
+    public required IReadOnlyList<Content> Content { get; init; }
 
     [JsonPropertyName("model")]
     public required string Model { get; init; }

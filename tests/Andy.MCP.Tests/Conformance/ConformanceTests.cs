@@ -439,7 +439,7 @@ public class ServerToClientRoundTripTests
             return Task.FromResult(new CreateMessageResult
             {
                 Role = Role.Assistant,
-                Content = new TextContent { Text = "Test response" },
+                Content = [new TextContent { Text = "Test response" }],
                 Model = "test-model",
                 StopReason = "endTurn"
             });

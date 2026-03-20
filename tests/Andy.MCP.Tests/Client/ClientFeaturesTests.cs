@@ -194,7 +194,7 @@ public class SamplingTests
             Messages = [new SamplingMessage
             {
                 Role = Role.User,
-                Content = new TextContent { Text = "What is 2+2?" }
+                Content = [new TextContent { Text = "What is 2+2?" }]
             }],
             MaxTokens = 100,
             SystemPrompt = "You are a math helper.",
@@ -221,7 +221,7 @@ public class SamplingTests
         var result = new CreateMessageResult
         {
             Role = Role.Assistant,
-            Content = new TextContent { Text = "4" },
+            Content = [new TextContent { Text = "4" }],
             Model = "claude-sonnet-4-20250514",
             StopReason = "endTurn"
         };
@@ -277,7 +277,7 @@ public class SamplingTests
             return Task.FromResult(new CreateMessageResult
             {
                 Role = Role.Assistant,
-                Content = new TextContent { Text = "Mock response" },
+                Content = [new TextContent { Text = "Mock response" }],
                 Model = "mock-model",
                 StopReason = "endTurn"
             });

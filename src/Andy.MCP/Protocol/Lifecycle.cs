@@ -83,6 +83,10 @@ public sealed record ClientCapabilities
     [JsonPropertyName("experimental")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public Dictionary<string, JsonElement>? Experimental { get; init; }
+
+    [JsonPropertyName("extensions")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public Dictionary<string, JsonElement>? Extensions { get; init; }
 }
 
 /// <summary>
@@ -113,6 +117,10 @@ public sealed record ServerCapabilities
     [JsonPropertyName("experimental")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public Dictionary<string, JsonElement>? Experimental { get; init; }
+
+    [JsonPropertyName("extensions")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public Dictionary<string, JsonElement>? Extensions { get; init; }
 }
 
 /// <summary>

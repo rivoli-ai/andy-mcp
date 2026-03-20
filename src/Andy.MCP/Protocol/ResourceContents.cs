@@ -16,6 +16,10 @@ public abstract record ResourceContents
     [JsonPropertyName("mimeType")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? MimeType { get; init; }
+
+    [JsonPropertyName("_meta")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public JsonElement? Meta { get; init; }
 }
 
 /// <summary>

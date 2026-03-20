@@ -31,6 +31,14 @@ public sealed record Tool
     [JsonPropertyName("annotations")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public ToolAnnotations? Annotations { get; init; }
+
+    [JsonPropertyName("icons")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public IReadOnlyList<Icon>? Icons { get; init; }
+
+    [JsonPropertyName("_meta")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public JsonElement? Meta { get; init; }
 }
 
 /// <summary>
@@ -38,6 +46,10 @@ public sealed record Tool
 /// </summary>
 public sealed record ToolAnnotations
 {
+    [JsonPropertyName("title")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? Title { get; init; }
+
     [JsonPropertyName("readOnlyHint")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public bool? ReadOnlyHint { get; init; }
@@ -53,6 +65,19 @@ public sealed record ToolAnnotations
     [JsonPropertyName("openWorldHint")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public bool? OpenWorldHint { get; init; }
+}
+
+/// <summary>
+/// Tool choice for sampling requests.
+/// </summary>
+public sealed record ToolChoice
+{
+    [JsonPropertyName("mode")]
+    public required string Mode { get; init; } // "auto", "required", "none"
+
+    public static ToolChoice Auto => new() { Mode = "auto" };
+    public static ToolChoice Required => new() { Mode = "required" };
+    public static ToolChoice None => new() { Mode = "none" };
 }
 
 public sealed record CallToolRequest
@@ -119,6 +144,14 @@ public sealed record Resource
     [JsonPropertyName("annotations")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public Annotations? Annotations { get; init; }
+
+    [JsonPropertyName("icons")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public IReadOnlyList<Icon>? Icons { get; init; }
+
+    [JsonPropertyName("_meta")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public JsonElement? Meta { get; init; }
 }
 
 /// <summary>
@@ -147,6 +180,14 @@ public sealed record ResourceTemplate
     [JsonPropertyName("annotations")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public Annotations? Annotations { get; init; }
+
+    [JsonPropertyName("icons")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public IReadOnlyList<Icon>? Icons { get; init; }
+
+    [JsonPropertyName("_meta")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public JsonElement? Meta { get; init; }
 }
 
 public sealed record ReadResourceResult
@@ -178,12 +219,24 @@ public sealed record Prompt
     [JsonPropertyName("arguments")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public IReadOnlyList<PromptArgument>? Arguments { get; init; }
+
+    [JsonPropertyName("icons")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public IReadOnlyList<Icon>? Icons { get; init; }
+
+    [JsonPropertyName("_meta")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public JsonElement? Meta { get; init; }
 }
 
 public sealed record PromptArgument
 {
     [JsonPropertyName("name")]
     public required string Name { get; init; }
+
+    [JsonPropertyName("title")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? Title { get; init; }
 
     [JsonPropertyName("description")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
