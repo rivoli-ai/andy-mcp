@@ -28,7 +28,7 @@
 
   <!-- Ensure the package icon is included. Expect icon under assets/ -->
   <ItemGroup>
-    <None Include="$(MSBuildThisFileDirectory)assets/andy_tui_icon.png" Pack="true" PackagePath="/" Visible="false" Condition="Exists('$(MSBuildThisFileDirectory)assets/andy_tui_icon.png')" />
+    <None Include="$(MSBuildThisFileDirectory)assets/andy_mcp_icon.png" Pack="true" PackagePath="/" Visible="false" Condition="Exists('$(MSBuildThisFileDirectory)assets/andy_mcp_icon.png')" />
   </ItemGroup>
 
   
