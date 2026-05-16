@@ -201,8 +201,8 @@ andy-mcp/
 | Auth | OAuth samples | Full OAuth/DRC/PKCE/SSRF |
 | Testing | 800+ lines integration | 416 tests, Everything Server |
 | ASP.NET Core | Separate package | Separate package |
-| OpenTelemetry | Built-in | Planned (#36) |
-| Attribute registration | `[McpServerTool]` | Planned (#37) |
+| OpenTelemetry | Built-in | Implemented (#36) |
+| Attribute registration | `[McpServerTool]` | Implemented (#37) |
 | Tasks (experimental) | Supported | Not implemented |
 
 ## CI/CD
