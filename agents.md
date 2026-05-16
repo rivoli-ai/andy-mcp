@@ -55,7 +55,6 @@ When completing a set of tasks or phase milestones:
 
 - Always write test in the tests/ assemblies for new code or code changes in the src/ directory
 - Run `dotnet format` before committing to ensure consistent formatting
-- Use the pre-commit hooks: `./scripts/setup-git-hooks.sh` (Linux/macOS) or `./scripts/setup-git-hooks.ps1` (Windows)
 - Ensure all tests pass: `dotnet test`
 - Generate coverage reports for significant changes
 
