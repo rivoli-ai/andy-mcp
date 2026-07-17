@@ -134,7 +134,13 @@ public sealed record SamplingMessage
     [JsonPropertyName("role")]
     public required Role Role { get; init; }
 
+    /// <summary>
+    /// The message content. Per MCP 2025-11-25 this is a scalar-or-array union on the wire; it is
+    /// normalized to a list here and always serialized as an array. Only valid sampling content
+    /// blocks (text, image, audio, tool_use, tool_result) are permitted.
+    /// </summary>
     [JsonPropertyName("content")]
+    [JsonConverter(typeof(SamplingContentConverter))]
     public required IReadOnlyList<Content> Content { get; init; }
 
     [JsonPropertyName("_meta")]
@@ -172,7 +178,13 @@ public sealed record CreateMessageResult
     [JsonPropertyName("role")]
     public required Role Role { get; init; }
 
+    /// <summary>
+    /// The generated message content. Per MCP 2025-11-25 this is a scalar-or-array union on the
+    /// wire (CreateMessageResult extends SamplingMessage); it is normalized to a list here and
+    /// always serialized as an array. Only valid sampling content blocks are permitted.
+    /// </summary>
     [JsonPropertyName("content")]
+    [JsonConverter(typeof(SamplingContentConverter))]
     public required IReadOnlyList<Content> Content { get; init; }
 
     [JsonPropertyName("model")]
@@ -181,6 +193,11 @@ public sealed record CreateMessageResult
     [JsonPropertyName("stopReason")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? StopReason { get; init; }
+
+    /// <summary>Reserved protocol metadata (CreateMessageResult extends Result).</summary>
+    [JsonPropertyName("_meta")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public JsonElement? Meta { get; init; }
 }
 
 #endregion
