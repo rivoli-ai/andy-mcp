@@ -42,7 +42,7 @@ public class ConformanceTests : IAsyncLifetime
     public void Session_IsReady()
     {
         Assert.Equal(McpSessionState.Ready, _client.Session.State);
-        Assert.Equal("2025-06-18", _client.Session.ProtocolVersion);
+        Assert.Equal(McpSession.LatestProtocolVersion, _client.Session.ProtocolVersion);
         Assert.Equal("EverythingServer", _client.Session.RemoteInfo?.Name);
         Assert.Equal("This server supports all MCP features for testing.", _client.Session.Instructions);
     }

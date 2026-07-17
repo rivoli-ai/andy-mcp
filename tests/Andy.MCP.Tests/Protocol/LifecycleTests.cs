@@ -169,7 +169,7 @@ public class LifecycleTypesTests
         Assert.Equal("initialize", parsedReq.Method);
 
         var reqParams = parsedReq.GetParams<InitializeParams>()!;
-        Assert.Equal("2025-06-18", reqParams.ProtocolVersion);
+        Assert.Equal(McpSession.LatestProtocolVersion, reqParams.ProtocolVersion);
 
         // Server sends initialize response
         var initResponse = JsonRpcResponse.Success(
@@ -448,7 +448,7 @@ public class McpSessionTests
     [Fact]
     public void NegotiateVersion_UnknownVersion_ReturnsLatest()
     {
-        Assert.Equal("2025-06-18", McpSession.NegotiateVersion("2099-01-01"));
+        Assert.Equal(McpSession.LatestProtocolVersion, McpSession.NegotiateVersion("2099-01-01"));
     }
 
     [Fact]

@@ -23,17 +23,12 @@ public sealed class McpSession
     /// <summary>
     /// The latest protocol version supported by this implementation.
     /// </summary>
-    public const string LatestProtocolVersion = "2025-06-18";
+    public static readonly string LatestProtocolVersion = ProtocolRevision.Latest.Version;
 
     /// <summary>
     /// All protocol versions this implementation supports, newest first.
     /// </summary>
-    public static readonly IReadOnlyList<string> SupportedProtocolVersions = new[]
-    {
-        "2025-06-18",
-        "2025-03-26",
-        "2024-11-05"
-    };
+    public static readonly IReadOnlyList<string> SupportedProtocolVersions = ProtocolRevision.AllVersions;
 
     private int _state = (int)McpSessionState.Uninitialized;
 
@@ -43,6 +38,13 @@ public sealed class McpSession
     /// The protocol version agreed upon during initialization.
     /// </summary>
     public string? ProtocolVersion { get; private set; }
+
+    /// <summary>
+    /// The negotiated protocol revision and its feature set, or null if not yet initialized
+    /// or the negotiated version is not one this implementation models. Consult this to gate
+    /// revision-specific wire behavior instead of comparing <see cref="ProtocolVersion"/>.
+    /// </summary>
+    public ProtocolRevision? Revision => ProtocolRevision.TryGet(ProtocolVersion);
 
     /// <summary>
     /// The remote peer's implementation info (server info if we're a client, client info if we're a server).
@@ -159,21 +161,19 @@ public sealed class McpSession
     /// </summary>
     public static string? NegotiateVersion(string clientVersion)
     {
-        // If the client's version is in our supported list, use it
-        if (SupportedProtocolVersions.Contains(clientVersion))
+        // If the client's requested revision is one we support, honor it.
+        if (ProtocolRevision.TryGet(clientVersion) is not null)
             return clientVersion;
 
-        // Otherwise return our latest
+        // Otherwise offer our latest and let the client decide whether to proceed.
         return LatestProtocolVersion;
     }
 
     /// <summary>
     /// Check if a client can accept a server's offered version.
     /// </summary>
-    public static bool IsVersionAcceptable(string serverVersion)
-    {
-        return SupportedProtocolVersions.Contains(serverVersion);
-    }
+    public static bool IsVersionAcceptable(string serverVersion) =>
+        ProtocolRevision.TryGet(serverVersion) is not null;
 
     private static bool IsValidTransition(McpSessionState from, McpSessionState to) => (from, to) switch
     {
