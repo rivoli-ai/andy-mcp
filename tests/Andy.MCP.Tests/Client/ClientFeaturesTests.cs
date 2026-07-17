@@ -334,7 +334,7 @@ public class ElicitationTests
         var deserialized = JsonSerializer.Deserialize<ElicitRequest>(json, McpJsonDefaults.Options)!;
 
         Assert.Equal("Please enter your name", deserialized.Message);
-        Assert.Equal("object", deserialized.RequestedSchema.GetProperty("type").GetString());
+        Assert.Equal("object", deserialized.RequestedSchema!.Value.GetProperty("type").GetString());
     }
 
     [Fact]

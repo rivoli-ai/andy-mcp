@@ -214,11 +214,55 @@ public interface IElicitationHandler
 
 public sealed record ElicitRequest
 {
+    /// <summary>
+    /// Elicitation mode: "form" (default when omitted) collects input against
+    /// <see cref="RequestedSchema"/>; "url" (MCP 2025-11-25) directs the user to
+    /// <see cref="Url"/> and correlates the interaction via <see cref="ElicitationId"/>.
+    /// </summary>
+    [JsonPropertyName("mode")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? Mode { get; init; }
+
     [JsonPropertyName("message")]
     public required string Message { get; init; }
 
+    /// <summary>The requested schema (form mode only). Absent for URL-mode elicitation.</summary>
     [JsonPropertyName("requestedSchema")]
-    public required JsonElement RequestedSchema { get; init; }
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public JsonElement? RequestedSchema { get; init; }
+
+    /// <summary>Opaque identifier correlating a URL-mode elicitation (URL mode only).</summary>
+    [JsonPropertyName("elicitationId")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? ElicitationId { get; init; }
+
+    /// <summary>The URL the user should visit to provide input (URL mode only).</summary>
+    [JsonPropertyName("url")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? Url { get; init; }
+
+    /// <summary>True when this is a URL-mode elicitation request.</summary>
+    [JsonIgnore]
+    public bool IsUrlMode => string.Equals(Mode, "url", StringComparison.Ordinal);
+
+    /// <summary>Build a form-mode elicitation request from a typed schema.</summary>
+    public static ElicitRequest Form(string message, ElicitationSchema schema) =>
+        new()
+        {
+            Mode = "form",
+            Message = message,
+            RequestedSchema = McpJsonDefaults.ToElement(schema)
+        };
+
+    /// <summary>Build a URL-mode elicitation request (MCP 2025-11-25).</summary>
+    public static ElicitRequest ForUrl(string message, string elicitationId, string url) =>
+        new()
+        {
+            Mode = "url",
+            Message = message,
+            ElicitationId = elicitationId,
+            Url = url
+        };
 }
 
 public sealed record ElicitResult

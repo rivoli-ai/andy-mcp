@@ -57,6 +57,27 @@ public sealed record Implementation
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? Title { get; init; }
 
+    /// <summary>
+    /// Optional human-readable description of what this implementation does (MCP 2025-11-25).
+    /// </summary>
+    [JsonPropertyName("description")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? Description { get; init; }
+
+    /// <summary>
+    /// Optional URL of the website for this implementation (MCP 2025-11-25).
+    /// </summary>
+    [JsonPropertyName("websiteUrl")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? WebsiteUrl { get; init; }
+
+    /// <summary>
+    /// Optional icons for this implementation (MCP 2025-11-25).
+    /// </summary>
+    [JsonPropertyName("icons")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public IReadOnlyList<Icon>? Icons { get; init; }
+
     public Implementation() { }
 
     [SetsRequiredMembers]
