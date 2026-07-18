@@ -455,6 +455,9 @@ public sealed class McpClient : IAsyncDisposable
     {
         switch (request.Method)
         {
+            case McpMethods.Ping:
+                return JsonRpcResponse.Success(request.Id);
+
             case McpMethods.RootsList:
                 if (_options.RootProvider is null)
                     return JsonRpcResponse.Failure(request.Id, JsonRpcError.MethodNotFound("Roots not supported"));
