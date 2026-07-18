@@ -66,13 +66,34 @@ public sealed record PrimitiveSchemaDefinition
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public double? Maximum { get; init; }
 
-    /// <summary>Allowed values for a single-select string enum.</summary>
+    /// <summary>Allowed values for an untitled single-select string enum.</summary>
     [JsonPropertyName("enum")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public IReadOnlyList<string>? Enum { get; init; }
 
+    /// <summary>Titled single-select enum options (each a value + display title).</summary>
+    [JsonPropertyName("oneOf")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public IReadOnlyList<EnumOption>? OneOf { get; init; }
+
+    /// <summary>Minimum number of selected items for a multi-select (array) enum.</summary>
+    [JsonPropertyName("minItems")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public int? MinItems { get; init; }
+
+    /// <summary>Maximum number of selected items for a multi-select (array) enum.</summary>
+    [JsonPropertyName("maxItems")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public int? MaxItems { get; init; }
+
+    /// <summary>Item schema for a multi-select (array) enum.</summary>
+    [JsonPropertyName("items")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public JsonElement? Items { get; init; }
+
     /// <summary>
-    /// The default value (string, number, or boolean) matching this field's type.
+    /// The default value matching this field's type: a string, number, or boolean for scalar
+    /// fields, or an array of strings for a multi-select enum.
     /// </summary>
     [JsonPropertyName("default")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
@@ -127,4 +148,54 @@ public sealed record PrimitiveSchemaDefinition
             Enum = values,
             Default = @default is null ? null : JsonSerializer.SerializeToElement(@default)
         };
+
+    /// <summary>A titled single-select string enum, where each option carries a display title.</summary>
+    public static PrimitiveSchemaDefinition TitledEnumField(
+        IReadOnlyList<EnumOption> options, string? title = null,
+        string? description = null, string? @default = null) =>
+        new()
+        {
+            Type = "string",
+            Title = title,
+            Description = description,
+            OneOf = options,
+            Default = @default is null ? null : JsonSerializer.SerializeToElement(@default)
+        };
+
+    /// <summary>An untitled multi-select enum (an array of strings drawn from a fixed set).</summary>
+    public static PrimitiveSchemaDefinition MultiSelectEnumField(
+        IReadOnlyList<string> values, string? title = null, string? description = null,
+        int? minItems = null, int? maxItems = null, IReadOnlyList<string>? @default = null) =>
+        new()
+        {
+            Type = "array",
+            Title = title,
+            Description = description,
+            MinItems = minItems,
+            MaxItems = maxItems,
+            Items = JsonSerializer.SerializeToElement(new { type = "string", @enum = values }),
+            Default = @default is null ? null : JsonSerializer.SerializeToElement(@default)
+        };
+}
+
+/// <summary>
+/// A single option in a titled enum: the stored value and its human-readable display title
+/// (MCP 2025-11-25, SEP-1330).
+/// </summary>
+public sealed record EnumOption
+{
+    [JsonPropertyName("const")]
+    public required string Const { get; init; }
+
+    [JsonPropertyName("title")]
+    public required string Title { get; init; }
+
+    public EnumOption() { }
+
+    [System.Diagnostics.CodeAnalysis.SetsRequiredMembers]
+    public EnumOption(string @const, string title)
+    {
+        Const = @const;
+        Title = title;
+    }
 }
