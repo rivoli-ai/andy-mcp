@@ -450,9 +450,16 @@ public sealed class McpServer : IAsyncDisposable
 
     private ServerCapabilities BuildCapabilities() => new()
     {
-        Tools = _tools.Count > 0 ? new ListChangedCapability { ListChanged = true } : null,
-        Resources = _resources.Count > 0 ? new ResourcesCapability { Subscribe = true, ListChanged = true } : null,
-        Prompts = _prompts.Count > 0 ? new ListChangedCapability { ListChanged = true } : null,
+        Tools = _tools.Count > 0
+            ? new ListChangedCapability { ListChanged = _options.ToolsListChanged }
+            : null,
+        // Advertised whenever resources OR resource templates are registered.
+        Resources = _resources.Count > 0 || _resourceTemplates.Count > 0
+            ? new ResourcesCapability { Subscribe = _options.ResourcesSubscribe, ListChanged = _options.ResourcesListChanged }
+            : null,
+        Prompts = _prompts.Count > 0
+            ? new ListChangedCapability { ListChanged = _options.PromptsListChanged }
+            : null,
         Completions = _completions.Count > 0 ? new EmptyCapability() : null,
         Logging = _loggingEnabled ? new EmptyCapability() : null,
     };
@@ -554,4 +561,16 @@ public sealed record McpServerOptions
     public Implementation ServerInfo { get; init; } = new("Andy.MCP.Server", "0.1.0");
     public string? Instructions { get; init; }
     public int PageSize { get; init; } = 50;
+
+    /// <summary>Advertise tools/list_changed support when tools are registered.</summary>
+    public bool ToolsListChanged { get; init; } = true;
+
+    /// <summary>Advertise resource subscription support when resources are registered.</summary>
+    public bool ResourcesSubscribe { get; init; } = true;
+
+    /// <summary>Advertise resources/list_changed support when resources are registered.</summary>
+    public bool ResourcesListChanged { get; init; } = true;
+
+    /// <summary>Advertise prompts/list_changed support when prompts are registered.</summary>
+    public bool PromptsListChanged { get; init; } = true;
 }
