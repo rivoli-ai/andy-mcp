@@ -33,12 +33,22 @@ public sealed record Root
     [JsonPropertyName("name")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? Name { get; init; }
+
+    /// <summary>Reserved protocol metadata (_meta), preserved round-trip.</summary>
+    [JsonPropertyName("_meta")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public JsonElement? Meta { get; init; }
 }
 
 public sealed record ListRootsResult
 {
     [JsonPropertyName("roots")]
     public required IReadOnlyList<Root> Roots { get; init; }
+
+    /// <summary>Reserved protocol metadata (_meta), preserved round-trip.</summary>
+    [JsonPropertyName("_meta")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public JsonElement? Meta { get; init; }
 }
 
 /// <summary>
@@ -127,6 +137,11 @@ public sealed record CreateMessageRequest
     [JsonPropertyName("toolChoice")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public ToolChoice? ToolChoice { get; init; }
+
+    /// <summary>Reserved protocol metadata (_meta), preserved round-trip.</summary>
+    [JsonPropertyName("_meta")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public JsonElement? Meta { get; init; }
 }
 
 public sealed record SamplingMessage
@@ -273,6 +288,11 @@ public sealed record ElicitResult
     [JsonPropertyName("content")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public JsonElement? Content { get; init; }
+
+    /// <summary>Reserved protocol metadata (_meta), preserved round-trip.</summary>
+    [JsonPropertyName("_meta")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public JsonElement? Meta { get; init; }
 
     public static ElicitResult Accept(JsonElement content) =>
         new() { Action = "accept", Content = content };
