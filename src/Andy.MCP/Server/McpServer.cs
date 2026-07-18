@@ -185,22 +185,14 @@ public sealed class McpServer : IAsyncDisposable
     {
         using var activity = McpDiagnostics.StartServerRequest(request.Method, request.Id);
 
-        // Add feature-specific attributes
+        // Add feature-specific attributes. Extraction must be type-safe: a caller may send a
+        // wrongly-typed field, and this runs before the guarded handler body.
         if (request.Method == McpMethods.ToolsCall)
-        {
-            var toolName = request.Params?.TryGetProperty("name", out var n) == true ? n.GetString() : null;
-            activity?.SetTag("mcp.tool.name", toolName);
-        }
+            activity?.SetTag("mcp.tool.name", TryGetStringProperty(request.Params, "name"));
         else if (request.Method == McpMethods.ResourcesRead)
-        {
-            var uri = request.Params?.TryGetProperty("uri", out var u) == true ? u.GetString() : null;
-            activity?.SetTag("mcp.resource.uri", uri);
-        }
+            activity?.SetTag("mcp.resource.uri", TryGetStringProperty(request.Params, "uri"));
         else if (request.Method == McpMethods.PromptsGet)
-        {
-            var name = request.Params?.TryGetProperty("name", out var pn) == true ? pn.GetString() : null;
-            activity?.SetTag("mcp.prompt.name", name);
-        }
+            activity?.SetTag("mcp.prompt.name", TryGetStringProperty(request.Params, "name"));
 
         try
         {
@@ -250,6 +242,12 @@ public sealed class McpServer : IAsyncDisposable
 
             return response;
         }
+        catch (JsonException ex)
+        {
+            // Malformed or mistyped request params are a caller error, not an internal one.
+            McpDiagnostics.SetError(activity, ex);
+            return JsonRpcResponse.Failure(request.Id, JsonRpcError.InvalidParams(ex.Message));
+        }
         catch (McpPaginationException ex)
         {
             McpDiagnostics.SetError(activity, ex);
@@ -264,6 +262,11 @@ public sealed class McpServer : IAsyncDisposable
     }
 
     #region Server-Initiated Requests
+
+    private static string? TryGetStringProperty(JsonElement? @params, string name) =>
+        @params is { } p && p.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.String
+            ? value.GetString()
+            : null;
 
     private RequestId NextId() => (RequestId)Interlocked.Increment(ref _nextId);
 
