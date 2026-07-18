@@ -26,6 +26,7 @@ public sealed class McpServer : IAsyncDisposable
     private readonly PaginationHelper _pagination;
     private readonly PendingRequestTracker _tracker = new();
     private long _nextId;
+    private bool _initialized;
     private McpLogLevel _logLevel = McpLogLevel.Warning;
     private bool _loggingEnabled;
     private CancellationTokenSource? _cts;
@@ -203,6 +204,26 @@ public sealed class McpServer : IAsyncDisposable
 
         try
         {
+            // Lifecycle enforcement: initialize is valid only once, and no operation other than
+            // ping is accepted until the client's notifications/initialized has been received.
+            if (request.Method == McpMethods.Initialize)
+            {
+                if (_session.State != McpSessionState.Uninitialized)
+                {
+                    var duplicate = JsonRpcResponse.Failure(request.Id,
+                        JsonRpcError.InvalidRequest("Server is already initialized."));
+                    McpDiagnostics.SetError(activity, errorCode: duplicate.Error?.Code);
+                    return duplicate;
+                }
+            }
+            else if (request.Method != McpMethods.Ping && !_initialized)
+            {
+                var notReady = JsonRpcResponse.Failure(request.Id,
+                    JsonRpcError.InvalidRequest($"Received '{request.Method}' before initialization was complete."));
+                McpDiagnostics.SetError(activity, errorCode: notReady.Error?.Code);
+                return notReady;
+            }
+
             var response = request.Method switch
             {
                 McpMethods.Initialize => HandleInitialize(request),
@@ -512,6 +533,7 @@ public sealed class McpServer : IAsyncDisposable
         switch (notification.Method)
         {
             case McpMethods.NotificationsInitialized:
+                _initialized = true;
                 _logger.LogInformation("Client initialized");
                 break;
             case McpMethods.NotificationsCancelled:
