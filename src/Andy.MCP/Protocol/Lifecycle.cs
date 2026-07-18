@@ -72,6 +72,7 @@ public sealed record Implementation
     /// </summary>
     [JsonPropertyName("description")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    [SinceRevision("2025-11-25")]
     public string? Description { get; init; }
 
     /// <summary>
@@ -79,6 +80,7 @@ public sealed record Implementation
     /// </summary>
     [JsonPropertyName("websiteUrl")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    [SinceRevision("2025-11-25")]
     public string? WebsiteUrl { get; init; }
 
     /// <summary>
@@ -86,6 +88,7 @@ public sealed record Implementation
     /// </summary>
     [JsonPropertyName("icons")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    [SinceRevision("2025-11-25")]
     public IReadOnlyList<Icon>? Icons { get; init; }
 
     public Implementation() { }

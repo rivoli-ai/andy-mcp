@@ -132,10 +132,12 @@ public sealed record CreateMessageRequest
 
     [JsonPropertyName("tools")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    [SinceRevision("2025-11-25")]
     public IReadOnlyList<Tool>? Tools { get; init; }
 
     [JsonPropertyName("toolChoice")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    [SinceRevision("2025-11-25")]
     public ToolChoice? ToolChoice { get; init; }
 
     /// <summary>Reserved protocol metadata (_meta), preserved round-trip.</summary>
@@ -236,6 +238,7 @@ public sealed record ElicitRequest
     /// </summary>
     [JsonPropertyName("mode")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    [SinceRevision("2025-11-25")]
     public string? Mode { get; init; }
 
     [JsonPropertyName("message")]
@@ -249,11 +252,13 @@ public sealed record ElicitRequest
     /// <summary>Opaque identifier correlating a URL-mode elicitation (URL mode only).</summary>
     [JsonPropertyName("elicitationId")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    [SinceRevision("2025-11-25")]
     public string? ElicitationId { get; init; }
 
     /// <summary>The URL the user should visit to provide input (URL mode only).</summary>
     [JsonPropertyName("url")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    [SinceRevision("2025-11-25")]
     public string? Url { get; init; }
 
     /// <summary>True when this is a URL-mode elicitation request.</summary>

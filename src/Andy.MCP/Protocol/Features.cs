@@ -34,6 +34,7 @@ public sealed record Tool
 
     [JsonPropertyName("icons")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    [SinceRevision("2025-11-25")]
     public IReadOnlyList<Icon>? Icons { get; init; }
 
     [JsonPropertyName("_meta")]
@@ -157,6 +158,7 @@ public sealed record Resource
 
     [JsonPropertyName("icons")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    [SinceRevision("2025-11-25")]
     public IReadOnlyList<Icon>? Icons { get; init; }
 
     [JsonPropertyName("_meta")]
@@ -193,6 +195,7 @@ public sealed record ResourceTemplate
 
     [JsonPropertyName("icons")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    [SinceRevision("2025-11-25")]
     public IReadOnlyList<Icon>? Icons { get; init; }
 
     [JsonPropertyName("_meta")]
@@ -237,6 +240,7 @@ public sealed record Prompt
 
     [JsonPropertyName("icons")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    [SinceRevision("2025-11-25")]
     public IReadOnlyList<Icon>? Icons { get; init; }
 
     [JsonPropertyName("_meta")]
