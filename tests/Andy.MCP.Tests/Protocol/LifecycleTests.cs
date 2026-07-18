@@ -14,7 +14,7 @@ public class LifecycleTypesTests
             Capabilities = new ClientCapabilities
             {
                 Roots = new RootsCapability { ListChanged = true },
-                Sampling = new EmptyCapability()
+                Sampling = new SamplingCapability()
             },
             ClientInfo = new Implementation("TestClient", "1.0.0")
         };
@@ -158,7 +158,7 @@ public class LifecycleTypesTests
                 Capabilities = new ClientCapabilities
                 {
                     Roots = new RootsCapability { ListChanged = true },
-                    Sampling = new EmptyCapability()
+                    Sampling = new SamplingCapability()
                 },
                 ClientInfo = new Implementation("TestClient", "1.0.0")
             })
@@ -353,7 +353,7 @@ public class McpSessionTests
             Capabilities = new ClientCapabilities
             {
                 Roots = new RootsCapability { ListChanged = true },
-                Sampling = new EmptyCapability()
+                Sampling = new SamplingCapability()
             },
             ClientInfo = new Implementation("TestClient", "2.0.0")
         };
@@ -419,7 +419,7 @@ public class McpSessionTests
             Capabilities = new ClientCapabilities
             {
                 Roots = new RootsCapability(),
-                Sampling = new EmptyCapability()
+                Sampling = new SamplingCapability()
             },
             ClientInfo = new Implementation("C", "1.0")
         }, "2025-06-18");

@@ -42,7 +42,7 @@ public sealed record McpClientOptions
                 ? new RootsCapability { ListChanged = true }
                 : Capabilities.Roots,
             Sampling = SamplingHandler is not null
-                ? new EmptyCapability()
+                ? Capabilities.Sampling ?? new SamplingCapability()
                 : Capabilities.Sampling,
             Elicitation = ElicitationHandler is not null
                 ? new EmptyCapability()

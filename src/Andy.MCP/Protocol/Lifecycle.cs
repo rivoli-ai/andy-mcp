@@ -108,7 +108,7 @@ public sealed record ClientCapabilities
 
     [JsonPropertyName("sampling")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    public EmptyCapability? Sampling { get; init; }
+    public SamplingCapability? Sampling { get; init; }
 
     [JsonPropertyName("elicitation")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
@@ -170,6 +170,24 @@ public sealed record ListChangedCapability
     [JsonPropertyName("listChanged")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public bool? ListChanged { get; init; }
+}
+
+/// <summary>
+/// Client sampling capability (MCP 2025-11-25). Presence declares sampling support; the optional
+/// sub-fields declare support for context inclusion (<c>context</c>) and tool use via the
+/// <c>tools</c>/<c>toolChoice</c> parameters (<c>tools</c>).
+/// </summary>
+public sealed record SamplingCapability
+{
+    [JsonPropertyName("context")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    [SinceRevision("2025-11-25")]
+    public EmptyCapability? Context { get; init; }
+
+    [JsonPropertyName("tools")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    [SinceRevision("2025-11-25")]
+    public EmptyCapability? Tools { get; init; }
 }
 
 /// <summary>
