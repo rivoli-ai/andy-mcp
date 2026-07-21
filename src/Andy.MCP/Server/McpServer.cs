@@ -72,6 +72,13 @@ public sealed class McpServer : IAsyncDisposable
         Func<JsonElement?, IProgress<McpProgress>, CancellationToken, Task<CallToolResult>> handler,
         ToolAnnotations? annotations = null, JsonElement? outputSchema = null)
     {
+        // Reject a malformed input/output schema at registration rather than at call time.
+        var schemaErrors = JsonSchemaValidator.ValidateSchema(inputSchema);
+        if (outputSchema is { } os)
+            schemaErrors = schemaErrors.Concat(JsonSchemaValidator.ValidateSchema(os)).ToList();
+        if (schemaErrors.Count > 0)
+            throw new ArgumentException($"Invalid schema for tool '{name}': {string.Join("; ", schemaErrors)}");
+
         _tools[name] = new ToolHandler
         {
             Tool = new Tool

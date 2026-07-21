@@ -24,6 +24,79 @@ public static class JsonSchemaValidator
         return errors;
     }
 
+    private static readonly HashSet<string> ValidTypes =
+        new(StringComparer.Ordinal) { "string", "number", "integer", "boolean", "array", "object", "null" };
+
+    /// <summary>
+    /// Validate that a value is itself a well-formed JSON Schema (used to check tool input/output
+    /// schemas at registration). Returns structural errors, empty if the schema is well-formed.
+    /// </summary>
+    public static IReadOnlyList<string> ValidateSchema(JsonElement schema)
+    {
+        var errors = new List<string>();
+        ValidateSchemaNode(schema, "", errors);
+        return errors;
+    }
+
+    private static void ValidateSchemaNode(JsonElement schema, string path, List<string> errors)
+    {
+        // A boolean is a valid schema.
+        if (schema.ValueKind is JsonValueKind.True or JsonValueKind.False)
+            return;
+        if (schema.ValueKind != JsonValueKind.Object)
+        {
+            errors.Add($"{SchemaLabel(path)} must be an object or boolean schema.");
+            return;
+        }
+
+        if (schema.TryGetProperty("type", out var type))
+        {
+            var typesValid = type.ValueKind switch
+            {
+                JsonValueKind.String => ValidTypes.Contains(type.GetString()!),
+                JsonValueKind.Array => type.EnumerateArray().All(t => t.ValueKind == JsonValueKind.String && ValidTypes.Contains(t.GetString()!)),
+                _ => false
+            };
+            if (!typesValid)
+                errors.Add($"{SchemaLabel(path)} has an invalid 'type'.");
+        }
+
+        if (schema.TryGetProperty("properties", out var properties))
+        {
+            if (properties.ValueKind != JsonValueKind.Object)
+                errors.Add($"{SchemaLabel(path)} 'properties' must be an object.");
+            else
+                foreach (var prop in properties.EnumerateObject())
+                    ValidateSchemaNode(prop.Value, path.Length == 0 ? prop.Name : $"{path}.{prop.Name}", errors);
+        }
+
+        if (schema.TryGetProperty("required", out var required))
+        {
+            if (required.ValueKind != JsonValueKind.Array || required.EnumerateArray().Any(r => r.ValueKind != JsonValueKind.String))
+                errors.Add($"{SchemaLabel(path)} 'required' must be an array of strings.");
+        }
+
+        if (schema.TryGetProperty("items", out var items))
+            ValidateSchemaNode(items, path.Length == 0 ? "items" : $"{path}.items", errors);
+
+        foreach (var combinator in new[] { "allOf", "anyOf", "oneOf" })
+        {
+            if (schema.TryGetProperty(combinator, out var sub))
+            {
+                if (sub.ValueKind != JsonValueKind.Array)
+                    errors.Add($"{SchemaLabel(path)} '{combinator}' must be an array of schemas.");
+                else
+                    foreach (var s in sub.EnumerateArray())
+                        ValidateSchemaNode(s, $"{path}.{combinator}", errors);
+            }
+        }
+
+        if (schema.TryGetProperty("not", out var not))
+            ValidateSchemaNode(not, path.Length == 0 ? "not" : $"{path}.not", errors);
+    }
+
+    private static string SchemaLabel(string path) => path.Length == 0 ? "Schema" : $"Schema at '{path}'";
+
     private static void ValidateValue(JsonElement? maybeValue, JsonElement schema, string path, List<string> errors)
     {
         // Boolean schemas: true accepts everything, false rejects everything.
