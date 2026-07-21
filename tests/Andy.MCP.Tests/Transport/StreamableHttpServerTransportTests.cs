@@ -184,6 +184,8 @@ public class StreamableHttpServerTransportTests
     {
         var context = new DefaultHttpContext();
         context.Request.Method = "POST";
+        context.Request.ContentType = "application/json";
+        context.Request.Headers.Accept = "application/json, text/event-stream";
         context.Request.Body = new MemoryStream(Encoding.UTF8.GetBytes(json));
         if (sessionId is not null)
             context.Request.Headers["Mcp-Session-Id"] = sessionId;
