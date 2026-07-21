@@ -1,6 +1,7 @@
 using System.Runtime.CompilerServices;
 using System.Text.Json;
 using Andy.MCP.Protocol;
+using Andy.MCP.Server;
 using Andy.MCP.Transport;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -292,6 +293,36 @@ public sealed class McpClient : IAsyncDisposable
     {
         _session.RequireServerCapability("logging");
         await SendRequestAsync<JsonElement>(McpMethods.LoggingSetLevel, new { level }, ct);
+    }
+
+    /// <summary>Request argument completions. Requires the server's completions capability.</summary>
+    public async Task<CompletionResult> CompleteAsync(CompletionRequest request, CancellationToken ct = default)
+    {
+        _session.RequireServerCapability("completions");
+        return await SendRequestAsync<CompletionResult>(McpMethods.CompletionComplete, request, ct);
+    }
+
+    /// <summary>
+    /// Subscribe to updates for a resource. Requires the server to declare the resources
+    /// subscribe sub-capability.
+    /// </summary>
+    public async Task SubscribeResourceAsync(string uri, CancellationToken ct = default)
+    {
+        RequireResourceSubscription();
+        await SendRequestAsync<JsonElement>(McpMethods.ResourcesSubscribe, new { uri }, ct);
+    }
+
+    /// <summary>Unsubscribe from updates for a resource.</summary>
+    public async Task UnsubscribeResourceAsync(string uri, CancellationToken ct = default)
+    {
+        RequireResourceSubscription();
+        await SendRequestAsync<JsonElement>(McpMethods.ResourcesUnsubscribe, new { uri }, ct);
+    }
+
+    private void RequireResourceSubscription()
+    {
+        if (_session.ServerCapabilities?.Resources?.Subscribe != true)
+            throw new McpCapabilityNotAvailableException("resources.subscribe");
     }
 
     #endregion
