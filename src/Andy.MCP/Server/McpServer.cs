@@ -59,6 +59,16 @@ public sealed class McpServer : IAsyncDisposable
 
     public McpServer AddTool(string name, string description, JsonElement inputSchema,
         Func<JsonElement?, CancellationToken, Task<CallToolResult>> handler,
+        ToolAnnotations? annotations = null) =>
+        AddTool(name, description, inputSchema, (args, _, ct) => handler(args, ct), annotations);
+
+    /// <summary>
+    /// Register a tool whose handler receives an <see cref="IProgress{McpProgress}"/> for reporting
+    /// progress. Reported progress is forwarded to the client only when the request carried a
+    /// progress token in its _meta; otherwise it is discarded.
+    /// </summary>
+    public McpServer AddTool(string name, string description, JsonElement inputSchema,
+        Func<JsonElement?, IProgress<McpProgress>, CancellationToken, Task<CallToolResult>> handler,
         ToolAnnotations? annotations = null)
     {
         _tools[name] = new ToolHandler
@@ -71,6 +81,14 @@ public sealed class McpServer : IAsyncDisposable
 
     public McpServer AddTool(string name, string description,
         Func<JsonElement?, CancellationToken, Task<CallToolResult>> handler)
+    {
+        var emptySchema = McpJsonDefaults.ToElement(new { type = "object", properties = new { } });
+        return AddTool(name, description, emptySchema, handler);
+    }
+
+    /// <summary>Register a schemaless tool whose handler receives an <see cref="IProgress{McpProgress}"/>.</summary>
+    public McpServer AddTool(string name, string description,
+        Func<JsonElement?, IProgress<McpProgress>, CancellationToken, Task<CallToolResult>> handler)
     {
         var emptySchema = McpJsonDefaults.ToElement(new { type = "object", properties = new { } });
         return AddTool(name, description, emptySchema, handler);
@@ -441,9 +459,11 @@ public sealed class McpServer : IAsyncDisposable
                 JsonRpcError.InvalidParams($"Input validation failed: {string.Join("; ", validationErrors)}"));
         }
 
+        var reporter = CreateProgressReporter(callReq.Meta);
+
         try
         {
-            var result = await handler.Handler(callReq.Arguments, ct);
+            var result = await handler.Handler(callReq.Arguments, reporter, ct);
             return JsonRpcResponse.Success(request.Id, ToWire(result));
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
@@ -451,6 +471,81 @@ public sealed class McpServer : IAsyncDisposable
             var errorResult = CallToolResult.Error(ex.Message);
             return JsonRpcResponse.Success(request.Id, ToWire(errorResult));
         }
+    }
+
+    /// <summary>
+    /// Build an <see cref="IProgress{McpProgress}"/> that forwards to the client via
+    /// notifications/progress when the request carried a <c>_meta.progressToken</c>, or a no-op
+    /// reporter otherwise.
+    /// </summary>
+    private IProgress<McpProgress> CreateProgressReporter(JsonElement? meta)
+    {
+        if (meta is { } m && m.TryGetProperty("progressToken", out var token))
+        {
+            RequestId? id = token.ValueKind switch
+            {
+                JsonValueKind.String => (RequestId)token.GetString()!,
+                JsonValueKind.Number => (RequestId)token.GetInt64(),
+                _ => null
+            };
+            if (id is { } progressToken)
+                return new ServerProgress(this, progressToken);
+        }
+        return NoOpProgress.Instance;
+    }
+
+    private async Task SendProgressAsync(RequestId progressToken, McpProgress progress)
+    {
+        try
+        {
+            await SendMessageAsync(new JsonRpcNotification
+            {
+                Method = McpMethods.NotificationsProgress,
+                Params = McpJsonDefaults.ToElement(new ProgressParams
+                {
+                    ProgressToken = progressToken,
+                    Progress = progress.Progress,
+                    Total = progress.Total,
+                    Message = progress.Message
+                })
+            });
+        }
+        catch
+        {
+            // Best-effort: progress delivery must never fault the handler.
+        }
+    }
+
+    private sealed class ServerProgress : IProgress<McpProgress>
+    {
+        private readonly McpServer _server;
+        private readonly RequestId _token;
+        private readonly object _gate = new();
+        private double _last = double.NegativeInfinity;
+
+        public ServerProgress(McpServer server, RequestId token)
+        {
+            _server = server;
+            _token = token;
+        }
+
+        public void Report(McpProgress value)
+        {
+            lock (_gate)
+            {
+                // Progress MUST increase monotonically; drop out-of-order reports.
+                if (value.Progress <= _last)
+                    return;
+                _last = value.Progress;
+            }
+            _ = _server.SendProgressAsync(_token, value);
+        }
+    }
+
+    private sealed class NoOpProgress : IProgress<McpProgress>
+    {
+        public static readonly NoOpProgress Instance = new();
+        public void Report(McpProgress value) { }
     }
 
     private JsonRpcResponse HandleResourcesList(JsonRpcRequest request)
@@ -707,7 +802,7 @@ public sealed class McpServer : IAsyncDisposable
     private sealed class ToolHandler
     {
         public required Tool Tool { get; init; }
-        public required Func<JsonElement?, CancellationToken, Task<CallToolResult>> Handler { get; init; }
+        public required Func<JsonElement?, IProgress<McpProgress>, CancellationToken, Task<CallToolResult>> Handler { get; init; }
     }
 
     private sealed class ResourceHandler

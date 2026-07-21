@@ -188,7 +188,15 @@ public sealed class McpClient : IAsyncDisposable
         return all;
     }
 
-    public async Task<CallToolResult> CallToolAsync(string name, object? arguments = null, CancellationToken ct = default)
+    public Task<CallToolResult> CallToolAsync(string name, object? arguments = null, CancellationToken ct = default) =>
+        CallToolAsync(name, arguments, progress: null, ct);
+
+    /// <summary>
+    /// Call a tool, receiving progress notifications. When <paramref name="progress"/> is provided,
+    /// a progress token is attached to the request and matching notifications/progress are routed to it.
+    /// </summary>
+    public async Task<CallToolResult> CallToolAsync(string name, object? arguments,
+        IProgress<McpProgress>? progress, CancellationToken ct = default)
     {
         _session.RequireServerCapability("tools");
         var args = arguments is JsonElement je
@@ -197,8 +205,22 @@ public sealed class McpClient : IAsyncDisposable
                 ? McpJsonDefaults.ToElement(arguments)
                 : (JsonElement?)null;
 
-        return await SendRequestAsync<CallToolResult>(McpMethods.ToolsCall,
-            new CallToolRequest { Name = name, Arguments = args }, ct);
+        RequestId? progressToken = null;
+        JsonElement? meta = null;
+        if (progress is not null)
+        {
+            progressToken = (RequestId)Guid.NewGuid().ToString("N");
+            meta = McpJsonDefaults.ToElement(new Meta { ProgressToken = progressToken });
+        }
+
+        var request = new CallToolRequest
+        {
+            Name = name,
+            Arguments = args,
+            Meta = meta
+        };
+
+        return await SendRequestAsync<CallToolResult>(McpMethods.ToolsCall, request, ct, progress, progressToken);
     }
 
     public async Task<IReadOnlyList<Resource>> ListResourcesAsync(CancellationToken ct = default)
@@ -278,7 +300,8 @@ public sealed class McpClient : IAsyncDisposable
 
     private RequestId NextId() => (RequestId)Interlocked.Increment(ref _nextId);
 
-    private async Task<T> SendRequestAsync<T>(string method, object? @params, CancellationToken ct)
+    private async Task<T> SendRequestAsync<T>(string method, object? @params, CancellationToken ct,
+        IProgress<McpProgress>? progress = null, RequestId? progressToken = null)
     {
         var id = NextId();
         using var activity = McpDiagnostics.StartClientRequest(
@@ -292,6 +315,11 @@ public sealed class McpClient : IAsyncDisposable
         };
 
         var pending = _tracker.Track(id, _options.RequestTimeout);
+        if (progress is not null && progressToken is { } token)
+        {
+            pending.ProgressToken = token;
+            pending.OnProgress(progress);
+        }
         try
         {
             await _transport.SendAsync(request, ct);
