@@ -73,6 +73,9 @@ public sealed class McpClient : IAsyncDisposable
     /// </summary>
     public McpSession Session => _session;
 
+    /// <summary>Test-only: number of outbound requests still awaiting a response.</summary>
+    internal int PendingRequestCount => _tracker.Count;
+
     // Events for server notifications
     public event EventHandler? ToolsChanged;
     public event EventHandler? ResourcesChanged;
@@ -308,6 +311,14 @@ public sealed class McpClient : IAsyncDisposable
 
             return JsonSerializer.Deserialize<T>(response.Result.Value, McpJsonDefaults.Options)!;
         }
+        catch (Exception ex) when (ex is OperationCanceledException or TimeoutException
+                                   && method != McpMethods.Initialize)
+        {
+            // Caller cancellation or request timeout stopped us waiting: tell the server to stop
+            // handling this request. The initialize request MUST NOT be cancelled this way.
+            await TrySendCancellationAsync(id);
+            throw;
+        }
         catch (Exception ex) when (activity is not null && ex is not McpException)
         {
             McpDiagnostics.SetError(activity, ex);
@@ -315,7 +326,22 @@ public sealed class McpClient : IAsyncDisposable
         }
         finally
         {
+            // Ensure the request leaves the tracker on every path (success removes it via
+            // TryComplete; cancellation/timeout would otherwise leak an entry).
+            _tracker.TryCancel(id);
             pending.Dispose();
+        }
+    }
+
+    private async Task TrySendCancellationAsync(RequestId id)
+    {
+        try
+        {
+            await SendNotificationAsync(McpMethods.NotificationsCancelled, new CancelledParams { RequestId = id });
+        }
+        catch
+        {
+            // Best-effort: the transport may already be gone.
         }
     }
 
