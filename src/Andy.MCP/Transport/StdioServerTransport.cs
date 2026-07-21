@@ -144,7 +144,9 @@ public sealed class StdioServerTransport : IServerTransport
         {
             await foreach (var json in _outgoing.Reader.ReadAllAsync(ct))
             {
-                await _output.WriteLineAsync(json.AsMemory(), ct);
+                // Terminate with LF explicitly: WriteLineAsync would emit the platform newline
+                // (CRLF on Windows), but stdio JSON-RPC framing requires "\n".
+                await _output.WriteAsync((json + '\n').AsMemory(), ct);
                 await _output.FlushAsync(ct);
             }
         }

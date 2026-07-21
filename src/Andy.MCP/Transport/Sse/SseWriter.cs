@@ -20,24 +20,26 @@ public sealed class SseWriter
     /// </summary>
     public async Task WriteEventAsync(SseEvent evt, CancellationToken cancellationToken = default)
     {
+        // SSE framing requires LF ("\n") line endings; do not use AppendLine, which emits the
+        // platform newline (CRLF on Windows) and breaks the wire format.
         var sb = new StringBuilder();
 
         if (evt.EventType != "message")
-            sb.Append("event: ").AppendLine(evt.EventType);
+            sb.Append("event: ").Append(evt.EventType).Append('\n');
 
-        // Split data into lines (SSE requires each line to be prefixed with "data: ")
+        // Split data into lines (SSE requires each line to be prefixed with "data: ").
         var dataLines = evt.Data.Split('\n');
         foreach (var line in dataLines)
-            sb.Append("data: ").AppendLine(line);
+            sb.Append("data: ").Append(line.TrimEnd('\r')).Append('\n');
 
         if (evt.Id is not null)
-            sb.Append("id: ").AppendLine(evt.Id);
+            sb.Append("id: ").Append(evt.Id).Append('\n');
 
         if (evt.Retry is not null)
-            sb.Append("retry: ").Append(evt.Retry.Value).AppendLine();
+            sb.Append("retry: ").Append(evt.Retry.Value).Append('\n');
 
-        // Blank line terminates the event
-        sb.AppendLine();
+        // Blank line terminates the event.
+        sb.Append('\n');
 
         var bytes = _encoding.GetBytes(sb.ToString());
         await _stream.WriteAsync(bytes, cancellationToken);
