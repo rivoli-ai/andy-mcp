@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using System.Runtime.CompilerServices;
+using System.Security.Claims;
 using System.Security.Cryptography;
 using System.Text.Json;
 using System.Threading.Channels;
@@ -126,7 +127,7 @@ public sealed class StreamableHttpHandler
         if (message is JsonRpcRequest { Method: McpMethods.Initialize } initRequest)
         {
             var sessionId = GenerateSessionId();
-            var session = new StreamableHttpSession(sessionId);
+            var session = new StreamableHttpSession(sessionId, GetUserKey(context));
             _sessions[sessionId] = session;
 
             context.Response.Headers["Mcp-Session-Id"] = sessionId;
@@ -160,13 +161,10 @@ public sealed class StreamableHttpHandler
             return;
         }
 
-        // All other requests require a session
-        var sid = context.Request.Headers["Mcp-Session-Id"].FirstOrDefault();
-        if (sid is null || !_sessions.TryGetValue(sid, out var existingSession))
-        {
-            context.Response.StatusCode = sid is null ? 400 : 404;
-            return;
-        }
+        // All other requests require a session bound to the same authenticated principal.
+        var existingSession = ResolveAuthorizedSession(context);
+        if (existingSession is null)
+            return; // status already set (400/404/403)
 
         if (message is JsonRpcNotification)
         {
@@ -214,12 +212,9 @@ public sealed class StreamableHttpHandler
             return;
         }
 
-        var sid = context.Request.Headers["Mcp-Session-Id"].FirstOrDefault();
-        if (sid is null || !_sessions.TryGetValue(sid, out var session))
-        {
-            context.Response.StatusCode = sid is null ? 400 : 404;
-            return;
-        }
+        var session = ResolveAuthorizedSession(context);
+        if (session is null)
+            return; // status already set (400/404/403)
 
         context.Response.ContentType = "text/event-stream";
         context.Response.Headers.CacheControl = "no-cache";
@@ -245,16 +240,58 @@ public sealed class StreamableHttpHandler
 
     private void HandleDelete(HttpContext context)
     {
+        // Only the owning principal may delete a session.
+        var session = ResolveAuthorizedSession(context);
+        if (session is null)
+            return; // status already set (400/404/403)
+
+        _sessions.TryRemove(session.SessionId, out _);
+        session.Close();
+        context.Response.StatusCode = 200;
+    }
+
+    /// <summary>
+    /// Resolve the session named by the Mcp-Session-Id header, enforcing that the current request's
+    /// authenticated principal matches the one that created it. Sets the response status and returns
+    /// null on any failure: 400 (no session header), 404 (unknown session), 403 (cross-user reuse).
+    /// </summary>
+    private StreamableHttpSession? ResolveAuthorizedSession(HttpContext context)
+    {
         var sid = context.Request.Headers["Mcp-Session-Id"].FirstOrDefault();
-        if (sid is not null && _sessions.TryRemove(sid, out var session))
+        if (sid is null)
         {
-            session.Close();
-            context.Response.StatusCode = 200;
+            context.Response.StatusCode = 400;
+            return null;
         }
-        else
+
+        if (!_sessions.TryGetValue(sid, out var session))
         {
             context.Response.StatusCode = 404;
+            return null;
         }
+
+        if (!string.Equals(session.UserKey, GetUserKey(context), StringComparison.Ordinal))
+        {
+            context.Response.StatusCode = 403;
+            return null;
+        }
+
+        return session;
+    }
+
+    /// <summary>
+    /// A stable key identifying the request's authenticated principal, or null if unauthenticated.
+    /// Used only internally to bind sessions; never surfaced to clients.
+    /// </summary>
+    private static string? GetUserKey(HttpContext context)
+    {
+        var user = context.User;
+        if (user?.Identity?.IsAuthenticated != true)
+            return null;
+
+        return user.FindFirst(ClaimTypes.NameIdentifier)?.Value
+            ?? user.FindFirst("sub")?.Value
+            ?? user.Identity.Name;
     }
 
     private static bool IsJsonContentType(HttpContext context)
@@ -310,12 +347,20 @@ public sealed class StreamableHttpSession : IServerTransport
     internal int BufferedResponseCount { get { lock (_sync) { return _bufferedResponses.Count; } } }
 
     public string SessionId { get; }
+
+    /// <summary>
+    /// A stable key for the principal that created this session, or null if it was created
+    /// anonymously. Requests bearing a different principal are rejected. Never sent to clients.
+    /// </summary>
+    public string? UserKey { get; }
+
     public bool IsConnected => _connected;
     public event EventHandler<TransportDisconnectedEventArgs>? Disconnected;
 
-    public StreamableHttpSession(string sessionId)
+    public StreamableHttpSession(string sessionId, string? userKey = null)
     {
         SessionId = sessionId;
+        UserKey = userKey;
         _incoming = Channel.CreateUnbounded<JsonRpcMessage>();
         _outgoing = Channel.CreateUnbounded<JsonRpcMessage>();
     }
