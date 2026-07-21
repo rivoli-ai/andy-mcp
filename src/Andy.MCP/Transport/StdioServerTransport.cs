@@ -1,5 +1,6 @@
 using System.Runtime.CompilerServices;
 using System.Text;
+using System.Text.Json;
 using System.Threading.Channels;
 using Andy.MCP.Protocol;
 using Microsoft.Extensions.Logging;
@@ -17,7 +18,9 @@ public sealed class StdioServerTransport : IServerTransport
     private readonly ILogger _logger;
     private readonly TextReader _input;
     private readonly TextWriter _output;
-    private readonly Channel<JsonRpcMessage> _outgoing;
+    // Outgoing lines are pre-serialized so protocol-level errors (e.g. a null-id parse error)
+    // that have no JsonRpcMessage representation can still be written on the same stream.
+    private readonly Channel<string> _outgoing;
     private readonly Channel<JsonRpcMessage> _incoming;
     private Task? _readLoop;
     private Task? _writeLoop;
@@ -42,7 +45,7 @@ public sealed class StdioServerTransport : IServerTransport
         _input = input;
         _output = output;
         _logger = logger ?? NullLogger.Instance;
-        _outgoing = Channel.CreateUnbounded<JsonRpcMessage>(new UnboundedChannelOptions
+        _outgoing = Channel.CreateUnbounded<string>(new UnboundedChannelOptions
         {
             SingleReader = true,
             SingleWriter = false
@@ -74,7 +77,7 @@ public sealed class StdioServerTransport : IServerTransport
         ObjectDisposedException.ThrowIf(_disposed, this);
         if (!_connected) throw new InvalidOperationException("Transport is not started.");
 
-        await _outgoing.Writer.WriteAsync(message, cancellationToken);
+        await _outgoing.Writer.WriteAsync(McpJsonDefaults.Serialize(message), cancellationToken);
     }
 
     public IAsyncEnumerable<JsonRpcMessage> Messages => ReadMessagesAsync();
@@ -104,13 +107,12 @@ public sealed class StdioServerTransport : IServerTransport
                     var message = McpJsonDefaults.Deserialize(line);
                     await _incoming.Writer.WriteAsync(message, ct);
                 }
-                catch (JsonRpcParseException ex)
-                {
-                    _logger.LogWarning(ex, "Failed to parse JSON-RPC message from stdin");
-                }
                 catch (Exception ex) when (ex is not OperationCanceledException)
                 {
-                    _logger.LogWarning(ex, "Error deserializing message from stdin");
+                    // Unparseable input: reply with a JSON-RPC parse error (id: null), per spec,
+                    // rather than silently dropping it.
+                    _logger.LogWarning(ex, "Failed to parse JSON-RPC message from stdin");
+                    await _outgoing.Writer.WriteAsync(ParseErrorLine(), ct);
                 }
             }
         }
@@ -127,13 +129,21 @@ public sealed class StdioServerTransport : IServerTransport
         }
     }
 
+    /// <summary>
+    /// A JSON-RPC parse-error response with a null id, for input that cannot be parsed at all.
+    /// </summary>
+    private static string ParseErrorLine()
+    {
+        var error = JsonSerializer.Serialize(JsonRpcError.ParseError(), McpJsonDefaults.Options);
+        return "{\"jsonrpc\":\"2.0\",\"id\":null,\"error\":" + error + "}";
+    }
+
     private async Task WriteLoopAsync(CancellationToken ct)
     {
         try
         {
-            await foreach (var message in _outgoing.Reader.ReadAllAsync(ct))
+            await foreach (var json in _outgoing.Reader.ReadAllAsync(ct))
             {
-                var json = McpJsonDefaults.Serialize(message);
                 await _output.WriteLineAsync(json.AsMemory(), ct);
                 await _output.FlushAsync(ct);
             }
