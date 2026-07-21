@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Text.Json;
 using Andy.MCP.Client;
 using Andy.MCP.Protocol;
@@ -25,6 +26,10 @@ public sealed class McpServer : IAsyncDisposable
     private readonly ResourceSubscriptionManager _subscriptions = new();
     private readonly PaginationHelper _pagination;
     private readonly PendingRequestTracker _tracker = new();
+    // Cancellation sources for inbound requests currently being handled, keyed by request id.
+    private readonly ConcurrentDictionary<RequestId, CancellationTokenSource> _inflight = new();
+    // Serializes outbound transport writes across concurrently-completing handlers.
+    private readonly SemaphoreSlim _writeLock = new(1, 1);
     private long _nextId;
     private bool _initialized;
     private McpLogLevel _logLevel = McpLogLevel.Warning;
@@ -54,6 +59,16 @@ public sealed class McpServer : IAsyncDisposable
 
     public McpServer AddTool(string name, string description, JsonElement inputSchema,
         Func<JsonElement?, CancellationToken, Task<CallToolResult>> handler,
+        ToolAnnotations? annotations = null) =>
+        AddTool(name, description, inputSchema, (args, _, ct) => handler(args, ct), annotations);
+
+    /// <summary>
+    /// Register a tool whose handler receives an <see cref="IProgress{McpProgress}"/> for reporting
+    /// progress. Reported progress is forwarded to the client only when the request carried a
+    /// progress token in its _meta; otherwise it is discarded.
+    /// </summary>
+    public McpServer AddTool(string name, string description, JsonElement inputSchema,
+        Func<JsonElement?, IProgress<McpProgress>, CancellationToken, Task<CallToolResult>> handler,
         ToolAnnotations? annotations = null)
     {
         _tools[name] = new ToolHandler
@@ -66,6 +81,14 @@ public sealed class McpServer : IAsyncDisposable
 
     public McpServer AddTool(string name, string description,
         Func<JsonElement?, CancellationToken, Task<CallToolResult>> handler)
+    {
+        var emptySchema = McpJsonDefaults.ToElement(new { type = "object", properties = new { } });
+        return AddTool(name, description, emptySchema, handler);
+    }
+
+    /// <summary>Register a schemaless tool whose handler receives an <see cref="IProgress{McpProgress}"/>.</summary>
+    public McpServer AddTool(string name, string description,
+        Func<JsonElement?, IProgress<McpProgress>, CancellationToken, Task<CallToolResult>> handler)
     {
         var emptySchema = McpJsonDefaults.ToElement(new { type = "object", properties = new { } });
         return AddTool(name, description, emptySchema, handler);
@@ -164,9 +187,15 @@ public sealed class McpServer : IAsyncDisposable
     {
         switch (message)
         {
+            case JsonRpcRequest { Method: McpMethods.Initialize } initialize:
+                // Handle the lifecycle-critical initialize in order, before any later message.
+                await HandleAndSendAsync(initialize, ct);
+                break;
+
             case JsonRpcRequest request:
-                var response = await HandleRequestAsync(request, ct);
-                await _transport.SendAsync(response, ct);
+                // Dispatch independent requests concurrently so a slow handler never blocks
+                // fast ones and the loop stays free to process cancellations.
+                DispatchRequest(request, ct);
                 break;
 
             case JsonRpcResponse clientResponse:
@@ -178,6 +207,53 @@ public sealed class McpServer : IAsyncDisposable
             case JsonRpcNotification notification:
                 HandleNotification(notification);
                 break;
+        }
+    }
+
+    private void DispatchRequest(JsonRpcRequest request, CancellationToken loopCt)
+    {
+        var cts = CancellationTokenSource.CreateLinkedTokenSource(loopCt);
+        _inflight[request.Id] = cts;
+
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                var response = await HandleRequestAsync(request, cts.Token);
+                // A request cancelled via notifications/cancelled gets no response.
+                if (!cts.IsCancellationRequested)
+                    await SendMessageAsync(response, loopCt);
+            }
+            catch (OperationCanceledException) { }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Unhandled error dispatching {Method}", request.Method);
+            }
+            finally
+            {
+                if (_inflight.TryRemove(request.Id, out var removed))
+                    removed.Dispose();
+            }
+        }, CancellationToken.None);
+    }
+
+    private async Task HandleAndSendAsync(JsonRpcRequest request, CancellationToken ct)
+    {
+        var response = await HandleRequestAsync(request, ct);
+        await SendMessageAsync(response, ct);
+    }
+
+    /// <summary>Serializes outbound writes so concurrent handlers never interleave on the transport.</summary>
+    private async Task SendMessageAsync(JsonRpcMessage message, CancellationToken ct = default)
+    {
+        await _writeLock.WaitAsync(ct);
+        try
+        {
+            await _transport.SendAsync(message, ct);
+        }
+        finally
+        {
+            _writeLock.Release();
         }
     }
 
@@ -288,7 +364,7 @@ public sealed class McpServer : IAsyncDisposable
         var pending = _tracker.Track(id, _options.RequestTimeout);
         try
         {
-            await _transport.SendAsync(request, ct);
+            await SendMessageAsync(request, ct);
             var response = await pending.Task.WaitAsync(ct);
 
             if (response.IsError)
@@ -383,9 +459,11 @@ public sealed class McpServer : IAsyncDisposable
                 JsonRpcError.InvalidParams($"Input validation failed: {string.Join("; ", validationErrors)}"));
         }
 
+        var reporter = CreateProgressReporter(callReq.Meta);
+
         try
         {
-            var result = await handler.Handler(callReq.Arguments, ct);
+            var result = await handler.Handler(callReq.Arguments, reporter, ct);
             return JsonRpcResponse.Success(request.Id, ToWire(result));
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
@@ -393,6 +471,81 @@ public sealed class McpServer : IAsyncDisposable
             var errorResult = CallToolResult.Error(ex.Message);
             return JsonRpcResponse.Success(request.Id, ToWire(errorResult));
         }
+    }
+
+    /// <summary>
+    /// Build an <see cref="IProgress{McpProgress}"/> that forwards to the client via
+    /// notifications/progress when the request carried a <c>_meta.progressToken</c>, or a no-op
+    /// reporter otherwise.
+    /// </summary>
+    private IProgress<McpProgress> CreateProgressReporter(JsonElement? meta)
+    {
+        if (meta is { } m && m.TryGetProperty("progressToken", out var token))
+        {
+            RequestId? id = token.ValueKind switch
+            {
+                JsonValueKind.String => (RequestId)token.GetString()!,
+                JsonValueKind.Number => (RequestId)token.GetInt64(),
+                _ => null
+            };
+            if (id is { } progressToken)
+                return new ServerProgress(this, progressToken);
+        }
+        return NoOpProgress.Instance;
+    }
+
+    private async Task SendProgressAsync(RequestId progressToken, McpProgress progress)
+    {
+        try
+        {
+            await SendMessageAsync(new JsonRpcNotification
+            {
+                Method = McpMethods.NotificationsProgress,
+                Params = McpJsonDefaults.ToElement(new ProgressParams
+                {
+                    ProgressToken = progressToken,
+                    Progress = progress.Progress,
+                    Total = progress.Total,
+                    Message = progress.Message
+                })
+            });
+        }
+        catch
+        {
+            // Best-effort: progress delivery must never fault the handler.
+        }
+    }
+
+    private sealed class ServerProgress : IProgress<McpProgress>
+    {
+        private readonly McpServer _server;
+        private readonly RequestId _token;
+        private readonly object _gate = new();
+        private double _last = double.NegativeInfinity;
+
+        public ServerProgress(McpServer server, RequestId token)
+        {
+            _server = server;
+            _token = token;
+        }
+
+        public void Report(McpProgress value)
+        {
+            lock (_gate)
+            {
+                // Progress MUST increase monotonically; drop out-of-order reports.
+                if (value.Progress <= _last)
+                    return;
+                _last = value.Progress;
+            }
+            _ = _server.SendProgressAsync(_token, value);
+        }
+    }
+
+    private sealed class NoOpProgress : IProgress<McpProgress>
+    {
+        public static readonly NoOpProgress Instance = new();
+        public void Report(McpProgress value) { }
     }
 
     private JsonRpcResponse HandleResourcesList(JsonRpcRequest request)
@@ -540,7 +693,12 @@ public sealed class McpServer : IAsyncDisposable
                 _logger.LogInformation("Client initialized");
                 break;
             case McpMethods.NotificationsCancelled:
-                _logger.LogDebug("Received cancellation notification");
+                var cancelled = notification.GetParams<CancelledParams>();
+                if (cancelled is not null && _inflight.TryGetValue(cancelled.RequestId, out var inflightCts))
+                {
+                    _logger.LogDebug("Cancelling request {Id}: {Reason}", cancelled.RequestId, cancelled.Reason);
+                    inflightCts.Cancel();
+                }
                 break;
             default:
                 _logger.LogDebug("Unhandled notification: {Method}", notification.Method);
@@ -568,19 +726,19 @@ public sealed class McpServer : IAsyncDisposable
 
     public async Task NotifyToolsChangedAsync()
     {
-        await _transport.SendAsync(new JsonRpcNotification { Method = McpMethods.NotificationsToolsListChanged });
+        await SendMessageAsync(new JsonRpcNotification { Method = McpMethods.NotificationsToolsListChanged });
     }
 
     public async Task NotifyResourcesChangedAsync()
     {
-        await _transport.SendAsync(new JsonRpcNotification { Method = McpMethods.NotificationsResourcesListChanged });
+        await SendMessageAsync(new JsonRpcNotification { Method = McpMethods.NotificationsResourcesListChanged });
     }
 
     public async Task NotifyResourceUpdatedAsync(string uri)
     {
         if (_subscriptions.HasSubscribers(uri))
         {
-            await _transport.SendAsync(new JsonRpcNotification
+            await SendMessageAsync(new JsonRpcNotification
             {
                 Method = McpMethods.NotificationsResourcesUpdated,
                 Params = McpJsonDefaults.ToElement(new { uri })
@@ -590,7 +748,7 @@ public sealed class McpServer : IAsyncDisposable
 
     public async Task NotifyPromptsChangedAsync()
     {
-        await _transport.SendAsync(new JsonRpcNotification { Method = McpMethods.NotificationsPromptsListChanged });
+        await SendMessageAsync(new JsonRpcNotification { Method = McpMethods.NotificationsPromptsListChanged });
     }
 
     /// <summary>
@@ -601,7 +759,7 @@ public sealed class McpServer : IAsyncDisposable
         if (!_loggingEnabled) return;
         if ((int)level > (int)_logLevel) return; // Filter: only send at or above set level
 
-        await _transport.SendAsync(new JsonRpcNotification
+        await SendMessageAsync(new JsonRpcNotification
         {
             Method = McpMethods.NotificationsMessage,
             Params = McpJsonDefaults.ToElement(new LogMessageParams
@@ -626,9 +784,15 @@ public sealed class McpServer : IAsyncDisposable
         if (_disposed) return;
         _disposed = true;
         _cts?.Cancel();
-        // Deterministically fail any in-flight server-initiated requests.
+        // Deterministically cancel/dispose in-flight inbound handlers and pending outbound requests.
+        foreach (var kvp in _inflight)
+            kvp.Value.Cancel();
+        foreach (var kvp in _inflight)
+            kvp.Value.Dispose();
+        _inflight.Clear();
         _tracker.CancelAll("Server disposing");
         _tracker.Dispose();
+        _writeLock.Dispose();
         await _transport.DisposeAsync();
         _cts?.Dispose();
     }
@@ -638,7 +802,7 @@ public sealed class McpServer : IAsyncDisposable
     private sealed class ToolHandler
     {
         public required Tool Tool { get; init; }
-        public required Func<JsonElement?, CancellationToken, Task<CallToolResult>> Handler { get; init; }
+        public required Func<JsonElement?, IProgress<McpProgress>, CancellationToken, Task<CallToolResult>> Handler { get; init; }
     }
 
     private sealed class ResourceHandler
