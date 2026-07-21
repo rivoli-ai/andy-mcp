@@ -31,6 +31,13 @@ public sealed class McpServer : IAsyncDisposable
     public McpSession Session => _session;
     public ResourceSubscriptionManager Subscriptions => _subscriptions;
 
+    /// <summary>
+    /// Serialize an outbound result/params payload for the session's negotiated revision, omitting
+    /// any fields newer than that revision. Falls back to the latest revision before negotiation.
+    /// </summary>
+    private JsonElement ToWire<T>(T value) =>
+        RevisionAwareJson.ToElementForRevision(value, _session.Revision ?? ProtocolRevision.Latest);
+
     public McpServer(IServerTransport transport, McpServerOptions? options = null, ILogger? logger = null)
     {
         _transport = transport;
@@ -246,7 +253,7 @@ public sealed class McpServer : IAsyncDisposable
             Instructions = _options.Instructions
         };
 
-        return JsonRpcResponse.Success(request.Id, McpJsonDefaults.ToElement(result));
+        return JsonRpcResponse.Success(request.Id, ToWire(result));
     }
 
     private JsonRpcResponse HandleToolsList(JsonRpcRequest request)
@@ -256,7 +263,7 @@ public sealed class McpServer : IAsyncDisposable
         var page = _pagination.GetPage(allTools, paginatedReq.Cursor);
 
         var result = new { tools = page.Items, nextCursor = page.NextCursor };
-        return JsonRpcResponse.Success(request.Id, McpJsonDefaults.ToElement(result));
+        return JsonRpcResponse.Success(request.Id, ToWire(result));
     }
 
     private async Task<JsonRpcResponse> HandleToolsCallAsync(JsonRpcRequest request, CancellationToken ct)
@@ -280,12 +287,12 @@ public sealed class McpServer : IAsyncDisposable
         try
         {
             var result = await handler.Handler(callReq.Arguments, ct);
-            return JsonRpcResponse.Success(request.Id, McpJsonDefaults.ToElement(result));
+            return JsonRpcResponse.Success(request.Id, ToWire(result));
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             var errorResult = CallToolResult.Error(ex.Message);
-            return JsonRpcResponse.Success(request.Id, McpJsonDefaults.ToElement(errorResult));
+            return JsonRpcResponse.Success(request.Id, ToWire(errorResult));
         }
     }
 
@@ -296,7 +303,7 @@ public sealed class McpServer : IAsyncDisposable
         var page = _pagination.GetPage(allResources, paginatedReq.Cursor);
 
         var result = new { resources = page.Items, nextCursor = page.NextCursor };
-        return JsonRpcResponse.Success(request.Id, McpJsonDefaults.ToElement(result));
+        return JsonRpcResponse.Success(request.Id, ToWire(result));
     }
 
     private async Task<JsonRpcResponse> HandleResourcesReadAsync(JsonRpcRequest request, CancellationToken ct)
@@ -310,7 +317,7 @@ public sealed class McpServer : IAsyncDisposable
 
         var contents = await handler.Handler(uri, ct);
         var result = new ReadResourceResult { Contents = [contents] };
-        return JsonRpcResponse.Success(request.Id, McpJsonDefaults.ToElement(result));
+        return JsonRpcResponse.Success(request.Id, ToWire(result));
     }
 
     private JsonRpcResponse HandleResourcesTemplatesList(JsonRpcRequest request)
@@ -319,7 +326,7 @@ public sealed class McpServer : IAsyncDisposable
         var page = _pagination.GetPage(_resourceTemplates, paginatedReq.Cursor);
 
         var result = new { resourceTemplates = page.Items, nextCursor = page.NextCursor };
-        return JsonRpcResponse.Success(request.Id, McpJsonDefaults.ToElement(result));
+        return JsonRpcResponse.Success(request.Id, ToWire(result));
     }
 
     private JsonRpcResponse HandleResourcesSubscribe(JsonRpcRequest request)
@@ -349,7 +356,7 @@ public sealed class McpServer : IAsyncDisposable
         var page = _pagination.GetPage(allPrompts, paginatedReq.Cursor);
 
         var result = new { prompts = page.Items, nextCursor = page.NextCursor };
-        return JsonRpcResponse.Success(request.Id, McpJsonDefaults.ToElement(result));
+        return JsonRpcResponse.Success(request.Id, ToWire(result));
     }
 
     private async Task<JsonRpcResponse> HandlePromptsGetAsync(JsonRpcRequest request, CancellationToken ct)
@@ -366,7 +373,7 @@ public sealed class McpServer : IAsyncDisposable
             : null;
 
         var result = await handler.Handler(name, arguments, ct);
-        return JsonRpcResponse.Success(request.Id, McpJsonDefaults.ToElement(result));
+        return JsonRpcResponse.Success(request.Id, ToWire(result));
     }
 
     private async Task<JsonRpcResponse> HandleCompletionAsync(JsonRpcRequest request, CancellationToken ct)
@@ -387,7 +394,7 @@ public sealed class McpServer : IAsyncDisposable
             {
                 Completion = new CompletionData { Values = [], HasMore = false }
             };
-            return JsonRpcResponse.Success(request.Id, McpJsonDefaults.ToElement(result));
+            return JsonRpcResponse.Success(request.Id, ToWire(result));
         }
 
         var values = await registration.Handler(
@@ -409,7 +416,7 @@ public sealed class McpServer : IAsyncDisposable
                 HasMore = values.HasMore || values.Values.Count > 100
             }
         };
-        return JsonRpcResponse.Success(request.Id, McpJsonDefaults.ToElement(completionResult));
+        return JsonRpcResponse.Success(request.Id, ToWire(completionResult));
     }
 
     private JsonRpcResponse HandleSetLogLevel(JsonRpcRequest request)
@@ -443,9 +450,16 @@ public sealed class McpServer : IAsyncDisposable
 
     private ServerCapabilities BuildCapabilities() => new()
     {
-        Tools = _tools.Count > 0 ? new ListChangedCapability { ListChanged = true } : null,
-        Resources = _resources.Count > 0 ? new ResourcesCapability { Subscribe = true, ListChanged = true } : null,
-        Prompts = _prompts.Count > 0 ? new ListChangedCapability { ListChanged = true } : null,
+        Tools = _tools.Count > 0
+            ? new ListChangedCapability { ListChanged = _options.ToolsListChanged }
+            : null,
+        // Advertised whenever resources OR resource templates are registered.
+        Resources = _resources.Count > 0 || _resourceTemplates.Count > 0
+            ? new ResourcesCapability { Subscribe = _options.ResourcesSubscribe, ListChanged = _options.ResourcesListChanged }
+            : null,
+        Prompts = _prompts.Count > 0
+            ? new ListChangedCapability { ListChanged = _options.PromptsListChanged }
+            : null,
         Completions = _completions.Count > 0 ? new EmptyCapability() : null,
         Logging = _loggingEnabled ? new EmptyCapability() : null,
     };
@@ -547,4 +561,16 @@ public sealed record McpServerOptions
     public Implementation ServerInfo { get; init; } = new("Andy.MCP.Server", "0.1.0");
     public string? Instructions { get; init; }
     public int PageSize { get; init; } = 50;
+
+    /// <summary>Advertise tools/list_changed support when tools are registered.</summary>
+    public bool ToolsListChanged { get; init; } = true;
+
+    /// <summary>Advertise resource subscription support when resources are registered.</summary>
+    public bool ResourcesSubscribe { get; init; } = true;
+
+    /// <summary>Advertise resources/list_changed support when resources are registered.</summary>
+    public bool ResourcesListChanged { get; init; } = true;
+
+    /// <summary>Advertise prompts/list_changed support when prompts are registered.</summary>
+    public bool PromptsListChanged { get; init; } = true;
 }

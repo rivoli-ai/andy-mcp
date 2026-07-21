@@ -70,7 +70,7 @@ public class McpClientTests
         await using var client = await McpClient.ConnectAsync(clientTransport, cancellationToken: cts.Token);
 
         Assert.Equal(McpSessionState.Ready, client.Session.State);
-        Assert.Equal("2025-06-18", client.Session.ProtocolVersion);
+        Assert.Equal(McpSession.LatestProtocolVersion, client.Session.ProtocolVersion);
         Assert.Equal("MockServer", client.Session.RemoteInfo?.Name);
     }
 

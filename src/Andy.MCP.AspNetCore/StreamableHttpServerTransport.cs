@@ -124,9 +124,22 @@ public sealed class StreamableHttpHandler
                 catch (Exception ex) { _logger.LogError(ex, "Session {Id} handler error", sessionId); }
             });
 
-            // Route message to session and get response
+            // Register the response waiter BEFORE the request becomes visible to the
+            // server loop, then deliver the request. This ordering closes the race where a
+            // fast server response could miss the waiter and leak onto the SSE stream.
+            var responseTask = session.RegisterResponseWaiter(initRequest.Id, context.RequestAborted);
             await session.ReceiveMessageAsync(message);
-            var response = await session.WaitForResponseAsync(initRequest.Id, context.RequestAborted);
+
+            JsonRpcResponse response;
+            try
+            {
+                response = await responseTask;
+            }
+            catch (OperationCanceledException)
+            {
+                // Client aborted before the response arrived; the waiter is already removed.
+                return;
+            }
 
             context.Response.ContentType = "application/json";
             await context.Response.WriteAsync(McpJsonDefaults.Serialize(response));
@@ -151,8 +164,19 @@ public sealed class StreamableHttpHandler
 
         if (message is JsonRpcRequest request)
         {
+            // Register the waiter before delivering the request (see initialize path).
+            var responseTask = existingSession.RegisterResponseWaiter(request.Id, context.RequestAborted);
             await existingSession.ReceiveMessageAsync(message);
-            var response = await existingSession.WaitForResponseAsync(request.Id, context.RequestAborted);
+
+            JsonRpcResponse response;
+            try
+            {
+                response = await responseTask;
+            }
+            catch (OperationCanceledException)
+            {
+                return;
+            }
 
             context.Response.ContentType = "application/json";
             await context.Response.WriteAsync(McpJsonDefaults.Serialize(response));
@@ -227,8 +251,18 @@ public sealed class StreamableHttpSession : IServerTransport
 {
     private readonly Channel<JsonRpcMessage> _incoming;
     private readonly Channel<JsonRpcMessage> _outgoing;
-    private readonly ConcurrentDictionary<RequestId, TaskCompletionSource<JsonRpcResponse>> _pendingResponses = new();
+
+    // All response-correlation state is guarded by _sync. _pendingResponses holds waiters
+    // registered by POST handlers; _bufferedResponses holds responses that arrived before
+    // their waiter was registered (defensive — see RegisterResponseWaiter/SendAsync).
+    private readonly object _sync = new();
+    private readonly Dictionary<RequestId, TaskCompletionSource<JsonRpcResponse>> _pendingResponses = new();
+    private readonly Dictionary<RequestId, JsonRpcResponse> _bufferedResponses = new();
     private volatile bool _connected = true;
+
+    // Test-only visibility into correlation state to assert no waiters/buffers are leaked.
+    internal int PendingResponseCount { get { lock (_sync) { return _pendingResponses.Count; } } }
+    internal int BufferedResponseCount { get { lock (_sync) { return _bufferedResponses.Count; } } }
 
     public string SessionId { get; }
     public bool IsConnected => _connected;
@@ -251,15 +285,27 @@ public sealed class StreamableHttpSession : IServerTransport
     {
         if (message is JsonRpcResponse response)
         {
-            // Route response to the waiting POST handler
-            if (_pendingResponses.TryRemove(response.Id, out var tcs))
+            lock (_sync)
             {
-                tcs.TrySetResult(response);
-                return;
+                // Route the response to the waiting POST handler.
+                if (_pendingResponses.Remove(response.Id, out var tcs))
+                {
+                    tcs.TrySetResult(response);
+                    return;
+                }
+
+                // No waiter is registered yet. A JSON-RPC response is the reply to a
+                // client request that arrived on a POST, and MUST be returned on that
+                // POST — it must NEVER be leaked onto the GET SSE stream. Because the
+                // POST handler registers its waiter before the request becomes visible
+                // to the server loop, reaching here is unexpected; buffer the response
+                // so a (racing) waiter can still claim it rather than dropping it.
+                _bufferedResponses[response.Id] = response;
             }
+            return;
         }
 
-        // Server-initiated requests and notifications go to SSE stream
+        // Server-initiated requests and notifications go to the SSE stream.
         await _outgoing.Writer.WriteAsync(message, cancellationToken);
     }
 
@@ -289,6 +335,9 @@ public sealed class StreamableHttpSession : IServerTransport
 
     /// <summary>
     /// Called by the HTTP handler to deliver a message from a POST request.
+    /// The caller must register a response waiter (for requests) via
+    /// <see cref="RegisterResponseWaiter"/> before calling this, so the response cannot
+    /// be produced before a waiter exists.
     /// </summary>
     internal async Task ReceiveMessageAsync(JsonRpcMessage message)
     {
@@ -296,24 +345,85 @@ public sealed class StreamableHttpSession : IServerTransport
     }
 
     /// <summary>
-    /// Called by the HTTP handler to wait for the server's response to a specific request.
+    /// Registers a waiter for the server's response to a specific request and returns the
+    /// task that completes when the response arrives. This MUST be called before the request
+    /// is handed to the server loop via <see cref="ReceiveMessageAsync"/> so a fast server
+    /// response can never miss the waiter and be routed onto the SSE stream.
     /// </summary>
-    internal async Task<JsonRpcResponse> WaitForResponseAsync(RequestId requestId, CancellationToken ct)
+    internal Task<JsonRpcResponse> RegisterResponseWaiter(RequestId requestId, CancellationToken ct)
     {
         var tcs = new TaskCompletionSource<JsonRpcResponse>(TaskCreationOptions.RunContinuationsAsynchronously);
-        _pendingResponses[requestId] = tcs;
-        ct.Register(() => tcs.TrySetCanceled());
-        return await tcs.Task;
+
+        lock (_sync)
+        {
+            // A response may already be buffered if it raced ahead of registration.
+            if (_bufferedResponses.Remove(requestId, out var buffered))
+            {
+                tcs.SetResult(buffered);
+                return tcs.Task;
+            }
+
+            if (!_connected)
+            {
+                tcs.SetCanceled();
+                return tcs.Task;
+            }
+
+            if (_pendingResponses.ContainsKey(requestId))
+                throw new InvalidOperationException(
+                    $"A request with id '{requestId}' is already awaiting a response on this session.");
+
+            _pendingResponses[requestId] = tcs;
+        }
+
+        if (ct.CanBeCanceled)
+        {
+            var registration = ct.Register(static state =>
+            {
+                var (session, id) = ((StreamableHttpSession session, RequestId id))state!;
+                session.CancelWaiter(id);
+            }, (this, requestId));
+
+            // Dispose the CT registration once the wait completes to avoid accumulating
+            // registrations on a long-lived cancellation token.
+            tcs.Task.ContinueWith(
+                static (_, state) => ((CancellationTokenRegistration)state!).Dispose(),
+                registration,
+                CancellationToken.None,
+                TaskContinuationOptions.ExecuteSynchronously,
+                TaskScheduler.Default);
+        }
+
+        return tcs.Task;
+    }
+
+    private void CancelWaiter(RequestId requestId)
+    {
+        TaskCompletionSource<JsonRpcResponse>? tcs;
+        lock (_sync)
+        {
+            _pendingResponses.Remove(requestId, out tcs);
+        }
+        tcs?.TrySetCanceled();
     }
 
     internal void Close()
     {
-        _connected = false;
+        List<TaskCompletionSource<JsonRpcResponse>> toCancel;
+        lock (_sync)
+        {
+            _connected = false;
+            toCancel = _pendingResponses.Values.ToList();
+            _pendingResponses.Clear();
+            _bufferedResponses.Clear();
+        }
+
         _incoming.Writer.TryComplete();
         _outgoing.Writer.TryComplete();
-        foreach (var tcs in _pendingResponses.Values)
+
+        foreach (var tcs in toCancel)
             tcs.TrySetCanceled();
-        _pendingResponses.Clear();
+
         Disconnected?.Invoke(this, new TransportDisconnectedEventArgs { Reason = "Session closed" });
     }
 

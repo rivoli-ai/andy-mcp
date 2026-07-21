@@ -14,6 +14,11 @@ public record PaginatedRequest
     [JsonPropertyName("cursor")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? Cursor { get; init; }
+
+    /// <summary>Reserved protocol metadata (_meta), preserved round-trip.</summary>
+    [JsonPropertyName("_meta")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public JsonElement? Meta { get; init; }
 }
 
 /// <summary>
@@ -24,6 +29,11 @@ public record PaginatedResult
     [JsonPropertyName("nextCursor")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? NextCursor { get; init; }
+
+    /// <summary>Reserved protocol metadata (_meta), preserved round-trip.</summary>
+    [JsonPropertyName("_meta")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public JsonElement? Meta { get; init; }
 }
 
 /// <summary>

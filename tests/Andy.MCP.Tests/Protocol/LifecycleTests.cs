@@ -14,7 +14,7 @@ public class LifecycleTypesTests
             Capabilities = new ClientCapabilities
             {
                 Roots = new RootsCapability { ListChanged = true },
-                Sampling = new EmptyCapability()
+                Sampling = new SamplingCapability()
             },
             ClientInfo = new Implementation("TestClient", "1.0.0")
         };
@@ -158,7 +158,7 @@ public class LifecycleTypesTests
                 Capabilities = new ClientCapabilities
                 {
                     Roots = new RootsCapability { ListChanged = true },
-                    Sampling = new EmptyCapability()
+                    Sampling = new SamplingCapability()
                 },
                 ClientInfo = new Implementation("TestClient", "1.0.0")
             })
@@ -169,7 +169,7 @@ public class LifecycleTypesTests
         Assert.Equal("initialize", parsedReq.Method);
 
         var reqParams = parsedReq.GetParams<InitializeParams>()!;
-        Assert.Equal("2025-06-18", reqParams.ProtocolVersion);
+        Assert.Equal(McpSession.LatestProtocolVersion, reqParams.ProtocolVersion);
 
         // Server sends initialize response
         var initResponse = JsonRpcResponse.Success(
@@ -353,7 +353,7 @@ public class McpSessionTests
             Capabilities = new ClientCapabilities
             {
                 Roots = new RootsCapability { ListChanged = true },
-                Sampling = new EmptyCapability()
+                Sampling = new SamplingCapability()
             },
             ClientInfo = new Implementation("TestClient", "2.0.0")
         };
@@ -419,7 +419,7 @@ public class McpSessionTests
             Capabilities = new ClientCapabilities
             {
                 Roots = new RootsCapability(),
-                Sampling = new EmptyCapability()
+                Sampling = new SamplingCapability()
             },
             ClientInfo = new Implementation("C", "1.0")
         }, "2025-06-18");
@@ -448,7 +448,7 @@ public class McpSessionTests
     [Fact]
     public void NegotiateVersion_UnknownVersion_ReturnsLatest()
     {
-        Assert.Equal("2025-06-18", McpSession.NegotiateVersion("2099-01-01"));
+        Assert.Equal(McpSession.LatestProtocolVersion, McpSession.NegotiateVersion("2099-01-01"));
     }
 
     [Fact]

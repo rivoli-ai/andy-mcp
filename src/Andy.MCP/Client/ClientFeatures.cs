@@ -33,12 +33,22 @@ public sealed record Root
     [JsonPropertyName("name")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? Name { get; init; }
+
+    /// <summary>Reserved protocol metadata (_meta), preserved round-trip.</summary>
+    [JsonPropertyName("_meta")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public JsonElement? Meta { get; init; }
 }
 
 public sealed record ListRootsResult
 {
     [JsonPropertyName("roots")]
     public required IReadOnlyList<Root> Roots { get; init; }
+
+    /// <summary>Reserved protocol metadata (_meta), preserved round-trip.</summary>
+    [JsonPropertyName("_meta")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public JsonElement? Meta { get; init; }
 }
 
 /// <summary>
@@ -122,11 +132,18 @@ public sealed record CreateMessageRequest
 
     [JsonPropertyName("tools")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    [SinceRevision("2025-11-25")]
     public IReadOnlyList<Tool>? Tools { get; init; }
 
     [JsonPropertyName("toolChoice")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    [SinceRevision("2025-11-25")]
     public ToolChoice? ToolChoice { get; init; }
+
+    /// <summary>Reserved protocol metadata (_meta), preserved round-trip.</summary>
+    [JsonPropertyName("_meta")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public JsonElement? Meta { get; init; }
 }
 
 public sealed record SamplingMessage
@@ -134,7 +151,13 @@ public sealed record SamplingMessage
     [JsonPropertyName("role")]
     public required Role Role { get; init; }
 
+    /// <summary>
+    /// The message content. Per MCP 2025-11-25 this is a scalar-or-array union on the wire; it is
+    /// normalized to a list here and always serialized as an array. Only valid sampling content
+    /// blocks (text, image, audio, tool_use, tool_result) are permitted.
+    /// </summary>
     [JsonPropertyName("content")]
+    [JsonConverter(typeof(SamplingContentConverter))]
     public required IReadOnlyList<Content> Content { get; init; }
 
     [JsonPropertyName("_meta")]
@@ -172,7 +195,13 @@ public sealed record CreateMessageResult
     [JsonPropertyName("role")]
     public required Role Role { get; init; }
 
+    /// <summary>
+    /// The generated message content. Per MCP 2025-11-25 this is a scalar-or-array union on the
+    /// wire (CreateMessageResult extends SamplingMessage); it is normalized to a list here and
+    /// always serialized as an array. Only valid sampling content blocks are permitted.
+    /// </summary>
     [JsonPropertyName("content")]
+    [JsonConverter(typeof(SamplingContentConverter))]
     public required IReadOnlyList<Content> Content { get; init; }
 
     [JsonPropertyName("model")]
@@ -181,6 +210,11 @@ public sealed record CreateMessageResult
     [JsonPropertyName("stopReason")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? StopReason { get; init; }
+
+    /// <summary>Reserved protocol metadata (CreateMessageResult extends Result).</summary>
+    [JsonPropertyName("_meta")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public JsonElement? Meta { get; init; }
 }
 
 #endregion
@@ -197,11 +231,58 @@ public interface IElicitationHandler
 
 public sealed record ElicitRequest
 {
+    /// <summary>
+    /// Elicitation mode: "form" (default when omitted) collects input against
+    /// <see cref="RequestedSchema"/>; "url" (MCP 2025-11-25) directs the user to
+    /// <see cref="Url"/> and correlates the interaction via <see cref="ElicitationId"/>.
+    /// </summary>
+    [JsonPropertyName("mode")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    [SinceRevision("2025-11-25")]
+    public string? Mode { get; init; }
+
     [JsonPropertyName("message")]
     public required string Message { get; init; }
 
+    /// <summary>The requested schema (form mode only). Absent for URL-mode elicitation.</summary>
     [JsonPropertyName("requestedSchema")]
-    public required JsonElement RequestedSchema { get; init; }
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public JsonElement? RequestedSchema { get; init; }
+
+    /// <summary>Opaque identifier correlating a URL-mode elicitation (URL mode only).</summary>
+    [JsonPropertyName("elicitationId")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    [SinceRevision("2025-11-25")]
+    public string? ElicitationId { get; init; }
+
+    /// <summary>The URL the user should visit to provide input (URL mode only).</summary>
+    [JsonPropertyName("url")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    [SinceRevision("2025-11-25")]
+    public string? Url { get; init; }
+
+    /// <summary>True when this is a URL-mode elicitation request.</summary>
+    [JsonIgnore]
+    public bool IsUrlMode => string.Equals(Mode, "url", StringComparison.Ordinal);
+
+    /// <summary>Build a form-mode elicitation request from a typed schema.</summary>
+    public static ElicitRequest Form(string message, ElicitationSchema schema) =>
+        new()
+        {
+            Mode = "form",
+            Message = message,
+            RequestedSchema = McpJsonDefaults.ToElement(schema)
+        };
+
+    /// <summary>Build a URL-mode elicitation request (MCP 2025-11-25).</summary>
+    public static ElicitRequest ForUrl(string message, string elicitationId, string url) =>
+        new()
+        {
+            Mode = "url",
+            Message = message,
+            ElicitationId = elicitationId,
+            Url = url
+        };
 }
 
 public sealed record ElicitResult
@@ -212,6 +293,11 @@ public sealed record ElicitResult
     [JsonPropertyName("content")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public JsonElement? Content { get; init; }
+
+    /// <summary>Reserved protocol metadata (_meta), preserved round-trip.</summary>
+    [JsonPropertyName("_meta")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public JsonElement? Meta { get; init; }
 
     public static ElicitResult Accept(JsonElement content) =>
         new() { Action = "accept", Content = content };

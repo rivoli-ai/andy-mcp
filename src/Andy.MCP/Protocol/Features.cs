@@ -34,6 +34,7 @@ public sealed record Tool
 
     [JsonPropertyName("icons")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    [SinceRevision("2025-11-25")]
     public IReadOnlyList<Icon>? Icons { get; init; }
 
     [JsonPropertyName("_meta")]
@@ -88,6 +89,11 @@ public sealed record CallToolRequest
     [JsonPropertyName("arguments")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public JsonElement? Arguments { get; init; }
+
+    /// <summary>Reserved protocol metadata (_meta), preserved round-trip.</summary>
+    [JsonPropertyName("_meta")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public JsonElement? Meta { get; init; }
 }
 
 public sealed record CallToolResult
@@ -102,6 +108,11 @@ public sealed record CallToolResult
     [JsonPropertyName("isError")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public bool? IsError { get; init; }
+
+    /// <summary>Reserved protocol metadata (_meta), preserved round-trip.</summary>
+    [JsonPropertyName("_meta")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public JsonElement? Meta { get; init; }
 
     public static CallToolResult Text(string text) =>
         new() { Content = [new TextContent { Text = text }] };
@@ -147,6 +158,7 @@ public sealed record Resource
 
     [JsonPropertyName("icons")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    [SinceRevision("2025-11-25")]
     public IReadOnlyList<Icon>? Icons { get; init; }
 
     [JsonPropertyName("_meta")]
@@ -183,6 +195,7 @@ public sealed record ResourceTemplate
 
     [JsonPropertyName("icons")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    [SinceRevision("2025-11-25")]
     public IReadOnlyList<Icon>? Icons { get; init; }
 
     [JsonPropertyName("_meta")]
@@ -194,6 +207,11 @@ public sealed record ReadResourceResult
 {
     [JsonPropertyName("contents")]
     public IReadOnlyList<ResourceContents> Contents { get; init; } = [];
+
+    /// <summary>Reserved protocol metadata (_meta), preserved round-trip.</summary>
+    [JsonPropertyName("_meta")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public JsonElement? Meta { get; init; }
 }
 
 #endregion
@@ -222,6 +240,7 @@ public sealed record Prompt
 
     [JsonPropertyName("icons")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    [SinceRevision("2025-11-25")]
     public IReadOnlyList<Icon>? Icons { get; init; }
 
     [JsonPropertyName("_meta")]
@@ -264,6 +283,11 @@ public sealed record GetPromptResult
 
     [JsonPropertyName("messages")]
     public IReadOnlyList<PromptMessage> Messages { get; init; } = [];
+
+    /// <summary>Reserved protocol metadata (_meta), preserved round-trip.</summary>
+    [JsonPropertyName("_meta")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public JsonElement? Meta { get; init; }
 }
 
 #endregion

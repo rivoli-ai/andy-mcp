@@ -16,4 +16,8 @@
     <ProjectReference Include="..\Andy.MCP\Andy.MCP.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <InternalsVisibleTo Include="Andy.MCP.Tests" />
+  </ItemGroup>
+
 </Project>

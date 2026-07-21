@@ -17,6 +17,11 @@ public sealed record InitializeParams
 
     [JsonPropertyName("clientInfo")]
     public required Implementation ClientInfo { get; init; }
+
+    /// <summary>Reserved protocol metadata (_meta), preserved round-trip.</summary>
+    [JsonPropertyName("_meta")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public JsonElement? Meta { get; init; }
 }
 
 /// <summary>
@@ -40,6 +45,11 @@ public sealed record InitializeResult
     [JsonPropertyName("instructions")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? Instructions { get; init; }
+
+    /// <summary>Reserved protocol metadata (_meta), preserved round-trip.</summary>
+    [JsonPropertyName("_meta")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public JsonElement? Meta { get; init; }
 }
 
 /// <summary>
@@ -56,6 +66,30 @@ public sealed record Implementation
     [JsonPropertyName("title")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? Title { get; init; }
+
+    /// <summary>
+    /// Optional human-readable description of what this implementation does (MCP 2025-11-25).
+    /// </summary>
+    [JsonPropertyName("description")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    [SinceRevision("2025-11-25")]
+    public string? Description { get; init; }
+
+    /// <summary>
+    /// Optional URL of the website for this implementation (MCP 2025-11-25).
+    /// </summary>
+    [JsonPropertyName("websiteUrl")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    [SinceRevision("2025-11-25")]
+    public string? WebsiteUrl { get; init; }
+
+    /// <summary>
+    /// Optional icons for this implementation (MCP 2025-11-25).
+    /// </summary>
+    [JsonPropertyName("icons")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    [SinceRevision("2025-11-25")]
+    public IReadOnlyList<Icon>? Icons { get; init; }
 
     public Implementation() { }
 
@@ -74,7 +108,7 @@ public sealed record ClientCapabilities
 
     [JsonPropertyName("sampling")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    public EmptyCapability? Sampling { get; init; }
+    public SamplingCapability? Sampling { get; init; }
 
     [JsonPropertyName("elicitation")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
@@ -136,6 +170,24 @@ public sealed record ListChangedCapability
     [JsonPropertyName("listChanged")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public bool? ListChanged { get; init; }
+}
+
+/// <summary>
+/// Client sampling capability (MCP 2025-11-25). Presence declares sampling support; the optional
+/// sub-fields declare support for context inclusion (<c>context</c>) and tool use via the
+/// <c>tools</c>/<c>toolChoice</c> parameters (<c>tools</c>).
+/// </summary>
+public sealed record SamplingCapability
+{
+    [JsonPropertyName("context")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    [SinceRevision("2025-11-25")]
+    public EmptyCapability? Context { get; init; }
+
+    [JsonPropertyName("tools")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    [SinceRevision("2025-11-25")]
+    public EmptyCapability? Tools { get; init; }
 }
 
 /// <summary>

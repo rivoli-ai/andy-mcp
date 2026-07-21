@@ -41,7 +41,7 @@ public sealed record StreamableHttpClientTransportOptions
 }
 
 /// <summary>
-/// MCP client transport using the Streamable HTTP protocol (MCP 2025-06-18).
+/// MCP client transport using the Streamable HTTP protocol (MCP 2025-11-25).
 /// POST for sending messages, GET for server-initiated SSE stream.
 /// </summary>
 public sealed class StreamableHttpClientTransport : IClientTransport
