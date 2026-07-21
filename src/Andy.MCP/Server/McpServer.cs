@@ -59,21 +59,29 @@ public sealed class McpServer : IAsyncDisposable
 
     public McpServer AddTool(string name, string description, JsonElement inputSchema,
         Func<JsonElement?, CancellationToken, Task<CallToolResult>> handler,
-        ToolAnnotations? annotations = null) =>
-        AddTool(name, description, inputSchema, (args, _, ct) => handler(args, ct), annotations);
+        ToolAnnotations? annotations = null, JsonElement? outputSchema = null) =>
+        AddTool(name, description, inputSchema, (args, _, ct) => handler(args, ct), annotations, outputSchema);
 
     /// <summary>
     /// Register a tool whose handler receives an <see cref="IProgress{McpProgress}"/> for reporting
     /// progress. Reported progress is forwarded to the client only when the request carried a
-    /// progress token in its _meta; otherwise it is discarded.
+    /// progress token in its _meta; otherwise it is discarded. When <paramref name="outputSchema"/>
+    /// is supplied, the result's structuredContent is validated against it.
     /// </summary>
     public McpServer AddTool(string name, string description, JsonElement inputSchema,
         Func<JsonElement?, IProgress<McpProgress>, CancellationToken, Task<CallToolResult>> handler,
-        ToolAnnotations? annotations = null)
+        ToolAnnotations? annotations = null, JsonElement? outputSchema = null)
     {
         _tools[name] = new ToolHandler
         {
-            Tool = new Tool { Name = name, Description = description, InputSchema = inputSchema, Annotations = annotations },
+            Tool = new Tool
+            {
+                Name = name,
+                Description = description,
+                InputSchema = inputSchema,
+                OutputSchema = outputSchema,
+                Annotations = annotations
+            },
             Handler = handler
         };
         return this;
@@ -464,6 +472,19 @@ public sealed class McpServer : IAsyncDisposable
         try
         {
             var result = await handler.Handler(callReq.Arguments, reporter, ct);
+
+            // A declared output schema is enforced: non-conforming structured content must not be
+            // returned as a successful, conforming result.
+            if (handler.Tool.OutputSchema is { } outputSchema && result.StructuredContent is { } structured)
+            {
+                var outputErrors = JsonSchemaValidator.Validate(structured, outputSchema);
+                if (outputErrors.Count > 0)
+                {
+                    return JsonRpcResponse.Failure(request.Id, JsonRpcError.InternalError(
+                        $"Tool output did not conform to its output schema: {string.Join("; ", outputErrors)}"));
+                }
+            }
+
             return JsonRpcResponse.Success(request.Id, ToWire(result));
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
