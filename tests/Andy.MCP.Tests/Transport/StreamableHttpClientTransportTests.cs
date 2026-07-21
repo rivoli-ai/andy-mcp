@@ -274,6 +274,44 @@ public class StreamableHttpClientTransportTests
         Assert.Equal("sess-123", deleteSessionId);
     }
 
+    [Fact]
+    public async Task SubsequentRequests_SendNegotiatedProtocolVersion()
+    {
+        var versions = new List<string?>();
+        var call = 0;
+        var handler = new MockHttpHandler((req, ct) =>
+        {
+            versions.Add(req.Headers.TryGetValues("MCP-Protocol-Version", out var v) ? v.FirstOrDefault() : null);
+            call++;
+
+            // The first response is the initialize result carrying the negotiated version.
+            var payload = call == 1
+                ? JsonRpcResponse.Success((RequestId)1, McpJsonDefaults.ToElement(new { protocolVersion = "2025-06-18" }))
+                : JsonRpcResponse.Success((RequestId)2);
+
+            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent(McpJsonDefaults.Serialize(payload), Encoding.UTF8, "application/json")
+            });
+        });
+
+        var options = new StreamableHttpClientTransportOptions
+        {
+            Endpoint = new Uri("https://example.com/mcp"),
+            HttpClient = new HttpClient(handler),
+            EnableServerSseStream = false
+        };
+
+        await using var transport = new StreamableHttpClientTransport(options);
+        await transport.ConnectAsync();
+
+        await transport.SendAsync(new JsonRpcRequest { Id = 1, Method = "initialize" });
+        await transport.SendAsync(new JsonRpcRequest { Id = 2, Method = "ping" });
+
+        Assert.Equal(McpSession.LatestProtocolVersion, versions[0]); // before negotiation
+        Assert.Equal("2025-06-18", versions[1]);                     // negotiated version
+    }
+
     /// <summary>
     /// Mock HTTP message handler for testing.
     /// </summary>
