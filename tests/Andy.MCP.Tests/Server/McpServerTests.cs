@@ -287,6 +287,10 @@ public class McpServerTests
             if (msg is JsonRpcResponse) break;
         }
 
+        // Complete initialization so operational requests are accepted.
+        await clientTransport.SendAsync(
+            new JsonRpcNotification { Method = McpMethods.NotificationsInitialized }, cts.Token);
+
         // Send unknown method
         var unknownReq = new JsonRpcRequest { Id = 2, Method = "some/unknown/method" };
         await clientTransport.SendAsync(unknownReq, cts.Token);

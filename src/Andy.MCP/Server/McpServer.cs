@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Andy.MCP.Client;
 using Andy.MCP.Protocol;
 using Andy.MCP.Transport;
 using Microsoft.Extensions.Logging;
@@ -23,6 +24,9 @@ public sealed class McpServer : IAsyncDisposable
     private readonly List<CompletionRegistration> _completions = new();
     private readonly ResourceSubscriptionManager _subscriptions = new();
     private readonly PaginationHelper _pagination;
+    private readonly PendingRequestTracker _tracker = new();
+    private long _nextId;
+    private bool _initialized;
     private McpLogLevel _logLevel = McpLogLevel.Warning;
     private bool _loggingEnabled;
     private CancellationTokenSource? _cts;
@@ -165,6 +169,12 @@ public sealed class McpServer : IAsyncDisposable
                 await _transport.SendAsync(response, ct);
                 break;
 
+            case JsonRpcResponse clientResponse:
+                // Correlate a client response to a server-initiated request.
+                if (!_tracker.TryComplete(clientResponse.Id, clientResponse))
+                    _logger.LogDebug("Received response with no matching pending request: {Id}", clientResponse.Id);
+                break;
+
             case JsonRpcNotification notification:
                 HandleNotification(notification);
                 break;
@@ -175,25 +185,37 @@ public sealed class McpServer : IAsyncDisposable
     {
         using var activity = McpDiagnostics.StartServerRequest(request.Method, request.Id);
 
-        // Add feature-specific attributes
+        // Add feature-specific attributes. Extraction must be type-safe: a caller may send a
+        // wrongly-typed field, and this runs before the guarded handler body.
         if (request.Method == McpMethods.ToolsCall)
-        {
-            var toolName = request.Params?.TryGetProperty("name", out var n) == true ? n.GetString() : null;
-            activity?.SetTag("mcp.tool.name", toolName);
-        }
+            activity?.SetTag("mcp.tool.name", TryGetStringProperty(request.Params, "name"));
         else if (request.Method == McpMethods.ResourcesRead)
-        {
-            var uri = request.Params?.TryGetProperty("uri", out var u) == true ? u.GetString() : null;
-            activity?.SetTag("mcp.resource.uri", uri);
-        }
+            activity?.SetTag("mcp.resource.uri", TryGetStringProperty(request.Params, "uri"));
         else if (request.Method == McpMethods.PromptsGet)
-        {
-            var name = request.Params?.TryGetProperty("name", out var pn) == true ? pn.GetString() : null;
-            activity?.SetTag("mcp.prompt.name", name);
-        }
+            activity?.SetTag("mcp.prompt.name", TryGetStringProperty(request.Params, "name"));
 
         try
         {
+            // Lifecycle enforcement: initialize is valid only once, and no operation other than
+            // ping is accepted until the client's notifications/initialized has been received.
+            if (request.Method == McpMethods.Initialize)
+            {
+                if (_session.State != McpSessionState.Uninitialized)
+                {
+                    var duplicate = JsonRpcResponse.Failure(request.Id,
+                        JsonRpcError.InvalidRequest("Server is already initialized."));
+                    McpDiagnostics.SetError(activity, errorCode: duplicate.Error?.Code);
+                    return duplicate;
+                }
+            }
+            else if (request.Method != McpMethods.Ping && !_initialized)
+            {
+                var notReady = JsonRpcResponse.Failure(request.Id,
+                    JsonRpcError.InvalidRequest($"Received '{request.Method}' before initialization was complete."));
+                McpDiagnostics.SetError(activity, errorCode: notReady.Error?.Code);
+                return notReady;
+            }
+
             var response = request.Method switch
             {
                 McpMethods.Initialize => HandleInitialize(request),
@@ -220,6 +242,12 @@ public sealed class McpServer : IAsyncDisposable
 
             return response;
         }
+        catch (JsonException ex)
+        {
+            // Malformed or mistyped request params are a caller error, not an internal one.
+            McpDiagnostics.SetError(activity, ex);
+            return JsonRpcResponse.Failure(request.Id, JsonRpcError.InvalidParams(ex.Message));
+        }
         catch (McpPaginationException ex)
         {
             McpDiagnostics.SetError(activity, ex);
@@ -232,6 +260,77 @@ public sealed class McpServer : IAsyncDisposable
             return JsonRpcResponse.Failure(request.Id, JsonRpcError.InternalError(ex.Message));
         }
     }
+
+    #region Server-Initiated Requests
+
+    private static string? TryGetStringProperty(JsonElement? @params, string name) =>
+        @params is { } p && p.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.String
+            ? value.GetString()
+            : null;
+
+    private RequestId NextId() => (RequestId)Interlocked.Increment(ref _nextId);
+
+    /// <summary>
+    /// Send a request from the server to the client and await the correlated response. Outbound
+    /// params are serialized for the negotiated revision. Server-initiated request IDs are tracked
+    /// independently of client-initiated ones, so overlapping numeric IDs never cross-correlate.
+    /// </summary>
+    private async Task<T> SendRequestAsync<T>(string method, object? @params, CancellationToken ct)
+    {
+        var id = NextId();
+        var request = new JsonRpcRequest
+        {
+            Id = id,
+            Method = method,
+            Params = @params is not null ? ToWire(@params) : null
+        };
+
+        var pending = _tracker.Track(id, _options.RequestTimeout);
+        try
+        {
+            await _transport.SendAsync(request, ct);
+            var response = await pending.Task.WaitAsync(ct);
+
+            if (response.IsError)
+                throw new McpException(response.Error!.Code, response.Error.Message, response.Error.Data);
+
+            return response.Result is null
+                ? default!
+                : JsonSerializer.Deserialize<T>(response.Result.Value, McpJsonDefaults.Options)!;
+        }
+        finally
+        {
+            pending.Dispose();
+        }
+    }
+
+    /// <summary>Ping the client and wait for its acknowledgement.</summary>
+    public async Task PingClientAsync(CancellationToken cancellationToken = default) =>
+        await SendRequestAsync<JsonElement>(McpMethods.Ping, null, cancellationToken);
+
+    /// <summary>Request the client's roots. Requires the client to have declared the roots capability.</summary>
+    public async Task<IReadOnlyList<Root>> ListRootsAsync(CancellationToken cancellationToken = default)
+    {
+        _session.RequireClientCapability("roots");
+        var result = await SendRequestAsync<ListRootsResult>(McpMethods.RootsList, null, cancellationToken);
+        return result.Roots;
+    }
+
+    /// <summary>Ask the client to sample an LLM completion. Requires the client's sampling capability.</summary>
+    public Task<CreateMessageResult> CreateMessageAsync(CreateMessageRequest request, CancellationToken cancellationToken = default)
+    {
+        _session.RequireClientCapability("sampling");
+        return SendRequestAsync<CreateMessageResult>(McpMethods.SamplingCreateMessage, request, cancellationToken);
+    }
+
+    /// <summary>Ask the client to elicit input from the user. Requires the client's elicitation capability.</summary>
+    public Task<ElicitResult> ElicitAsync(ElicitRequest request, CancellationToken cancellationToken = default)
+    {
+        _session.RequireClientCapability("elicitation");
+        return SendRequestAsync<ElicitResult>(McpMethods.ElicitationCreate, request, cancellationToken);
+    }
+
+    #endregion
 
     #region Request Handlers
 
@@ -437,6 +536,7 @@ public sealed class McpServer : IAsyncDisposable
         switch (notification.Method)
         {
             case McpMethods.NotificationsInitialized:
+                _initialized = true;
                 _logger.LogInformation("Client initialized");
                 break;
             case McpMethods.NotificationsCancelled:
@@ -526,6 +626,9 @@ public sealed class McpServer : IAsyncDisposable
         if (_disposed) return;
         _disposed = true;
         _cts?.Cancel();
+        // Deterministically fail any in-flight server-initiated requests.
+        _tracker.CancelAll("Server disposing");
+        _tracker.Dispose();
         await _transport.DisposeAsync();
         _cts?.Dispose();
     }
@@ -561,6 +664,9 @@ public sealed record McpServerOptions
     public Implementation ServerInfo { get; init; } = new("Andy.MCP.Server", "0.1.0");
     public string? Instructions { get; init; }
     public int PageSize { get; init; } = 50;
+
+    /// <summary>Timeout for server-initiated requests. Null means no timeout.</summary>
+    public TimeSpan? RequestTimeout { get; init; }
 
     /// <summary>Advertise tools/list_changed support when tools are registered.</summary>
     public bool ToolsListChanged { get; init; } = true;
