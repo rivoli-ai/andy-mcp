@@ -27,6 +27,17 @@ public sealed record StreamableHttpServerOptions
     /// Session timeout. Sessions inactive longer than this are cleaned up.
     /// </summary>
     public TimeSpan SessionTimeout { get; init; } = TimeSpan.FromMinutes(30);
+
+    /// <summary>
+    /// Maximum accepted request body size in bytes. Larger bodies are rejected with 413.
+    /// </summary>
+    public long MaxRequestBodyBytes { get; init; } = 4 * 1024 * 1024; // 4 MB
+
+    /// <summary>
+    /// Maximum number of concurrent sessions. New initialize requests beyond this are rejected
+    /// with 503 to bound memory use.
+    /// </summary>
+    public int MaxSessions { get; init; } = 10_000;
 }
 
 /// <summary>
@@ -110,7 +121,13 @@ public sealed class StreamableHttpHandler
             return;
         }
 
-        var body = await new StreamReader(context.Request.Body).ReadToEndAsync();
+        var body = await ReadBodyAsync(context);
+        if (body is null)
+        {
+            context.Response.StatusCode = 413; // Payload Too Large
+            return;
+        }
+
         JsonRpcMessage message;
         try
         {
@@ -126,6 +143,13 @@ public sealed class StreamableHttpHandler
         // Handle initialize — create new session
         if (message is JsonRpcRequest { Method: McpMethods.Initialize } initRequest)
         {
+            // Bound the number of live sessions to limit memory exhaustion.
+            if (_sessions.Count >= _options.MaxSessions)
+            {
+                context.Response.StatusCode = 503; // Service Unavailable
+                return;
+            }
+
             var sessionId = GenerateSessionId();
             var session = new StreamableHttpSession(sessionId, GetUserKey(context));
             _sessions[sessionId] = session;
@@ -292,6 +316,29 @@ public sealed class StreamableHttpHandler
         return user.FindFirst(ClaimTypes.NameIdentifier)?.Value
             ?? user.FindFirst("sub")?.Value
             ?? user.Identity.Name;
+    }
+
+    /// <summary>
+    /// Read the request body as UTF-8, enforcing the configured maximum size. Returns null if the
+    /// body exceeds the limit (via Content-Length or during streaming).
+    /// </summary>
+    private async Task<string?> ReadBodyAsync(HttpContext context)
+    {
+        var max = _options.MaxRequestBodyBytes;
+        if (context.Request.ContentLength is { } declared && declared > max)
+            return null;
+
+        using var buffer = new MemoryStream();
+        var chunk = new byte[8192];
+        int read;
+        while ((read = await context.Request.Body.ReadAsync(chunk)) > 0)
+        {
+            if (buffer.Length + read > max)
+                return null;
+            buffer.Write(chunk, 0, read);
+        }
+
+        return System.Text.Encoding.UTF8.GetString(buffer.ToArray());
     }
 
     private static bool IsJsonContentType(HttpContext context)
