@@ -95,6 +95,20 @@ public sealed class StreamableHttpHandler
 
     private async Task HandlePostAsync(HttpContext context)
     {
+        // The client MUST send application/json and accept both application/json and
+        // text/event-stream so the server may reply with either a JSON body or an SSE stream.
+        if (!IsJsonContentType(context))
+        {
+            context.Response.StatusCode = 415; // Unsupported Media Type
+            return;
+        }
+
+        if (!AcceptsAll(context, "application/json", "text/event-stream"))
+        {
+            context.Response.StatusCode = 406; // Not Acceptable
+            return;
+        }
+
         var body = await new StreamReader(context.Request.Body).ReadToEndAsync();
         JsonRpcMessage message;
         try
@@ -193,6 +207,13 @@ public sealed class StreamableHttpHandler
 
     private async Task HandleGetAsync(HttpContext context)
     {
+        // A GET opens an SSE stream, so the client MUST accept text/event-stream.
+        if (!AcceptsAll(context, "text/event-stream"))
+        {
+            context.Response.StatusCode = 406; // Not Acceptable
+            return;
+        }
+
         var sid = context.Request.Headers["Mcp-Session-Id"].FirstOrDefault();
         if (sid is null || !_sessions.TryGetValue(sid, out var session))
         {
@@ -234,6 +255,30 @@ public sealed class StreamableHttpHandler
         {
             context.Response.StatusCode = 404;
         }
+    }
+
+    private static bool IsJsonContentType(HttpContext context)
+    {
+        var contentType = context.Request.ContentType;
+        return contentType is not null &&
+               contentType.Contains("application/json", StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
+    /// True if the request's Accept header allows every one of <paramref name="mediaTypes"/>
+    /// (a <c>*/*</c> wildcard satisfies all). An absent Accept header is treated as not acceptable.
+    /// </summary>
+    private static bool AcceptsAll(HttpContext context, params string[] mediaTypes)
+    {
+        var accept = context.Request.Headers.Accept;
+        if (accept.Count == 0)
+            return false;
+
+        var value = string.Join(",", accept.ToArray());
+        if (value.Contains("*/*", StringComparison.Ordinal))
+            return true;
+
+        return mediaTypes.All(mt => value.Contains(mt, StringComparison.OrdinalIgnoreCase));
     }
 
     private static string GenerateSessionId()

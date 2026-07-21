@@ -1,6 +1,7 @@
 using System.Net.Http.Headers;
 using System.Runtime.CompilerServices;
 using System.Text;
+using System.Text.Json;
 using System.Threading.Channels;
 using Andy.MCP.Protocol;
 using Andy.MCP.Transport.Sse;
@@ -52,6 +53,7 @@ public sealed class StreamableHttpClientTransport : IClientTransport
     private readonly bool _ownsHttpClient;
     private readonly Channel<JsonRpcMessage> _incoming;
     private string? _sessionId;
+    private string? _negotiatedVersion;
     private string? _lastEventId;
     private Task? _sseListenTask;
     private CancellationTokenSource? _cts;
@@ -162,6 +164,7 @@ public sealed class StreamableHttpClientTransport : IClientTransport
                 // Single JSON response
                 var responseJson = await response.Content.ReadAsStringAsync(cancellationToken);
                 var responseMessage = McpJsonDefaults.Deserialize(responseJson);
+                CaptureNegotiatedVersion(responseMessage);
                 await _incoming.Writer.WriteAsync(responseMessage, cancellationToken);
             }
             else if (contentType == "text/event-stream")
@@ -260,9 +263,29 @@ public sealed class StreamableHttpClientTransport : IClientTransport
         }
     }
 
+    /// <summary>
+    /// Once the initialize response is seen, remember the negotiated protocol version so that
+    /// subsequent requests carry it rather than our preferred latest version.
+    /// </summary>
+    private void CaptureNegotiatedVersion(JsonRpcMessage message)
+    {
+        if (_negotiatedVersion is not null)
+            return;
+
+        if (message is JsonRpcResponse { Result: { } result } &&
+            result.TryGetProperty("protocolVersion", out var pv) &&
+            pv.ValueKind == JsonValueKind.String &&
+            pv.GetString() is { } version &&
+            McpSession.SupportedProtocolVersions.Contains(version))
+        {
+            _negotiatedVersion = version;
+        }
+    }
+
     private void ApplyHeaders(HttpRequestMessage request)
     {
-        request.Headers.TryAddWithoutValidation("MCP-Protocol-Version", McpSession.LatestProtocolVersion);
+        request.Headers.TryAddWithoutValidation("MCP-Protocol-Version",
+            _negotiatedVersion ?? McpSession.LatestProtocolVersion);
 
         if (_sessionId is not null)
             request.Headers.TryAddWithoutValidation("Mcp-Session-Id", _sessionId);

@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Andy.MCP.Protocol;
 using Andy.MCP.Transport;
 
@@ -5,6 +6,27 @@ namespace Andy.MCP.Tests.Transport;
 
 public class StdioServerTransportTests
 {
+    [Fact]
+    public async Task MalformedInput_WritesJsonRpcParseError()
+    {
+        using var input = new StringReader("this is not valid json\n");
+        using var output = new StringWriter();
+
+        await using var transport = new StdioServerTransport(input, output);
+        await transport.StartAsync();
+
+        // The malformed line is processed once, then stdin EOFs; give the write loop a moment.
+        await Task.Delay(100);
+
+        var written = output.ToString().Trim();
+        Assert.NotEmpty(written);
+
+        using var doc = JsonDocument.Parse(written);
+        var root = doc.RootElement;
+        Assert.Equal(JsonValueKind.Null, root.GetProperty("id").ValueKind);
+        Assert.Equal(McpErrorCodes.ParseError, root.GetProperty("error").GetProperty("code").GetInt32());
+    }
+
     [Fact]
     public async Task ReceiveMessage_FromStdin()
     {
