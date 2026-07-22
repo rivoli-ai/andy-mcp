@@ -21,6 +21,7 @@ public sealed class McpServer : IAsyncDisposable
     private readonly Dictionary<string, ToolHandler> _tools = new();
     private readonly Dictionary<string, ResourceHandler> _resources = new();
     private readonly List<ResourceTemplate> _resourceTemplates = new();
+    private readonly List<ResourceTemplateHandler> _templateHandlers = new();
     private readonly Dictionary<string, PromptHandler> _prompts = new();
     private readonly List<CompletionRegistration> _completions = new();
     private readonly ResourceSubscriptionManager _subscriptions = new();
@@ -131,6 +132,23 @@ public sealed class McpServer : IAsyncDisposable
             Name = name,
             Description = description,
             MimeType = mimeType
+        });
+        return this;
+    }
+
+    /// <summary>
+    /// Register a resource template with a handler. A resources/read for a URI matching the
+    /// template resolves its variables and invokes the handler, which may return multiple contents.
+    /// </summary>
+    public McpServer AddResourceTemplate(string uriTemplate, string name,
+        Func<string, IReadOnlyDictionary<string, string>, CancellationToken, Task<IReadOnlyList<ResourceContents>>> handler,
+        string? description = null, string? mimeType = null)
+    {
+        AddResourceTemplate(uriTemplate, name, description, mimeType);
+        _templateHandlers.Add(new ResourceTemplateHandler
+        {
+            Matcher = new UriTemplate(uriTemplate),
+            Handler = handler
         });
         return this;
     }
@@ -680,12 +698,23 @@ public sealed class McpServer : IAsyncDisposable
         if (uri is null)
             return JsonRpcResponse.Failure(request.Id, JsonRpcError.InvalidParams("Missing 'uri' parameter"));
 
-        if (!_resources.TryGetValue(uri, out var handler))
-            return JsonRpcResponse.Failure(request.Id, JsonRpcError.ResourceNotFound($"Resource not found: '{uri}'"));
+        if (_resources.TryGetValue(uri, out var handler))
+        {
+            var contents = await handler.Handler(uri, ct);
+            return JsonRpcResponse.Success(request.Id, ToWire(new ReadResourceResult { Contents = [contents] }));
+        }
 
-        var contents = await handler.Handler(uri, ct);
-        var result = new ReadResourceResult { Contents = [contents] };
-        return JsonRpcResponse.Success(request.Id, ToWire(result));
+        // No static resource — try resource templates (first match wins).
+        foreach (var template in _templateHandlers)
+        {
+            if (template.Matcher.TryMatch(uri, out var variables))
+            {
+                var contents = await template.Handler(uri, variables, ct);
+                return JsonRpcResponse.Success(request.Id, ToWire(new ReadResourceResult { Contents = contents }));
+            }
+        }
+
+        return JsonRpcResponse.Failure(request.Id, JsonRpcError.ResourceNotFound($"Resource not found: '{uri}'"));
     }
 
     private JsonRpcResponse HandleResourcesTemplatesList(JsonRpcRequest request)
@@ -925,6 +954,12 @@ public sealed class McpServer : IAsyncDisposable
     {
         public required Resource Resource { get; init; }
         public required Func<string, CancellationToken, Task<ResourceContents>> Handler { get; init; }
+    }
+
+    private sealed class ResourceTemplateHandler
+    {
+        public required UriTemplate Matcher { get; init; }
+        public required Func<string, IReadOnlyDictionary<string, string>, CancellationToken, Task<IReadOnlyList<ResourceContents>>> Handler { get; init; }
     }
 
     private sealed class PromptHandler
