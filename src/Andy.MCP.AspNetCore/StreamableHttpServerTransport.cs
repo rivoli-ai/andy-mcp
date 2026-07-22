@@ -246,21 +246,29 @@ public sealed class StreamableHttpHandler
         var writer = new SseWriter(context.Response.Body);
         var ct = context.RequestAborted;
 
-        // Resume from Last-Event-ID when it belongs to this session's stream; otherwise start from
-        // the current position (a fresh stream does not replay prior events).
-        var startSeq = session.CurrentSequence;
+        // Resume the same stream from Last-Event-ID, or allocate a fresh stream id.
         var lastEventId = context.Request.Headers["Last-Event-ID"].FirstOrDefault();
-        if (session.TryParseEventId(lastEventId, out var resumeSeq))
-            startSeq = resumeSeq;
+        string streamId;
+        long resumeAfterSeq;
+        if (StreamableHttpSession.TryParseEventId(lastEventId, out var resumeStream, out var resumeSeq))
+        {
+            streamId = resumeStream;
+            resumeAfterSeq = resumeSeq;
+        }
+        else
+        {
+            streamId = StreamableHttpSession.NewStreamId();
+            resumeAfterSeq = 0;
+        }
 
         try
         {
-            await foreach (var (seq, message) in session.ReadServerEventsAsync(startSeq, ct))
+            await foreach (var (seq, message) in session.ReadServerEventsAsync(streamId, resumeAfterSeq, ct))
             {
                 await writer.WriteEventAsync(new SseEvent
                 {
                     Data = McpJsonDefaults.Serialize(message),
-                    Id = session.FormatEventId(seq)
+                    Id = StreamableHttpSession.FormatEventId(streamId, seq)
                 }, ct);
             }
         }
@@ -385,16 +393,23 @@ public sealed class StreamableHttpSession : IServerTransport
 {
     private readonly Channel<JsonRpcMessage> _incoming;
 
-    // Server-initiated messages destined for the GET SSE stream are held in a bounded replay
-    // buffer (rather than a consume-once channel) so a reconnecting client can resume with
-    // Last-Event-ID. Event ids are "{epoch}.{seq}"; the per-session epoch prevents an id minted on
-    // one stream from replaying onto a different one.
-    private readonly string _streamEpoch = Guid.NewGuid().ToString("N");
+    // Server-initiated messages destined for a GET SSE stream are held in a bounded replay buffer
+    // (rather than a consume-once channel) so a reconnecting client can resume with Last-Event-ID.
+    // Each buffered event is claimed by exactly one stream when first delivered, so with multiple
+    // concurrent GET streams every message is delivered exactly once. Event ids are
+    // "{streamId}.{seq}"; a reconnect reuses the stream id to resume that stream's own events.
     private readonly object _sseSync = new();
-    private readonly LinkedList<(long Seq, JsonRpcMessage Message)> _replay = new();
+    private readonly LinkedList<SseEntry> _replay = new();
     private long _seq;
     private const int MaxReplayEvents = 256;
     private TaskCompletionSource _sseSignal = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+    private sealed class SseEntry
+    {
+        public required long Seq { get; init; }
+        public required JsonRpcMessage Message { get; init; }
+        public string? ClaimedBy { get; set; }
+    }
 
     // All response-correlation state is guarded by _sync. _pendingResponses holds waiters
     // registered by POST handlers; _bufferedResponses holds responses that arrived before
@@ -467,7 +482,7 @@ public sealed class StreamableHttpSession : IServerTransport
         lock (_sseSync)
         {
             _seq++;
-            _replay.AddLast((_seq, message));
+            _replay.AddLast(new SseEntry { Seq = _seq, Message = message });
             while (_replay.Count > MaxReplayEvents)
                 _replay.RemoveFirst();
 
@@ -480,68 +495,76 @@ public sealed class StreamableHttpSession : IServerTransport
     /// <summary>
     /// Messages from the MCP server meant for the SSE stream (server-initiated requests/notifications).
     /// </summary>
-    /// <summary>Server-initiated messages for the SSE stream (from the current position onward).</summary>
+    /// <summary>Start a new SSE stream and read its server-initiated messages.</summary>
     public IAsyncEnumerable<JsonRpcMessage> ServerMessages => ReadServerMessagesAsync();
 
     private async IAsyncEnumerable<JsonRpcMessage> ReadServerMessagesAsync(
         [EnumeratorCancellation] CancellationToken ct = default)
     {
-        await foreach (var (_, message) in ReadServerEventsAsync(CurrentSequence, ct))
+        await foreach (var (_, message) in ReadServerEventsAsync(NewStreamId(), 0, ct))
             yield return message;
     }
 
-    /// <summary>The highest event sequence number emitted so far.</summary>
-    public long CurrentSequence
-    {
-        get { lock (_sseSync) { return _seq; } }
-    }
+    /// <summary>Generate an identifier for a new SSE stream.</summary>
+    public static string NewStreamId() => Guid.NewGuid().ToString("N");
 
-    /// <summary>Format an SSE event id that encodes this session's stream epoch and a sequence.</summary>
-    public string FormatEventId(long seq) => $"{_streamEpoch}.{seq}";
+    /// <summary>Format an SSE event id encoding the delivering stream and the event sequence.</summary>
+    public static string FormatEventId(string streamId, long seq) => $"{streamId}.{seq}";
 
-    /// <summary>
-    /// Parse a Last-Event-ID. Returns true and the resume sequence only when the id belongs to this
-    /// session's stream epoch, so an id from a different stream can never trigger a replay here.
-    /// </summary>
-    public bool TryParseEventId(string? eventId, out long seq)
+    /// <summary>Parse a Last-Event-ID into its stream id and sequence.</summary>
+    public static bool TryParseEventId(string? eventId, out string streamId, out long seq)
     {
+        streamId = "";
         seq = 0;
         if (eventId is null)
             return false;
         var dot = eventId.LastIndexOf('.');
         if (dot <= 0)
             return false;
-        return string.Equals(eventId[..dot], _streamEpoch, StringComparison.Ordinal)
-               && long.TryParse(eventId[(dot + 1)..], out seq);
+        if (!long.TryParse(eventId[(dot + 1)..], out seq))
+            return false;
+        streamId = eventId[..dot];
+        return true;
     }
 
     /// <summary>
-    /// Enumerate server events with sequence greater than <paramref name="afterSeq"/>, replaying any
-    /// still-buffered events first and then streaming new ones until the session closes.
+    /// Enumerate server events for one SSE stream. First replays events this stream previously
+    /// delivered after <paramref name="resumeAfterSeq"/> (Last-Event-ID resumption), then claims and
+    /// delivers unclaimed events — so each event reaches exactly one concurrent stream.
     /// </summary>
     public async IAsyncEnumerable<(long Seq, JsonRpcMessage Message)> ReadServerEventsAsync(
-        long afterSeq, [EnumeratorCancellation] CancellationToken ct = default)
+        string streamId, long resumeAfterSeq, [EnumeratorCancellation] CancellationToken ct = default)
     {
-        var cursor = afterSeq;
+        // Phase 1: resume this stream's own previously-delivered events.
         while (true)
         {
-            var batch = new List<(long Seq, JsonRpcMessage Message)>();
+            SseEntry? replayEntry;
+            lock (_sseSync)
+            {
+                replayEntry = _replay.FirstOrDefault(e => e.ClaimedBy == streamId && e.Seq > resumeAfterSeq);
+            }
+            if (replayEntry is null)
+                break;
+            resumeAfterSeq = replayEntry.Seq;
+            yield return (replayEntry.Seq, replayEntry.Message);
+        }
+
+        // Phase 2: claim and deliver unclaimed events (exactly-once across streams).
+        while (true)
+        {
+            SseEntry? claimed;
             Task signal;
             lock (_sseSync)
             {
-                foreach (var entry in _replay)
-                    if (entry.Seq > cursor)
-                        batch.Add(entry);
+                claimed = _replay.FirstOrDefault(e => e.ClaimedBy is null);
+                if (claimed is not null)
+                    claimed.ClaimedBy = streamId;
                 signal = _sseSignal.Task;
             }
 
-            if (batch.Count > 0)
+            if (claimed is not null)
             {
-                foreach (var entry in batch)
-                {
-                    cursor = entry.Seq;
-                    yield return entry;
-                }
+                yield return (claimed.Seq, claimed.Message);
                 continue;
             }
 
