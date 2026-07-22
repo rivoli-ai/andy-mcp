@@ -40,3 +40,30 @@ jobs:
         name: coverage-${{ matrix.os }}
         path: ./TestResults/**/coverage.cobertura.xml
         if-no-files-found: warn
+
+  security:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: ${{ env.DOTNET_VERSION }}
+
+    - name: Restore dependencies
+      run: dotnet restore
+
+    - name: Fail on vulnerable dependencies
+      shell: bash
+      run: |
+        output=$(dotnet list package --vulnerable --include-transitive 2>&1)
+        echo "$output"
+        if echo "$output" | grep -q "has the following vulnerable packages"; then
+          echo "::error::Vulnerable dependencies detected"
+          exit 1
+        fi
+
+    - name: Report outdated packages
+      shell: bash
+      run: dotnet list package --outdated || true
