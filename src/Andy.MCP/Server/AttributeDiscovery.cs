@@ -16,26 +16,31 @@ public static class AttributeDiscovery
     /// </summary>
     public static McpServer AddToolsFromType(this McpServer server, Type type, object? instance = null)
     {
+        // Create at most one instance for the whole type, lazily and reused across every attributed
+        // method — never a fresh instance per method.
+        var shared = instance;
+        object? InstanceFor(MethodInfo m) => m.IsStatic ? null : shared ??= CreateInstance(type);
+
         foreach (var method in type.GetMethods(BindingFlags.Public | BindingFlags.Instance | BindingFlags.Static))
         {
             var toolAttr = method.GetCustomAttribute<McpToolAttribute>();
             if (toolAttr is not null)
             {
-                RegisterTool(server, method, toolAttr, instance ?? CreateInstance(type, method));
+                RegisterTool(server, method, toolAttr, InstanceFor(method));
                 continue;
             }
 
             var resourceAttr = method.GetCustomAttribute<McpResourceAttribute>();
             if (resourceAttr is not null)
             {
-                RegisterResource(server, method, resourceAttr, instance ?? CreateInstance(type, method));
+                RegisterResource(server, method, resourceAttr, InstanceFor(method));
                 continue;
             }
 
             var promptAttr = method.GetCustomAttribute<McpPromptAttribute>();
             if (promptAttr is not null)
             {
-                RegisterPrompt(server, method, promptAttr, instance ?? CreateInstance(type, method));
+                RegisterPrompt(server, method, promptAttr, InstanceFor(method));
             }
         }
 
@@ -82,9 +87,9 @@ public static class AttributeDiscovery
             IdempotentHint = attr.Idempotent ? true : null
         };
 
-        server.AddTool(name, description, schema, async (args, ct) =>
+        server.AddTool(name, description, schema, async (args, progress, ct) =>
         {
-            var parameters = BindParameters(method, args, ct);
+            var parameters = BindParameters(method, args, progress, ct);
             var result = method.Invoke(method.IsStatic ? null : instance, parameters);
             return await CoerceToolResult(result, method.ReturnType);
         }, annotations);
@@ -100,16 +105,20 @@ public static class AttributeDiscovery
             if (IsInjectedParameter(param)) continue;
 
             var paramAttr = param.GetCustomAttribute<McpParamAttribute>();
-            var prop = new Dictionary<string, object>
-            {
-                ["type"] = GetJsonSchemaType(param.ParameterType)
-            };
+            var schemaType = GetJsonSchemaType(param.ParameterType);
+            var prop = new Dictionary<string, object> { ["type"] = schemaType };
 
             var desc = paramAttr?.Description;
             if (desc is not null) prop["description"] = desc;
 
-            if (param.ParameterType.IsEnum)
-                prop["enum"] = Enum.GetNames(param.ParameterType);
+            // Array/collection element schema.
+            if (schemaType == "array" && ElementTypeOf(param.ParameterType) is { } elementType)
+                prop["items"] = new Dictionary<string, object> { ["type"] = GetJsonSchemaType(elementType) };
+
+            // Enum values (also for a nullable enum).
+            var enumType = Nullable.GetUnderlyingType(param.ParameterType) ?? param.ParameterType;
+            if (enumType.IsEnum)
+                prop["enum"] = Enum.GetNames(enumType);
 
             if (param.HasDefaultValue && param.DefaultValue is not null)
                 prop["default"] = param.DefaultValue;
@@ -137,7 +146,8 @@ public static class AttributeDiscovery
         return McpJsonDefaults.ToElement(schema);
     }
 
-    private static object?[] BindParameters(MethodInfo method, JsonElement? args, CancellationToken ct)
+    private static object?[] BindParameters(
+        MethodInfo method, JsonElement? args, IProgress<McpProgress> progress, CancellationToken ct)
     {
         var methodParams = method.GetParameters();
         var values = new object?[methodParams.Length];
@@ -154,7 +164,7 @@ public static class AttributeDiscovery
 
             if (param.ParameterType == typeof(IProgress<McpProgress>))
             {
-                values[i] = null; // Could be injected from _meta.progressToken
+                values[i] = progress; // functional reporter injected end-to-end
                 continue;
             }
 
@@ -336,11 +346,23 @@ public static class AttributeDiscovery
         return Regex.Replace(name, "(?<!^)([A-Z])", "_$1").ToLowerInvariant();
     }
 
-    private static object? CreateInstance(Type type, MethodInfo method)
+    private static object CreateInstance(Type type)
     {
-        if (method.IsStatic) return null;
-        try { return Activator.CreateInstance(type); }
+        try { return Activator.CreateInstance(type)!; }
         catch { throw new InvalidOperationException($"Cannot create instance of '{type.Name}'. Make it have a parameterless constructor or use static methods."); }
+    }
+
+    private static Type? ElementTypeOf(Type type)
+    {
+        if (type.IsArray)
+            return type.GetElementType();
+        if (type.IsGenericType &&
+            (type.GetGenericTypeDefinition() == typeof(List<>) ||
+             type.GetGenericTypeDefinition() == typeof(IReadOnlyList<>) ||
+             type.GetGenericTypeDefinition() == typeof(IList<>) ||
+             type.GetGenericTypeDefinition() == typeof(IEnumerable<>)))
+            return type.GetGenericArguments()[0];
+        return null;
     }
 
     #endregion
