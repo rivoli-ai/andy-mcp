@@ -4,7 +4,9 @@
 
 ## Overview
 
-Andy.MCP is a .NET 8 library implementing the [Model Context Protocol](https://modelcontextprotocol.io/) (MCP) specification version 2025-06-18. It provides both client and server capabilities for building MCP-compatible applications.
+Andy.MCP is a .NET 8 library implementing the [Model Context Protocol](https://modelcontextprotocol.io/) (MCP). It negotiates **2025-11-25** (the latest revision) by default and negotiates down to 2025-06-18, 2025-03-26, and 2024-11-05 for older peers. It provides both client and server capabilities for building MCP-compatible applications.
+
+Feature support is granular (stable / experimental / partial) and documented with test evidence in the **[compliance matrix](docs/compliance.md)** — please read it before relying on any specific capability.
 
 The library is designed for integration with the Andy ecosystem (Andy Engine, Andy MCP Gateway, Andy Containers) but can be used independently in any .NET application.
 
@@ -17,19 +19,22 @@ The library is designed for integration with the Andy ecosystem (Andy Engine, An
 
 ## Features
 
-- Full MCP 2025-06-18 specification compliance
-- JSON-RPC 2.0 protocol with polymorphic serialization
-- Transports: stdio (local process), Streamable HTTP (remote), SSE
-- High-level client API with auto-pagination and capability gating
-- High-level server API with fluent and attribute-based registration
-- All server features: tools, resources, prompts, completions, logging
-- All client features: roots, sampling, elicitation
-- All content types: text, image, audio, resource link, embedded resource, tool use, tool result
-- OAuth 2.1 with PKCE, Dynamic Client Registration (RFC 7591/7592)
-- Security: SSRF prevention, Origin validation, session management
-- OpenTelemetry distributed tracing via `System.Diagnostics.ActivitySource`
-- Dependency injection and `IHostedService` integration
-- Configuration binding from `appsettings.json`
+See the **[compliance matrix](docs/compliance.md)** for exact, test-linked status. In summary:
+
+- MCP 2025-11-25 negotiated by default, with revision-aware serialization for older peers
+- JSON-RPC 2.0 with polymorphic serialization; bidirectional request/response correlation
+- Transports: stdio and Streamable HTTP (SSE GET stream; replay/resumption not yet implemented)
+- High-level client API: tools, resources (+ subscribe), prompts, completion, roots, sampling, elicitation, auto-pagination, capability gating
+- High-level server API: fluent + attribute registration; concurrent dispatch, cancellation, progress
+- Recursive JSON Schema input validation and structured tool output enforcement
+- Experimental tasks (task-augmented `tools/call` + `tasks/*`)
+- Security: opt-in Origin validation, principal-bound sessions with cross-user rejection, fail-closed body/session limits
+- OAuth: challenge parsing, correct 401 handling, safe concurrent refresh (discovery/registration partial — see matrix)
+- OpenTelemetry tracing, dependency injection, `IHostedService`, and `appsettings.json` binding
+
+> **Not a full-compliance claim.** Several areas are partial or experimental (SSE replay, OAuth
+> discovery, resource templates, sampling tool-calling, task augmentation beyond tools). The
+> matrix marks each honestly and links to tests.
 
 ## Quick Start
 
@@ -172,9 +177,26 @@ See the [.NET support policy](https://dotnet.microsoft.com/en-us/platform/suppor
 
 See the `docs/` directory:
 
-- [Requirements](docs/requirements.md) -- full MCP spec compliance matrix
+- [Compliance matrix](docs/compliance.md) -- test-linked, revision-specific feature status
+- [Requirements](docs/requirements.md) -- MCP spec requirement tracking
 - [Design](docs/design.md) -- architecture, design decisions, extensibility
 - [Implementation](docs/implementation.md) -- project structure, type inventory, test breakdown
+
+## Project status
+
+**Phase 7 (Full MCP 2025-11-25 compliance) — in progress (updated 2026-07-21).**
+
+Landed and tested across this phase: 2025-11-25 schema + revision-aware serialization, bidirectional
+JSON-RPC and lifecycle enforcement, concurrent dispatch with cancellation/progress/timeouts,
+Streamable HTTP validation + negotiated version + stdio parse errors, principal-bound HTTP sessions
+with fail-closed limits, recursive JSON Schema validation + structured outputs, client
+completion/subscribe APIs, experimental tasks (tools), conformance fixtures + CI coverage/vulnerability
+gates, and OAuth 401/refresh hardening. The full suite is green on Linux, macOS, and Windows.
+
+Phase 7 is **not** marked complete: several matrix rows remain partial/experimental (see the
+[compliance matrix](docs/compliance.md)), and the official-schema + cross-implementation conformance
+gate is not yet in place. The **ALPHA** and non-full-compliance wording above stays until those gates
+pass.
 
 ## License
 
