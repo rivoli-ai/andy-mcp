@@ -12,19 +12,23 @@ public sealed class OAuthDelegatingHandler : DelegatingHandler
     private readonly string _resource;
     private readonly AuthorizationServerMetadata? _authMetadata;
     private readonly string? _clientId;
+    private readonly OAuthMetadataDiscovery? _discovery;
+    private AuthorizationServerMetadata? _discoveredMetadata;
 
     public OAuthDelegatingHandler(
         OAuthClient oauthClient,
         string resource,
         AuthorizationServerMetadata? authMetadata = null,
         string? clientId = null,
-        HttpMessageHandler? innerHandler = null)
+        HttpMessageHandler? innerHandler = null,
+        OAuthMetadataDiscovery? discovery = null)
         : base(innerHandler ?? new HttpClientHandler())
     {
         _oauthClient = oauthClient;
         _resource = resource;
         _authMetadata = authMetadata;
         _clientId = clientId;
+        _discovery = discovery;
     }
 
     protected override async Task<HttpResponseMessage> SendAsync(
@@ -43,11 +47,10 @@ public sealed class OAuthDelegatingHandler : DelegatingHandler
         // token — if no fresh token can be obtained, surface the response (with its challenge).
         if (response.StatusCode == HttpStatusCode.Unauthorized)
         {
-            WwwAuthenticateChallenge.TryParse(
-                response.Headers.WwwAuthenticate.FirstOrDefault()?.ToString(), out _);
+            var metadata = await ResolveAuthMetadataAsync(response, cancellationToken);
 
             var newToken = await _oauthClient.HandleUnauthorizedAsync(
-                _resource, _authMetadata, _clientId, cancellationToken);
+                _resource, metadata, _clientId, cancellationToken);
 
             if (newToken is not null && newToken != token)
             {
@@ -59,6 +62,47 @@ public sealed class OAuthDelegatingHandler : DelegatingHandler
         }
 
         return response;
+    }
+
+    /// <summary>
+    /// Determine the authorization-server metadata to use for a 401: the pre-configured metadata,
+    /// a previously discovered one, or — following the challenge's <c>resource_metadata</c> —
+    /// protected-resource metadata (RFC 9728) then authorization-server metadata (RFC 8414/OIDC).
+    /// </summary>
+    private async Task<AuthorizationServerMetadata?> ResolveAuthMetadataAsync(
+        HttpResponseMessage response, CancellationToken cancellationToken)
+    {
+        if (_authMetadata is not null)
+            return _authMetadata;
+        if (_discoveredMetadata is not null)
+            return _discoveredMetadata;
+        if (_discovery is null)
+            return null;
+
+        if (!WwwAuthenticateChallenge.TryParse(
+                response.Headers.WwwAuthenticate.FirstOrDefault()?.ToString(), out var challenge) ||
+            challenge.ResourceMetadata is null ||
+            !Uri.TryCreate(challenge.ResourceMetadata, UriKind.Absolute, out var prmUrl))
+        {
+            return null;
+        }
+
+        try
+        {
+            var prm = await _discovery.FetchProtectedResourceMetadataAsync(prmUrl, cancellationToken);
+            if (prm.AuthorizationServers.Count == 0 ||
+                !Uri.TryCreate(prm.AuthorizationServers[0], UriKind.Absolute, out var issuer))
+            {
+                return null;
+            }
+
+            _discoveredMetadata = await _discovery.DiscoverAuthorizationServerMetadataAsync(issuer, cancellationToken);
+            return _discoveredMetadata;
+        }
+        catch (Exception ex) when (ex is HttpRequestException or InvalidOperationException)
+        {
+            return null; // discovery failed; surface the original 401
+        }
     }
 
     private static async Task<HttpRequestMessage> CloneRequestAsync(HttpRequestMessage original)

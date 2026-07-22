@@ -69,6 +69,19 @@ public sealed class OAuthMetadataDiscovery
         throw new InvalidOperationException($"No protected resource metadata found for '{resource}'.");
     }
 
+    /// <summary>
+    /// Fetch protected-resource metadata from a URL given directly (e.g. the <c>resource_metadata</c>
+    /// parameter of a WWW-Authenticate challenge), rather than from well-known construction.
+    /// </summary>
+    public async Task<ProtectedResourceMetadata> FetchProtectedResourceMetadataAsync(
+        Uri metadataUrl, CancellationToken ct = default)
+    {
+        var metadata = await TryFetchAsync<ProtectedResourceMetadata>(metadataUrl, ct);
+        if (metadata is null || metadata.AuthorizationServers.Count == 0)
+            throw new InvalidOperationException($"No usable protected resource metadata at '{metadataUrl}'.");
+        return metadata;
+    }
+
     public async Task<AuthorizationServerMetadata> DiscoverAuthorizationServerMetadataAsync(
         Uri issuer, CancellationToken ct = default)
     {
