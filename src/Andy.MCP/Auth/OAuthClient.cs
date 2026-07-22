@@ -128,10 +128,19 @@ public sealed class OAuthClient
         await _refreshLock.WaitAsync(ct);
         try
         {
+            // Re-read token state inside the lock: a concurrent request may already have rotated the
+            // one-time refresh token, in which case reuse the freshly-stored token instead of
+            // attempting a second refresh that would fail against a rotated token.
+            var current = await _tokenStore.LoadTokensAsync(resource);
+            if (current is not null && !current.IsExpired && current.RefreshToken != refreshToken)
+                return current;
+
+            var effectiveRefreshToken = current?.RefreshToken ?? refreshToken;
+
             var content = new FormUrlEncodedContent(new Dictionary<string, string>
             {
                 ["grant_type"] = "refresh_token",
-                ["refresh_token"] = refreshToken,
+                ["refresh_token"] = effectiveRefreshToken,
                 ["client_id"] = clientId,
                 ["resource"] = resource
             });
@@ -145,7 +154,7 @@ public sealed class OAuthClient
             var tokens = new OAuthTokens
             {
                 AccessToken = tokenResponse.AccessToken,
-                RefreshToken = tokenResponse.RefreshToken ?? refreshToken, // Rotation: use new if provided
+                RefreshToken = tokenResponse.RefreshToken ?? effectiveRefreshToken, // Rotation: use new if provided
                 ExpiresAt = tokenResponse.ExpiresIn.HasValue
                     ? DateTimeOffset.UtcNow.AddSeconds(tokenResponse.ExpiresIn.Value)
                     : null,
@@ -184,6 +193,39 @@ public sealed class OAuthClient
         }
 
         return null; // Expired and can't refresh
+    }
+
+    /// <summary>
+    /// React to a 401 for a token that the server rejected: attempt a refresh to obtain a genuinely
+    /// new token, or clear the rejected token so it is not reused. Returns the new access token, or
+    /// null when no fresh token could be obtained (the caller should surface the challenge).
+    /// </summary>
+    public async Task<string?> HandleUnauthorizedAsync(
+        string resource,
+        AuthorizationServerMetadata? metadata = null,
+        string? clientId = null,
+        CancellationToken ct = default)
+    {
+        var tokens = await _tokenStore.LoadTokensAsync(resource);
+        if (tokens is null)
+            return null;
+
+        if (tokens.RefreshToken is not null && metadata is not null && clientId is not null)
+        {
+            try
+            {
+                var refreshed = await RefreshTokenAsync(metadata, tokens.RefreshToken, clientId, resource, ct);
+                return refreshed.AccessToken;
+            }
+            catch
+            {
+                // Refresh failed; fall through to invalidate the rejected token.
+            }
+        }
+
+        // No refresh available or it failed: discard the rejected token rather than reusing it.
+        await _tokenStore.ClearTokensAsync(resource);
+        return null;
     }
 
     /// <summary>

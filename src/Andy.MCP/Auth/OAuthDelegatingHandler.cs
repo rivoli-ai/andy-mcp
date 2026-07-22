@@ -39,18 +39,20 @@ public sealed class OAuthDelegatingHandler : DelegatingHandler
 
         var response = await base.SendAsync(request, cancellationToken);
 
-        // Handle 401: try refresh and retry once
-        if (response.StatusCode == HttpStatusCode.Unauthorized && _authMetadata is not null && _clientId is not null)
+        // Handle 401: obtain a genuinely new token and retry once. Never blindly retry the same
+        // token — if no fresh token can be obtained, surface the response (with its challenge).
+        if (response.StatusCode == HttpStatusCode.Unauthorized)
         {
-            var store = new InMemoryTokenStore();
-            var refreshedToken = await _oauthClient.GetAccessTokenAsync(
+            WwwAuthenticateChallenge.TryParse(
+                response.Headers.WwwAuthenticate.FirstOrDefault()?.ToString(), out _);
+
+            var newToken = await _oauthClient.HandleUnauthorizedAsync(
                 _resource, _authMetadata, _clientId, cancellationToken);
 
-            if (refreshedToken is not null)
+            if (newToken is not null && newToken != token)
             {
-                // Retry with new token
                 var retryRequest = await CloneRequestAsync(request);
-                retryRequest.Headers.Authorization = new AuthenticationHeaderValue("Bearer", refreshedToken);
+                retryRequest.Headers.Authorization = new AuthenticationHeaderValue("Bearer", newToken);
                 response.Dispose();
                 return await base.SendAsync(retryRequest, cancellationToken);
             }

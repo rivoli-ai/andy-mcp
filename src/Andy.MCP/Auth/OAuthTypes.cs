@@ -89,5 +89,8 @@ public sealed record OAuthTokens
     public DateTimeOffset? ExpiresAt { get; init; }
     public string? Scope { get; init; }
 
-    public bool IsExpired => ExpiresAt.HasValue && DateTimeOffset.UtcNow >= ExpiresAt.Value;
+    /// <summary>Clock-skew margin: a token is treated as expired shortly before its actual expiry.</summary>
+    public static readonly TimeSpan ExpirySkew = TimeSpan.FromSeconds(30);
+
+    public bool IsExpired => ExpiresAt.HasValue && DateTimeOffset.UtcNow >= ExpiresAt.Value - ExpirySkew;
 }
