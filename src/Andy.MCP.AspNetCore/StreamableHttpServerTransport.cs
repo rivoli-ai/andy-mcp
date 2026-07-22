@@ -50,7 +50,6 @@ public sealed class StreamableHttpHandler
     private readonly StreamableHttpServerOptions _options;
     private readonly Func<IServerTransport, Task> _sessionHandler;
     private readonly ILogger<StreamableHttpHandler> _logger;
-    private long _eventCounter;
 
     /// <param name="sessionHandler">Called when a new session is created. Receives the session's transport
     /// and should run the MCP server logic (e.g., McpServer.RunAsync).</param>
@@ -247,15 +246,21 @@ public sealed class StreamableHttpHandler
         var writer = new SseWriter(context.Response.Body);
         var ct = context.RequestAborted;
 
+        // Resume from Last-Event-ID when it belongs to this session's stream; otherwise start from
+        // the current position (a fresh stream does not replay prior events).
+        var startSeq = session.CurrentSequence;
+        var lastEventId = context.Request.Headers["Last-Event-ID"].FirstOrDefault();
+        if (session.TryParseEventId(lastEventId, out var resumeSeq))
+            startSeq = resumeSeq;
+
         try
         {
-            await foreach (var message in session.ServerMessages.WithCancellation(ct))
+            await foreach (var (seq, message) in session.ReadServerEventsAsync(startSeq, ct))
             {
-                var eventId = Interlocked.Increment(ref _eventCounter).ToString();
                 await writer.WriteEventAsync(new SseEvent
                 {
                     Data = McpJsonDefaults.Serialize(message),
-                    Id = eventId
+                    Id = session.FormatEventId(seq)
                 }, ct);
             }
         }
@@ -379,7 +384,17 @@ public sealed class StreamableHttpHandler
 public sealed class StreamableHttpSession : IServerTransport
 {
     private readonly Channel<JsonRpcMessage> _incoming;
-    private readonly Channel<JsonRpcMessage> _outgoing;
+
+    // Server-initiated messages destined for the GET SSE stream are held in a bounded replay
+    // buffer (rather than a consume-once channel) so a reconnecting client can resume with
+    // Last-Event-ID. Event ids are "{epoch}.{seq}"; the per-session epoch prevents an id minted on
+    // one stream from replaying onto a different one.
+    private readonly string _streamEpoch = Guid.NewGuid().ToString("N");
+    private readonly object _sseSync = new();
+    private readonly LinkedList<(long Seq, JsonRpcMessage Message)> _replay = new();
+    private long _seq;
+    private const int MaxReplayEvents = 256;
+    private TaskCompletionSource _sseSignal = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
     // All response-correlation state is guarded by _sync. _pendingResponses holds waiters
     // registered by POST handlers; _bufferedResponses holds responses that arrived before
@@ -409,7 +424,6 @@ public sealed class StreamableHttpSession : IServerTransport
         SessionId = sessionId;
         UserKey = userKey;
         _incoming = Channel.CreateUnbounded<JsonRpcMessage>();
-        _outgoing = Channel.CreateUnbounded<JsonRpcMessage>();
     }
 
     public Task StartAsync(CancellationToken cancellationToken = default) => Task.CompletedTask;
@@ -418,7 +432,7 @@ public sealed class StreamableHttpSession : IServerTransport
     /// Send a message from the server. Responses are routed to the waiting POST handler.
     /// Other messages (requests, notifications) go to the SSE stream.
     /// </summary>
-    public async Task SendAsync(JsonRpcMessage message, CancellationToken cancellationToken = default)
+    public Task SendAsync(JsonRpcMessage message, CancellationToken cancellationToken = default)
     {
         if (message is JsonRpcResponse response)
         {
@@ -428,7 +442,7 @@ public sealed class StreamableHttpSession : IServerTransport
                 if (_pendingResponses.Remove(response.Id, out var tcs))
                 {
                     tcs.TrySetResult(response);
-                    return;
+                    return Task.CompletedTask;
                 }
 
                 // No waiter is registered yet. A JSON-RPC response is the reply to a
@@ -439,23 +453,105 @@ public sealed class StreamableHttpSession : IServerTransport
                 // so a (racing) waiter can still claim it rather than dropping it.
                 _bufferedResponses[response.Id] = response;
             }
-            return;
+            return Task.CompletedTask;
         }
 
-        // Server-initiated requests and notifications go to the SSE stream.
-        await _outgoing.Writer.WriteAsync(message, cancellationToken);
+        // Server-initiated requests and notifications go to the SSE stream (via the replay buffer).
+        AppendServerEvent(message);
+        return Task.CompletedTask;
+    }
+
+    private void AppendServerEvent(JsonRpcMessage message)
+    {
+        TaskCompletionSource signal;
+        lock (_sseSync)
+        {
+            _seq++;
+            _replay.AddLast((_seq, message));
+            while (_replay.Count > MaxReplayEvents)
+                _replay.RemoveFirst();
+
+            signal = _sseSignal;
+            _sseSignal = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        }
+        signal.TrySetResult();
     }
 
     /// <summary>
     /// Messages from the MCP server meant for the SSE stream (server-initiated requests/notifications).
     /// </summary>
-    public IAsyncEnumerable<JsonRpcMessage> ServerMessages => ReadServerMessages();
+    /// <summary>Server-initiated messages for the SSE stream (from the current position onward).</summary>
+    public IAsyncEnumerable<JsonRpcMessage> ServerMessages => ReadServerMessagesAsync();
 
-    private async IAsyncEnumerable<JsonRpcMessage> ReadServerMessages(
+    private async IAsyncEnumerable<JsonRpcMessage> ReadServerMessagesAsync(
         [EnumeratorCancellation] CancellationToken ct = default)
     {
-        await foreach (var msg in _outgoing.Reader.ReadAllAsync(ct))
-            yield return msg;
+        await foreach (var (_, message) in ReadServerEventsAsync(CurrentSequence, ct))
+            yield return message;
+    }
+
+    /// <summary>The highest event sequence number emitted so far.</summary>
+    public long CurrentSequence
+    {
+        get { lock (_sseSync) { return _seq; } }
+    }
+
+    /// <summary>Format an SSE event id that encodes this session's stream epoch and a sequence.</summary>
+    public string FormatEventId(long seq) => $"{_streamEpoch}.{seq}";
+
+    /// <summary>
+    /// Parse a Last-Event-ID. Returns true and the resume sequence only when the id belongs to this
+    /// session's stream epoch, so an id from a different stream can never trigger a replay here.
+    /// </summary>
+    public bool TryParseEventId(string? eventId, out long seq)
+    {
+        seq = 0;
+        if (eventId is null)
+            return false;
+        var dot = eventId.LastIndexOf('.');
+        if (dot <= 0)
+            return false;
+        return string.Equals(eventId[..dot], _streamEpoch, StringComparison.Ordinal)
+               && long.TryParse(eventId[(dot + 1)..], out seq);
+    }
+
+    /// <summary>
+    /// Enumerate server events with sequence greater than <paramref name="afterSeq"/>, replaying any
+    /// still-buffered events first and then streaming new ones until the session closes.
+    /// </summary>
+    public async IAsyncEnumerable<(long Seq, JsonRpcMessage Message)> ReadServerEventsAsync(
+        long afterSeq, [EnumeratorCancellation] CancellationToken ct = default)
+    {
+        var cursor = afterSeq;
+        while (true)
+        {
+            var batch = new List<(long Seq, JsonRpcMessage Message)>();
+            Task signal;
+            lock (_sseSync)
+            {
+                foreach (var entry in _replay)
+                    if (entry.Seq > cursor)
+                        batch.Add(entry);
+                signal = _sseSignal.Task;
+            }
+
+            if (batch.Count > 0)
+            {
+                foreach (var entry in batch)
+                {
+                    cursor = entry.Seq;
+                    yield return entry;
+                }
+                continue;
+            }
+
+            if (!_connected)
+                yield break;
+
+            var completed = await Task.WhenAny(signal, Task.Delay(Timeout.Infinite, ct)).ConfigureAwait(false);
+            if (completed != signal)
+                yield break; // cancelled
+        }
     }
 
     /// <summary>
@@ -556,7 +652,14 @@ public sealed class StreamableHttpSession : IServerTransport
         }
 
         _incoming.Writer.TryComplete();
-        _outgoing.Writer.TryComplete();
+
+        // Wake any SSE reader so it observes the closed state and completes.
+        TaskCompletionSource signal;
+        lock (_sseSync)
+        {
+            signal = _sseSignal;
+        }
+        signal.TrySetResult();
 
         foreach (var tcs in toCancel)
             tcs.TrySetCanceled();
