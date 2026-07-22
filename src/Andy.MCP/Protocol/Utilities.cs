@@ -103,6 +103,12 @@ public static class McpMethods
     public const string NotificationsRootsListChanged = "notifications/roots/list_changed";
     public const string SamplingCreateMessage = "sampling/createMessage";
     public const string ElicitationCreate = "elicitation/create";
+
+    // Experimental tasks (MCP 2025-11-25)
+    public const string TasksGet = "tasks/get";
+    public const string TasksList = "tasks/list";
+    public const string TasksResult = "tasks/result";
+    public const string TasksCancel = "tasks/cancel";
 }
 
 /// <summary>
