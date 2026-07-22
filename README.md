@@ -153,6 +153,21 @@ dotnet build
 dotnet test
 ```
 
+## .NET support policy
+
+Andy.MCP currently targets **.NET 8 (LTS)**, supported by Microsoft through **November 2026**.
+.NET 10 is the active LTS through November 2028.
+
+- Package versions are managed centrally via [`Directory.Packages.props`](Directory.Packages.props)
+  (Central Package Management).
+- CI runs the test suite on Linux, macOS, and Windows, collects code coverage, and **fails the
+  build on any known-vulnerable dependency** (`dotnet list package --vulnerable`).
+- **Plan:** multi-target `net8.0` and `net10.0` (or migrate to `net10.0`) before .NET 8 reaches
+  end of support in November 2026, then drop `net8.0` after that date. Multi-targeting is deferred
+  until the .NET 10 SDK is available in the build/CI environment.
+
+See the [.NET support policy](https://dotnet.microsoft.com/en-us/platform/support/policy) for details.
+
 ## Documentation
 
 See the `docs/` directory:
