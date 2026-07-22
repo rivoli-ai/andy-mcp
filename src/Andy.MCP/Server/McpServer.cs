@@ -527,7 +527,12 @@ public sealed class McpServer : IAsyncDisposable
     }
 
     /// <summary>Owner key that scopes tasks for this server connection.</summary>
-    private const string? TaskOwnerKey = null;
+    /// <summary>
+    /// Owner key scoping this server's tasks in the (possibly shared/durable) task store. When
+    /// multiple connections share a store, set a distinct key per session/principal so one session
+    /// cannot list, inspect, cancel, or retrieve another's tasks.
+    /// </summary>
+    private string? TaskOwnerKey => _options.TaskOwnerKey;
 
     private static bool TryGetTaskMetadata(JsonElement? @params, out TaskMetadata? metadata)
     {
@@ -984,9 +989,16 @@ public sealed record McpServerOptions
     public TimeSpan? RequestTimeout { get; init; }
 
     /// <summary>
-    /// Store backing experimental task execution. Defaults to an in-memory store.
+    /// Store backing experimental task execution. Defaults to an in-memory store. Share one store
+    /// across connections (with a distinct <see cref="TaskOwnerKey"/> each) for durable tasks.
     /// </summary>
     public ITaskStore? TaskStore { get; init; }
+
+    /// <summary>
+    /// Owner key that scopes this server's tasks in a shared/durable store. Null keeps tasks owned
+    /// by the (single) connection.
+    /// </summary>
+    public string? TaskOwnerKey { get; init; }
 
     /// <summary>Advertise tools/list_changed support when tools are registered.</summary>
     public bool ToolsListChanged { get; init; } = true;
