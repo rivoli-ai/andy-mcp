@@ -325,6 +325,42 @@ public sealed class McpClient : IAsyncDisposable
             throw new McpCapabilityNotAvailableException("resources.subscribe");
     }
 
+    // --- Experimental tasks (MCP 2025-11-25) ---
+
+    /// <summary>
+    /// Experimental: call a tool as a task. Returns immediately with the created task; retrieve the
+    /// real result later with <see cref="GetTaskResultAsync"/>.
+    /// </summary>
+    public async Task<CreateTaskResult> CallToolAsTaskAsync(string name, object? arguments = null,
+        long? ttlMs = null, CancellationToken ct = default)
+    {
+        _session.RequireServerCapability("tools");
+        var args = arguments is JsonElement je
+            ? je
+            : arguments is not null
+                ? McpJsonDefaults.ToElement(arguments)
+                : (JsonElement?)null;
+
+        return await SendRequestAsync<CreateTaskResult>(McpMethods.ToolsCall,
+            new { name, arguments = args, task = new TaskMetadata { Ttl = ttlMs } }, ct);
+    }
+
+    /// <summary>Experimental: get a task's current state.</summary>
+    public Task<McpTask> GetTaskAsync(string taskId, CancellationToken ct = default) =>
+        SendRequestAsync<McpTask>(McpMethods.TasksGet, new TaskIdParams { TaskId = taskId }, ct);
+
+    /// <summary>Experimental: list the caller's tasks.</summary>
+    public async Task<IReadOnlyList<McpTask>> ListTasksAsync(CancellationToken ct = default) =>
+        (await SendRequestAsync<ListTasksResult>(McpMethods.TasksList, new PaginatedRequest(), ct)).Tasks;
+
+    /// <summary>Experimental: retrieve a completed task's result payload.</summary>
+    public Task<JsonElement> GetTaskResultAsync(string taskId, CancellationToken ct = default) =>
+        SendRequestAsync<JsonElement>(McpMethods.TasksResult, new TaskIdParams { TaskId = taskId }, ct);
+
+    /// <summary>Experimental: cancel a task.</summary>
+    public Task<McpTask> CancelTaskAsync(string taskId, CancellationToken ct = default) =>
+        SendRequestAsync<McpTask>(McpMethods.TasksCancel, new TaskIdParams { TaskId = taskId }, ct);
+
     #endregion
 
     #region Message Sending

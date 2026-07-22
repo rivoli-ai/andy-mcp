@@ -25,6 +25,7 @@ public sealed class McpServer : IAsyncDisposable
     private readonly List<CompletionRegistration> _completions = new();
     private readonly ResourceSubscriptionManager _subscriptions = new();
     private readonly PaginationHelper _pagination;
+    private readonly ITaskStore _taskStore;
     private readonly PendingRequestTracker _tracker = new();
     // Cancellation sources for inbound requests currently being handled, keyed by request id.
     private readonly ConcurrentDictionary<RequestId, CancellationTokenSource> _inflight = new();
@@ -53,6 +54,7 @@ public sealed class McpServer : IAsyncDisposable
         _options = options ?? new McpServerOptions();
         _logger = logger ?? NullLogger.Instance;
         _pagination = new PaginationHelper(Guid.NewGuid().ToString("N"), _options.PageSize);
+        _taskStore = _options.TaskStore ?? new InMemoryTaskStore();
     }
 
     #region Registration
@@ -322,6 +324,10 @@ public sealed class McpServer : IAsyncDisposable
                 McpMethods.PromptsGet => await HandlePromptsGetAsync(request, ct),
                 McpMethods.CompletionComplete => await HandleCompletionAsync(request, ct),
                 McpMethods.LoggingSetLevel => HandleSetLogLevel(request),
+                McpMethods.TasksGet => HandleTasksGet(request),
+                McpMethods.TasksList => HandleTasksList(request),
+                McpMethods.TasksResult => HandleTasksResult(request),
+                McpMethods.TasksCancel => HandleTasksCancel(request),
                 _ => JsonRpcResponse.Failure(request.Id,
                     JsonRpcError.MethodNotFound($"Unknown method: '{request.Method}'"))
             };
@@ -476,21 +482,22 @@ public sealed class McpServer : IAsyncDisposable
 
         var reporter = CreateProgressReporter(callReq.Meta);
 
+        // Task augmentation (experimental): run in the background and return a CreateTaskResult
+        // immediately; the real result is retrieved later via tasks/result.
+        if (TryGetTaskMetadata(request.Params, out var taskMetadata))
+        {
+            var task = _taskStore.Create(taskMetadata, TaskOwnerKey);
+            RunToolAsTask(task.TaskId, handler, callReq.Arguments, reporter);
+            return JsonRpcResponse.Success(request.Id, ToWire(new CreateTaskResult { Task = task }));
+        }
+
         try
         {
             var result = await handler.Handler(callReq.Arguments, reporter, ct);
 
-            // A declared output schema is enforced: non-conforming structured content must not be
-            // returned as a successful, conforming result.
-            if (handler.Tool.OutputSchema is { } outputSchema && result.StructuredContent is { } structured)
-            {
-                var outputErrors = JsonSchemaValidator.Validate(structured, outputSchema);
-                if (outputErrors.Count > 0)
-                {
-                    return JsonRpcResponse.Failure(request.Id, JsonRpcError.InternalError(
-                        $"Tool output did not conform to its output schema: {string.Join("; ", outputErrors)}"));
-                }
-            }
+            var outputError = ValidateToolOutput(handler, result);
+            if (outputError is not null)
+                return JsonRpcResponse.Failure(request.Id, JsonRpcError.InternalError(outputError));
 
             return JsonRpcResponse.Success(request.Id, ToWire(result));
         }
@@ -499,6 +506,87 @@ public sealed class McpServer : IAsyncDisposable
             var errorResult = CallToolResult.Error(ex.Message);
             return JsonRpcResponse.Success(request.Id, ToWire(errorResult));
         }
+    }
+
+    /// <summary>Owner key that scopes tasks for this server connection.</summary>
+    private const string? TaskOwnerKey = null;
+
+    private static bool TryGetTaskMetadata(JsonElement? @params, out TaskMetadata? metadata)
+    {
+        metadata = null;
+        if (@params is { } p && p.TryGetProperty("task", out var task) && task.ValueKind == JsonValueKind.Object)
+        {
+            metadata = task.Deserialize<TaskMetadata>(McpJsonDefaults.Options) ?? new TaskMetadata();
+            return true;
+        }
+        return false;
+    }
+
+    private static string? ValidateToolOutput(ToolHandler handler, CallToolResult result)
+    {
+        if (handler.Tool.OutputSchema is { } outputSchema && result.StructuredContent is { } structured)
+        {
+            var errors = JsonSchemaValidator.Validate(structured, outputSchema);
+            if (errors.Count > 0)
+                return $"Tool output did not conform to its output schema: {string.Join("; ", errors)}";
+        }
+        return null;
+    }
+
+    private void RunToolAsTask(string taskId,
+        ToolHandler handler, JsonElement? arguments, IProgress<McpProgress> reporter)
+    {
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                var result = await handler.Handler(arguments, reporter, _cts?.Token ?? CancellationToken.None);
+                var outputError = ValidateToolOutput(handler, result);
+                if (outputError is not null)
+                    _taskStore.SetFailed(taskId, outputError);
+                else
+                    _taskStore.SetResult(taskId, McpJsonDefaults.ToElement(result));
+            }
+            catch (Exception ex)
+            {
+                _taskStore.SetFailed(taskId, ex.Message);
+            }
+        }, CancellationToken.None);
+    }
+
+    private JsonRpcResponse HandleTasksGet(JsonRpcRequest request)
+    {
+        var taskId = request.GetParams<TaskIdParams>()!.TaskId;
+        var task = _taskStore.Get(taskId, TaskOwnerKey);
+        return task is null
+            ? JsonRpcResponse.Failure(request.Id, JsonRpcError.InvalidParams($"Unknown task: '{taskId}'"))
+            : JsonRpcResponse.Success(request.Id, ToWire(task));
+    }
+
+    private JsonRpcResponse HandleTasksList(JsonRpcRequest request) =>
+        JsonRpcResponse.Success(request.Id, ToWire(new ListTasksResult { Tasks = _taskStore.List(TaskOwnerKey) }));
+
+    private JsonRpcResponse HandleTasksResult(JsonRpcRequest request)
+    {
+        var taskId = request.GetParams<TaskIdParams>()!.TaskId;
+        var task = _taskStore.Get(taskId, TaskOwnerKey);
+        if (task is null)
+            return JsonRpcResponse.Failure(request.Id, JsonRpcError.InvalidParams($"Unknown task: '{taskId}'"));
+        if (task.Status != McpTaskStatus.Completed)
+            return JsonRpcResponse.Failure(request.Id,
+                JsonRpcError.InvalidRequest($"Task '{taskId}' result is not available (status: {task.Status})."));
+
+        var payload = _taskStore.GetResult(taskId, TaskOwnerKey);
+        return JsonRpcResponse.Success(request.Id, payload ?? McpJsonDefaults.ToElement(new { }));
+    }
+
+    private JsonRpcResponse HandleTasksCancel(JsonRpcRequest request)
+    {
+        var taskId = request.GetParams<TaskIdParams>()!.TaskId;
+        var task = _taskStore.Cancel(taskId, TaskOwnerKey);
+        return task is null
+            ? JsonRpcResponse.Failure(request.Id, JsonRpcError.InvalidParams($"Unknown task: '{taskId}'"))
+            : JsonRpcResponse.Success(request.Id, ToWire(task));
     }
 
     /// <summary>
@@ -859,6 +947,11 @@ public sealed record McpServerOptions
 
     /// <summary>Timeout for server-initiated requests. Null means no timeout.</summary>
     public TimeSpan? RequestTimeout { get; init; }
+
+    /// <summary>
+    /// Store backing experimental task execution. Defaults to an in-memory store.
+    /// </summary>
+    public ITaskStore? TaskStore { get; init; }
 
     /// <summary>Advertise tools/list_changed support when tools are registered.</summary>
     public bool ToolsListChanged { get; init; } = true;
