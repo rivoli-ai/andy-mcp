@@ -160,16 +160,18 @@ dotnet test
 
 ## .NET support policy
 
-Andy.MCP currently targets **.NET 8 (LTS)**, supported by Microsoft through **November 2026**.
-.NET 10 is the active LTS through November 2028.
+Andy.MCP **multi-targets `net8.0` and `net10.0`** — both LTS releases. .NET 8 is supported through
+November 2026; .NET 10 through November 2028. Packages ship assemblies for both TFMs.
 
+- Building requires the **.NET 10 SDK** (it builds both target frameworks); running the `net8.0`
+  assemblies needs only the .NET 8 runtime. `global.json` rolls forward to the latest installed
+  major SDK.
 - Package versions are managed centrally via [`Directory.Packages.props`](Directory.Packages.props)
   (Central Package Management).
-- CI runs the test suite on Linux, macOS, and Windows, collects code coverage, and **fails the
-  build on any known-vulnerable dependency** (`dotnet list package --vulnerable`).
-- **Plan:** multi-target `net8.0` and `net10.0` (or migrate to `net10.0`) before .NET 8 reaches
-  end of support in November 2026, then drop `net8.0` after that date. Multi-targeting is deferred
-  until the .NET 10 SDK is available in the build/CI environment.
+- CI builds and tests **both target frameworks** on Linux, macOS, and Windows, collects code
+  coverage, and **fails the build on any known-vulnerable dependency** (`dotnet list package
+  --vulnerable`).
+- **Plan:** drop `net8.0` after it reaches end of support in November 2026.
 
 See the [.NET support policy](https://dotnet.microsoft.com/en-us/platform/support/policy) for details.
 
