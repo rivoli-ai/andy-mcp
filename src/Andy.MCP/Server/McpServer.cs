@@ -445,6 +445,42 @@ public sealed class McpServer : IAsyncDisposable
         return SendRequestAsync<ElicitResult>(McpMethods.ElicitationCreate, request, cancellationToken);
     }
 
+    // --- Experimental: task-augmented client requests (the client creates the task; we poll it) ---
+
+    /// <summary>Experimental: ask the client to sample as a task; retrieve the result via the task APIs.</summary>
+    public Task<CreateTaskResult> CreateMessageAsTaskAsync(CreateMessageRequest request, long? ttlMs = null, CancellationToken cancellationToken = default)
+    {
+        _session.RequireClientCapability("sampling");
+        return SendRequestAsync<CreateTaskResult>(McpMethods.SamplingCreateMessage, AugmentWithTask(request, ttlMs), cancellationToken);
+    }
+
+    /// <summary>Experimental: ask the client to elicit as a task; retrieve the result via the task APIs.</summary>
+    public Task<CreateTaskResult> ElicitAsTaskAsync(ElicitRequest request, long? ttlMs = null, CancellationToken cancellationToken = default)
+    {
+        _session.RequireClientCapability("elicitation");
+        return SendRequestAsync<CreateTaskResult>(McpMethods.ElicitationCreate, AugmentWithTask(request, ttlMs), cancellationToken);
+    }
+
+    /// <summary>Experimental: get the state of a task the client is running.</summary>
+    public Task<McpTask> GetClientTaskAsync(string taskId, CancellationToken cancellationToken = default) =>
+        SendRequestAsync<McpTask>(McpMethods.TasksGet, new TaskIdParams { TaskId = taskId }, cancellationToken);
+
+    /// <summary>Experimental: retrieve the deferred result of a task the client ran.</summary>
+    public Task<JsonElement> GetClientTaskResultAsync(string taskId, CancellationToken cancellationToken = default) =>
+        SendRequestAsync<JsonElement>(McpMethods.TasksResult, new TaskIdParams { TaskId = taskId }, cancellationToken);
+
+    /// <summary>Experimental: cancel a task the client is running.</summary>
+    public Task<McpTask> CancelClientTaskAsync(string taskId, CancellationToken cancellationToken = default) =>
+        SendRequestAsync<McpTask>(McpMethods.TasksCancel, new TaskIdParams { TaskId = taskId }, cancellationToken);
+
+    /// <summary>Serialize a request for the negotiated revision and attach task-augmentation metadata.</summary>
+    private JsonElement AugmentWithTask<T>(T request, long? ttlMs)
+    {
+        var node = JsonSerializer.SerializeToNode(ToWire(request), McpJsonDefaults.Options)!.AsObject();
+        node["task"] = JsonSerializer.SerializeToNode(new TaskMetadata { Ttl = ttlMs }, McpJsonDefaults.Options);
+        return node.Deserialize<JsonElement>(McpJsonDefaults.Options);
+    }
+
     #endregion
 
     #region Request Handlers
@@ -625,7 +661,7 @@ public sealed class McpServer : IAsyncDisposable
             {
                 JsonValueKind.String => (RequestId)token.GetString()!,
                 JsonValueKind.Number => (RequestId)token.GetInt64(),
-                _ => null
+                _ => (RequestId?)null
             };
             if (id is { } progressToken)
                 return new ServerProgress(this, progressToken);

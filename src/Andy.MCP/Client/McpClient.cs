@@ -64,6 +64,7 @@ public sealed class McpClient : IAsyncDisposable
     private readonly ILogger _logger;
     private readonly McpSession _session = new();
     private readonly PendingRequestTracker _tracker = new();
+    private readonly ITaskStore _taskStore = new InMemoryTaskStore();
     private long _nextId;
     private Task? _messageLoop;
     private CancellationTokenSource? _cts;
@@ -592,6 +593,12 @@ public sealed class McpClient : IAsyncDisposable
                     return JsonRpcResponse.Failure(request.Id, JsonRpcError.MethodNotFound("Sampling not supported"));
 
                 var samplingReq = request.GetParams<CreateMessageRequest>()!;
+                if (TryGetTaskMetadata(request.Params, out var samplingTaskMeta))
+                {
+                    var task = _taskStore.Create(samplingTaskMeta, null);
+                    RunHandlerAsTask(task.TaskId, ct => _options.SamplingHandler.HandleAsync(samplingReq, ct));
+                    return JsonRpcResponse.Success(request.Id, McpJsonDefaults.ToElement(new CreateTaskResult { Task = task }));
+                }
                 var samplingResult = await _options.SamplingHandler.HandleAsync(samplingReq, _cts?.Token ?? CancellationToken.None);
                 return JsonRpcResponse.Success(request.Id, McpJsonDefaults.ToElement(samplingResult));
 
@@ -600,13 +607,87 @@ public sealed class McpClient : IAsyncDisposable
                     return JsonRpcResponse.Failure(request.Id, JsonRpcError.MethodNotFound("Elicitation not supported"));
 
                 var elicitReq = request.GetParams<ElicitRequest>()!;
+                if (TryGetTaskMetadata(request.Params, out var elicitTaskMeta))
+                {
+                    var task = _taskStore.Create(elicitTaskMeta, null);
+                    RunHandlerAsTask(task.TaskId, ct => _options.ElicitationHandler.HandleAsync(elicitReq, ct));
+                    return JsonRpcResponse.Success(request.Id, McpJsonDefaults.ToElement(new CreateTaskResult { Task = task }));
+                }
                 var elicitResult = await _options.ElicitationHandler.HandleAsync(elicitReq, _cts?.Token ?? CancellationToken.None);
                 return JsonRpcResponse.Success(request.Id, McpJsonDefaults.ToElement(elicitResult));
+
+            case McpMethods.TasksGet:
+                return HandleClientTaskGet(request);
+            case McpMethods.TasksList:
+                return JsonRpcResponse.Success(request.Id,
+                    McpJsonDefaults.ToElement(new ListTasksResult { Tasks = _taskStore.List(null) }));
+            case McpMethods.TasksResult:
+                return HandleClientTaskResult(request);
+            case McpMethods.TasksCancel:
+                return HandleClientTaskCancel(request);
 
             default:
                 return JsonRpcResponse.Failure(request.Id,
                     JsonRpcError.MethodNotFound($"Client does not handle '{request.Method}'"));
         }
+    }
+
+    private static bool TryGetTaskMetadata(JsonElement? @params, out TaskMetadata? metadata)
+    {
+        metadata = null;
+        if (@params is { } p && p.TryGetProperty("task", out var task) && task.ValueKind == JsonValueKind.Object)
+        {
+            metadata = task.Deserialize<TaskMetadata>(McpJsonDefaults.Options) ?? new TaskMetadata();
+            return true;
+        }
+        return false;
+    }
+
+    private void RunHandlerAsTask<T>(string taskId, Func<CancellationToken, Task<T>> handler)
+    {
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                var result = await handler(_cts?.Token ?? CancellationToken.None);
+                _taskStore.SetResult(taskId, McpJsonDefaults.ToElement(result));
+            }
+            catch (Exception ex)
+            {
+                _taskStore.SetFailed(taskId, ex.Message);
+            }
+        }, CancellationToken.None);
+    }
+
+    private JsonRpcResponse HandleClientTaskGet(JsonRpcRequest request)
+    {
+        var taskId = request.GetParams<TaskIdParams>()!.TaskId;
+        var task = _taskStore.Get(taskId, null);
+        return task is null
+            ? JsonRpcResponse.Failure(request.Id, JsonRpcError.InvalidParams($"Unknown task: '{taskId}'"))
+            : JsonRpcResponse.Success(request.Id, McpJsonDefaults.ToElement(task));
+    }
+
+    private JsonRpcResponse HandleClientTaskResult(JsonRpcRequest request)
+    {
+        var taskId = request.GetParams<TaskIdParams>()!.TaskId;
+        var task = _taskStore.Get(taskId, null);
+        if (task is null)
+            return JsonRpcResponse.Failure(request.Id, JsonRpcError.InvalidParams($"Unknown task: '{taskId}'"));
+        if (task.Status != McpTaskStatus.Completed)
+            return JsonRpcResponse.Failure(request.Id,
+                JsonRpcError.InvalidRequest($"Task '{taskId}' result is not available (status: {task.Status})."));
+        var payload = _taskStore.GetResult(taskId, null);
+        return JsonRpcResponse.Success(request.Id, payload ?? McpJsonDefaults.ToElement(new { }));
+    }
+
+    private JsonRpcResponse HandleClientTaskCancel(JsonRpcRequest request)
+    {
+        var taskId = request.GetParams<TaskIdParams>()!.TaskId;
+        var task = _taskStore.Cancel(taskId, null);
+        return task is null
+            ? JsonRpcResponse.Failure(request.Id, JsonRpcError.InvalidParams($"Unknown task: '{taskId}'"))
+            : JsonRpcResponse.Success(request.Id, McpJsonDefaults.ToElement(task));
     }
 
     #endregion
