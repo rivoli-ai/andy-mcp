@@ -29,8 +29,26 @@ See the **[compliance matrix](docs/compliance.md)** for exact, test-linked statu
 - Recursive JSON Schema input validation and structured tool output enforcement
 - Experimental tasks (task-augmented `tools/call` + `tasks/*`)
 - Security: opt-in Origin validation, principal-bound sessions with cross-user rejection, fail-closed body/session limits
-- OAuth: challenge parsing, correct 401 handling, safe concurrent refresh (discovery/registration partial — see matrix)
+- OAuth: challenge parsing, safe 401 refresh, managed registration, Client ID Metadata Documents, and opt-in PKCE/403 scope step-up (not a complete OAuth claim — see matrix)
 - OpenTelemetry tracing, dependency injection, `IHostedService`, and `appsettings.json` binding
+
+### OAuth registration and authorization boundaries
+
+The supported registration paths are RFC 7592 management of an existing registration, Client ID
+Metadata Documents (CIMD), and explicitly configured Dynamic Client Registration (DCR). For
+initial registration selection, a validated CIMD is used when the authorization server advertises
+`client_id_metadata_document_supported`; otherwise the library uses DCR only when the caller
+explicitly supplies DCR metadata and the server advertises a registration endpoint. RFC 7592 then
+manages the resulting registration state. CIMD documents remain host-provided: the library
+validates and selects their URL identity but neither fetches, hosts, nor sends the document.
+
+Interactive authorization is also host-integrated rather than browser-integrated. An
+`IOAuthAuthorizationProvider` receives only authorization and redirect URIs; the library owns PKCE
+S256, state, callback validation, code exchange, and token persistence. A step-up occurs only for
+a Bearer `403` with `error="insufficient_scope"` and challenged scopes. It requests the ordinal,
+case-sensitive union of existing and challenged scopes, coordinates an upgrade per resource, and
+retries the original request once only after a new token covers that set. Failed interactions leave
+the existing token and original `403` intact.
 
 > **Not a full-compliance claim.** Several areas are partial or experimental (SSE replay, OAuth
 > discovery, resource templates, sampling tool-calling, task augmentation beyond tools). The

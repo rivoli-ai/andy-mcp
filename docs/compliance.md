@@ -68,7 +68,7 @@ Evidence: `Protocol/ProtocolRevisionTests.cs`, `Protocol/RevisionAwareJsonTests.
 | Unguessable session ids (no identity leakage) | Stable | `Transport/StreamableHttpSessionBindingTests.cs` |
 | Fail-closed request body (413) and session (503) limits | Stable | `Transport/StreamableHttpLimitsTests.cs` |
 | OAuth: WWW-Authenticate parsing; correct 401 (no blind retry); safe concurrent refresh; expiry skew | Partial | `Auth/OAuthAuthorizationTests.cs` |
-| OAuth: PRM/authorization-server discovery, DCR, Client ID Metadata Documents, scope step-up | Not implemented / partial | — |
+| OAuth registration and interactive authorization | Partial — RFC 7592 management, Client ID Metadata Documents, PKCE S256 callback validation, and one 403 `insufficient_scope` retry are implemented; hosts supply external interaction and this is not a complete OAuth interoperability claim | `Auth/DynamicClientRegistrationManagementTests.cs`, `Auth/ClientIdMetadataDocumentTests.cs`, `Auth/OAuthInteractiveAuthorizationTests.cs`, `Auth/OAuthScopeStepUpTests.cs` |
 
 See **[Security configuration](#security-configuration)** below for required application settings.
 
@@ -96,7 +96,13 @@ control (e.g. Origin, authentication). Configure the following for a secure depl
   10,000 → `503`) bound resource use; tune for your deployment.
 - **OAuth** — supply the resource, authorization-server metadata, and client id to
   `OAuthDelegatingHandler`; a `401` triggers a genuine refresh or surfaces the challenge, never a
-  blind retry. Do **not** forward user tokens upstream (no token passthrough).
+  blind retry. To enable interactive scope step-up, also supply an
+  `IOAuthAuthorizationProvider` and a validated redirect URI. Only a Bearer `403` challenge with
+  `error="insufficient_scope"` and non-empty scopes starts one PKCE S256 interaction; the library
+  requests the ordinal scope union, validates the callback and returned scope set, coordinates
+  authorization by resource, then retries once. The host receives neither verifier nor state and
+  returns only the callback URI; failures preserve the original `403` and stored token. Do **not**
+  forward user tokens upstream (no token passthrough).
 
 ## Local development
 
