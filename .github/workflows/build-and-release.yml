@@ -9,7 +9,6 @@ on:
   workflow_dispatch:
 
 env:
-  DOTNET_VERSION: '8.0.x'
   NUGET_SOURCE: 'https://api.nuget.org/v3/index.json'
 
 jobs:
@@ -24,7 +23,9 @@ jobs:
     - name: Setup .NET
       uses: actions/setup-dotnet@v4
       with:
-        dotnet-version: ${{ env.DOTNET_VERSION }}
+        dotnet-version: |
+          8.0.x
+          10.0.x
 
     - name: Restore dependencies
       run: dotnet restore
@@ -80,7 +81,9 @@ jobs:
     - name: Setup .NET
       uses: actions/setup-dotnet@v4
       with:
-        dotnet-version: ${{ env.DOTNET_VERSION }}
+        dotnet-version: |
+          8.0.x
+          10.0.x
 
     - name: Publish to NuGet
       run: |
@@ -104,7 +107,9 @@ jobs:
     - name: Setup .NET
       uses: actions/setup-dotnet@v4
       with:
-        dotnet-version: ${{ env.DOTNET_VERSION }}
+        dotnet-version: |
+          8.0.x
+          10.0.x
 
     - name: Publish to NuGet
       run: |

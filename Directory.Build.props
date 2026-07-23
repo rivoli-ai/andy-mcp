@@ -1,6 +1,7 @@
 <Project>
   <PropertyGroup>
-    <TargetFramework>net8.0</TargetFramework>
+    <!-- Multi-target the current LTS (net8.0) and the active LTS (net10.0). -->
+    <TargetFrameworks>net8.0;net10.0</TargetFrameworks>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <LangVersion>latest</LangVersion>
@@ -8,7 +9,9 @@
     <!-- Packaging defaults for libraries; tests override IsPackable -->
     <IsPackable>true</IsPackable>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
-    <NoWarn>$(NoWarn);CS1591</NoWarn>
+    <!-- CS1591: missing XML docs. NU1510: .NET 10 SDK hint that framework-provided packages are
+         redundant — not actionable under central package management + multi-targeting. -->
+    <NoWarn>$(NoWarn);CS1591;NU1510</NoWarn>
     <Authors>Rivoli AI</Authors>
     <Company>Rivoli AI</Company>
     <Copyright>Copyright © Rivoli AI</Copyright>
