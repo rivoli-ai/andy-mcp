@@ -78,8 +78,15 @@ Golden fixtures (valid messages round-trip) and negative fixtures (malformed mes
 `Conformance/MessageFixtureTests.cs`, `Conformance/ConformanceTests.cs`. CI collects code coverage
 on Linux/macOS/Windows and fails on known-vulnerable dependencies.
 
-Not yet in place: validation against the official MCP JSON schema for every revision, and
-interop against independent reference implementations.
+Serialized output is validated against the **official MCP 2025-11-25 JSON schema** with a JSON
+Schema 2020-12 validator: `Conformance/OfficialSchemaConformanceTests.cs` checks the library's
+serialization of the core types (Tool, Implementation, content blocks, CallToolResult, Resource,
+ResourceTemplate, Prompt, Icon, InitializeResult, ReadResourceResult, CreateMessageResult) against
+the committed `schema/2025-11-25/schema.json` `$defs`, plus a negative case proving the gate rejects
+non-conforming output. CI therefore fails if output violates the official schema.
+
+Not yet in place: full-corpus official-schema validation for every advertised revision, interop
+against independent reference implementations, and a coverage-threshold gate.
 
 ## Security configuration
 
