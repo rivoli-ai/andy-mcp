@@ -4,7 +4,8 @@ using System.Net.Http.Headers;
 namespace Andy.MCP.Auth;
 
 /// <summary>
-/// HttpClient delegating handler that injects Bearer token and handles 401 with auto-refresh.
+/// HttpClient delegating handler that injects Bearer tokens, handles 401 refresh, and performs one
+/// interactive authorization retry for a qualifying 403 insufficient-scope challenge.
 /// </summary>
 public sealed class OAuthDelegatingHandler : DelegatingHandler
 {
@@ -13,6 +14,8 @@ public sealed class OAuthDelegatingHandler : DelegatingHandler
     private readonly AuthorizationServerMetadata? _authMetadata;
     private readonly string? _clientId;
     private readonly OAuthMetadataDiscovery? _discovery;
+    private readonly IOAuthAuthorizationProvider? _authorizationProvider;
+    private readonly string? _authorizationRedirectUri;
     private AuthorizationServerMetadata? _discoveredMetadata;
 
     public OAuthDelegatingHandler(
@@ -21,7 +24,9 @@ public sealed class OAuthDelegatingHandler : DelegatingHandler
         AuthorizationServerMetadata? authMetadata = null,
         string? clientId = null,
         HttpMessageHandler? innerHandler = null,
-        OAuthMetadataDiscovery? discovery = null)
+        OAuthMetadataDiscovery? discovery = null,
+        IOAuthAuthorizationProvider? authorizationProvider = null,
+        string? authorizationRedirectUri = null)
         : base(innerHandler ?? new HttpClientHandler())
     {
         _oauthClient = oauthClient;
@@ -29,11 +34,15 @@ public sealed class OAuthDelegatingHandler : DelegatingHandler
         _authMetadata = authMetadata;
         _clientId = clientId;
         _discovery = discovery;
+        _authorizationProvider = authorizationProvider;
+        _authorizationRedirectUri = authorizationRedirectUri;
     }
 
     protected override async Task<HttpResponseMessage> SendAsync(
         HttpRequestMessage request, CancellationToken cancellationToken)
     {
+        var replayable = await TryBufferContentAsync(request, cancellationToken);
+
         // Inject token
         var token = await _oauthClient.GetAccessTokenAsync(
             _resource, _authMetadata, _clientId, cancellationToken);
@@ -52,12 +61,35 @@ public sealed class OAuthDelegatingHandler : DelegatingHandler
             var newToken = await _oauthClient.HandleUnauthorizedAsync(
                 _resource, metadata, _clientId, cancellationToken);
 
-            if (newToken is not null && newToken != token)
+            if (replayable && newToken is not null && newToken != token)
             {
                 var retryRequest = await CloneRequestAsync(request);
                 retryRequest.Headers.Authorization = new AuthenticationHeaderValue("Bearer", newToken);
                 response.Dispose();
                 return await base.SendAsync(retryRequest, cancellationToken);
+            }
+        }
+
+        // MCP scope step-up is intentionally narrower than generic 403 handling: only an exact
+        // Bearer insufficient_scope challenge with one or more scopes may initiate interaction.
+        if (replayable && response.StatusCode == HttpStatusCode.Forbidden && token is not null &&
+            _authorizationProvider is not null && !string.IsNullOrWhiteSpace(_authorizationRedirectUri) &&
+            WwwAuthenticateChallenge.TryParse(response.Headers.WwwAuthenticate.FirstOrDefault()?.ToString(), out var challenge) &&
+            string.Equals(challenge.Error, "insufficient_scope", StringComparison.Ordinal) && challenge.Scopes.Count > 0)
+        {
+            var metadata = await ResolveAuthMetadataAsync(response, cancellationToken);
+            if (metadata is not null && !string.IsNullOrWhiteSpace(_clientId))
+            {
+                var newToken = await _oauthClient.HandleInsufficientScopeAsync(
+                    _resource, token, metadata, _clientId, _authorizationRedirectUri, challenge.Scopes,
+                    _authorizationProvider, cancellationToken);
+                if (newToken is not null && !string.Equals(newToken, token, StringComparison.Ordinal))
+                {
+                    var retryRequest = await CloneRequestAsync(request);
+                    retryRequest.Headers.Authorization = new AuthenticationHeaderValue("Bearer", newToken);
+                    response.Dispose();
+                    return await base.SendAsync(retryRequest, cancellationToken);
+                }
             }
         }
 
@@ -107,19 +139,47 @@ public sealed class OAuthDelegatingHandler : DelegatingHandler
 
     private static async Task<HttpRequestMessage> CloneRequestAsync(HttpRequestMessage original)
     {
-        var clone = new HttpRequestMessage(original.Method, original.RequestUri);
+        var clone = new HttpRequestMessage(original.Method, original.RequestUri)
+        {
+            Version = original.Version,
+            VersionPolicy = original.VersionPolicy
+        };
 
         if (original.Content is not null)
         {
             var content = await original.Content.ReadAsByteArrayAsync();
             clone.Content = new ByteArrayContent(content);
-            if (original.Content.Headers.ContentType is not null)
-                clone.Content.Headers.ContentType = original.Content.Headers.ContentType;
+            foreach (var header in original.Content.Headers)
+                clone.Content.Headers.TryAddWithoutValidation(header.Key, header.Value);
         }
 
         foreach (var header in original.Headers)
-            clone.Headers.TryAddWithoutValidation(header.Key, header.Value);
+        {
+            if (!string.Equals(header.Key, "Authorization", StringComparison.OrdinalIgnoreCase))
+                clone.Headers.TryAddWithoutValidation(header.Key, header.Value);
+        }
+
+        foreach (var option in original.Options)
+            clone.Options.Set(new HttpRequestOptionsKey<object?>(option.Key), option.Value);
 
         return clone;
+    }
+
+    private static async Task<bool> TryBufferContentAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+    {
+        if (request.Content is null)
+            return true;
+
+        try
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            await request.Content.LoadIntoBufferAsync();
+            cancellationToken.ThrowIfCancellationRequested();
+            return true;
+        }
+        catch (Exception ex) when (ex is HttpRequestException or InvalidOperationException)
+        {
+            return false;
+        }
     }
 }
