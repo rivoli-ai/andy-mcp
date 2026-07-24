@@ -30,7 +30,7 @@ jobs:
       run: dotnet build --configuration Release --no-restore
 
     - name: Test
-      run: dotnet test --configuration Release --no-build --verbosity normal --collect:"XPlat Code Coverage" --results-directory ./TestResults
+      run: dotnet test --configuration Release --no-build --verbosity normal --filter "Category!=Interop" --collect:"XPlat Code Coverage" --results-directory ./TestResults
 
     - name: Upload coverage
       if: always()
@@ -39,6 +39,34 @@ jobs:
         name: coverage-${{ matrix.os }}
         path: ./TestResults/**/coverage.cobertura.xml
         if-no-files-found: warn
+
+  interop:
+    # Cross-implementation conformance: drive the Andy.MCP client against the official
+    # reference server (@modelcontextprotocol/server-everything) over stdio.
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: |
+          8.0.x
+          10.0.x
+
+    - name: Setup Node
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+
+    - name: Pre-fetch reference MCP server
+      run: timeout 120 npx -y @modelcontextprotocol/server-everything stdio </dev/null || true
+
+    - name: Build
+      run: dotnet build --configuration Release
+
+    - name: Interop tests
+      run: dotnet test --configuration Release --no-build --framework net8.0 --filter "Category=Interop"
 
   security:
     runs-on: ubuntu-latest
