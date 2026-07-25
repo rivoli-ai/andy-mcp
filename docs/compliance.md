@@ -85,8 +85,14 @@ ResourceTemplate, Prompt, Icon, InitializeResult, ReadResourceResult, CreateMess
 the committed `schema/2025-11-25/schema.json` `$defs`, plus a negative case proving the gate rejects
 non-conforming output. CI therefore fails if output violates the official schema.
 
-Not yet in place: full-corpus official-schema validation for every advertised revision, interop
-against independent reference implementations, and a coverage-threshold gate.
+**Cross-implementation interop:** `Conformance/ReferenceServerInteropTests.cs` drives the Andy.MCP
+client against the official reference server (`@modelcontextprotocol/server-everything`) over stdio —
+initialize, list/call tools (`echo`), list/read resources, and list prompts — proving
+interoperability with an independent MCP implementation. It runs in a dedicated CI `interop` job
+(Node + the reference server) and is excluded from the normal test run.
+
+Not yet in place: full-corpus official-schema validation for every advertised revision, interop in
+the server→independent-client direction, and a coverage-threshold gate.
 
 ## Security configuration
 
