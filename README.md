@@ -143,7 +143,7 @@ src/
   Andy.MCP/                  Core library
   Andy.MCP.AspNetCore/       ASP.NET Core HTTP server transport
 tests/
-  Andy.MCP.Tests/            450 tests
+  Andy.MCP.Tests/            unit + conformance + interop suites
 examples/
   Andy.MCP.Examples/         Getting-started examples
 docs/
