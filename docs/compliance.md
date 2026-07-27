@@ -32,11 +32,11 @@ Evidence: `Protocol/ProtocolRevisionTests.cs`, `Protocol/RevisionAwareJsonTests.
 | Bidirectional JSON-RPC (server-initiated ping/roots/sampling/elicitation, response correlation) | Stable | `Server/ServerInitiatedRequestTests.cs` |
 | JSON-RPC error classification (parse / invalid request / invalid params / method not found) | Stable | `Server/ServerErrorClassificationTests.cs` |
 | Concurrent request dispatch; `notifications/cancelled`; client cancel/timeout cleanup | Stable | `Server/ServerConcurrencyCancellationTests.cs`, `Client/ClientCancellationTimeoutTests.cs` |
-| Progress (`notifications/progress`) end-to-end for tools | Partial — fluent `IProgress` only; attribute-based injection not wired | `Server/ProgressEndToEndTests.cs` |
+| Progress (`notifications/progress`) end-to-end for tools (fluent + attribute-based injection) | Stable | `Server/ProgressEndToEndTests.cs`, `Server/AttributeToolFeatureTests.cs` |
 | Tools: list / call; recursive JSON Schema input validation; schema self-validation | Stable | `Server/McpServerTests.cs`, `Server/JsonSchemaValidatorRecursiveTests.cs`, `Server/ToolSchemaRegistrationTests.cs` |
 | Structured tool output (`outputSchema` + `structuredContent` enforcement) | Stable | `Server/StructuredOutputTests.cs` |
 | Resources: list / read; subscribe / unsubscribe (sub-capability gated) | Stable | `Client/ClientHighLevelApiTests.cs`, `Server/Phase3Tests.cs` |
-| Resource templates | Partial — advertised/listed; no template-handler binding or URI-template resolution | — |
+| Resource templates (handler binding, RFC 6570 URI-template resolution, multi-content reads) | Stable | `Server/ResourceTemplateHandlerTests.cs`, `Server/UriTemplateTests.cs` |
 | Prompts: list / get | Stable | `Server/McpServerTests.cs` |
 | Completion (`completion/complete`) | Stable | `Client/ClientHighLevelApiTests.cs` |
 | Sampling content scalar-or-array union; sampling capability sub-fields | Stable (models) | `Protocol/SamplingContentTests.cs`, `Protocol/SamplingCapabilityTests.cs` |
@@ -45,7 +45,7 @@ Evidence: `Protocol/ProtocolRevisionTests.cs`, `Protocol/RevisionAwareJsonTests.
 | `_meta` / extension-data round-trip across request/result/object types | Stable | `Protocol/MetaRoundTripTests.cs` |
 | Icons; Implementation description/websiteUrl | Stable (models) | `Protocol/ElicitationSchemaTests.cs`, `Protocol/RevisionAwareJsonTests.cs` |
 | Capability objects (exact sub-capabilities; template-only resource advertisement) | Stable | `Server/ServerCapabilityExactnessTests.cs` |
-| Experimental tasks (model + store; task-augmented `tools/call`; `tasks/*`) | Experimental — tools only; sampling/elicitation augmentation and HTTP session binding pending | `Server/TaskStoreTests.cs`, `Server/TaskAugmentedToolTests.cs` |
+| Experimental tasks (store; task-augmented `tools/call`, `sampling`, `elicitation`; `tasks/*`; owner-key isolation) | Experimental — `input_required` transitions and a tasks-capability advertisement still pending | `Server/TaskStoreTests.cs`, `Server/TaskAugmentedToolTests.cs`, `Server/SamplingTaskAugmentationTests.cs`, `Server/TaskOwnershipTests.cs` |
 
 ## Transports
 
@@ -55,8 +55,9 @@ Evidence: `Protocol/ProtocolRevisionTests.cs`, `Protocol/RevisionAwareJsonTests.
 | stdio graceful shutdown (SIGTERM grace → SIGKILL) | Not implemented | — |
 | Streamable HTTP server (POST JSON, response correlation, Content-Type/Accept validation) | Stable | `Transport/StreamableHttpServerTransportTests.cs`, `Transport/StreamableHttpValidationTests.cs` |
 | Streamable HTTP client (negotiated `MCP-Protocol-Version`, session id, 404 handling) | Stable | `Transport/StreamableHttpClientTransportTests.cs` |
-| SSE: GET stream, event ids | Partial | `Transport/SseParserTests.cs` |
-| SSE: bounded replay, `Last-Event-ID` resumption, multiple streams, polling | Not implemented | — |
+| SSE: GET stream with per-stream event ids | Stable | `Transport/SseReplayTests.cs`, `Transport/SseParserTests.cs` |
+| SSE: bounded replay, `Last-Event-ID` resumption, multiple concurrent streams (exactly-once routing) | Stable | `Transport/SseReplayTests.cs` |
+| SSE: polling / server-initiated stream closure (SEP-1699) | Not implemented | — |
 | 2024-11-05 HTTP+SSE fallback | Not implemented (not advertised as a separate transport) | — |
 
 ## Security
@@ -67,8 +68,9 @@ Evidence: `Protocol/ProtocolRevisionTests.cs`, `Protocol/RevisionAwareJsonTests.
 | Session ↔ authenticated principal binding; cross-user rejection (403) | Stable | `Transport/StreamableHttpSessionBindingTests.cs` |
 | Unguessable session ids (no identity leakage) | Stable | `Transport/StreamableHttpSessionBindingTests.cs` |
 | Fail-closed request body (413) and session (503) limits | Stable | `Transport/StreamableHttpLimitsTests.cs` |
-| OAuth: WWW-Authenticate parsing; correct 401 (no blind retry); safe concurrent refresh; expiry skew | Partial | `Auth/OAuthAuthorizationTests.cs` |
-| OAuth: PRM/authorization-server discovery, DCR, Client ID Metadata Documents, scope step-up | Not implemented / partial | — |
+| OAuth: WWW-Authenticate parsing; correct 401 (no blind retry); safe concurrent refresh; expiry skew | Stable | `Auth/OAuthAuthorizationTests.cs` |
+| OAuth: PRM (RFC 9728) + authorization-server (RFC 8414 / OIDC) discovery, wired into the 401 flow | Stable | `Auth/OAuthDiscoveryTests.cs`, `Auth/OAuth401DiscoveryTests.cs` |
+| OAuth: Dynamic Client Registration, Client ID Metadata Documents, scope step-up | Not implemented | — |
 
 See **[Security configuration](#security-configuration)** below for required application settings.
 

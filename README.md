@@ -23,18 +23,19 @@ See the **[compliance matrix](docs/compliance.md)** for exact, test-linked statu
 
 - MCP 2025-11-25 negotiated by default, with revision-aware serialization for older peers
 - JSON-RPC 2.0 with polymorphic serialization; bidirectional request/response correlation
-- Transports: stdio and Streamable HTTP (SSE GET stream; replay/resumption not yet implemented)
+- Transports: stdio and Streamable HTTP with SSE replay, `Last-Event-ID` resumption, and multiple concurrent streams (exactly-once)
 - High-level client API: tools, resources (+ subscribe), prompts, completion, roots, sampling, elicitation, auto-pagination, capability gating
 - High-level server API: fluent + attribute registration; concurrent dispatch, cancellation, progress
 - Recursive JSON Schema input validation and structured tool output enforcement
 - Experimental tasks (task-augmented `tools/call` + `tasks/*`)
 - Security: opt-in Origin validation, principal-bound sessions with cross-user rejection, fail-closed body/session limits
-- OAuth: challenge parsing, correct 401 handling, safe concurrent refresh (discovery/registration partial — see matrix)
+- OAuth: challenge parsing, correct 401 handling, safe concurrent refresh, and PRM/RFC 8414/OIDC metadata discovery wired into the 401 flow (dynamic client registration still partial — see matrix)
 - OpenTelemetry tracing, dependency injection, `IHostedService`, and `appsettings.json` binding
 
-> **Not a full-compliance claim.** Several areas are partial or experimental (SSE replay, OAuth
-> discovery, resource templates, sampling tool-calling, task augmentation beyond tools). The
-> matrix marks each honestly and links to tests.
+> **Not a full-compliance claim.** A few areas are still partial or not implemented — sampling
+> tool-calling (no server-driven tool loop), OAuth dynamic client registration / Client ID Metadata
+> Documents / scope step-up, stdio SIGTERM shutdown, and SSE polling / server-initiated stream
+> closure. The [compliance matrix](docs/compliance.md) marks each honestly and links to tests.
 
 ## Quick Start
 
@@ -142,7 +143,7 @@ src/
   Andy.MCP/                  Core library
   Andy.MCP.AspNetCore/       ASP.NET Core HTTP server transport
 tests/
-  Andy.MCP.Tests/            450 tests
+  Andy.MCP.Tests/            unit + conformance + interop suites
 examples/
   Andy.MCP.Examples/         Getting-started examples
 docs/
@@ -186,19 +187,21 @@ See the `docs/` directory:
 
 ## Project status
 
-**Phase 7 (Full MCP 2025-11-25 compliance) — in progress (updated 2026-07-21).**
+**Phase 7 + Phase 8 (Full MCP 2025-11-25 compliance) — in progress (updated 2026-07-25).**
 
-Landed and tested across this phase: 2025-11-25 schema + revision-aware serialization, bidirectional
-JSON-RPC and lifecycle enforcement, concurrent dispatch with cancellation/progress/timeouts,
-Streamable HTTP validation + negotiated version + stdio parse errors, principal-bound HTTP sessions
-with fail-closed limits, recursive JSON Schema validation + structured outputs, client
-completion/subscribe APIs, experimental tasks (tools), conformance fixtures + CI coverage/vulnerability
-gates, and OAuth 401/refresh hardening. The full suite is green on Linux, macOS, and Windows.
+Landed and tested: 2025-11-25 schema + revision-aware serialization, bidirectional JSON-RPC and
+lifecycle enforcement, concurrent dispatch with cancellation/progress/timeouts (fluent and
+attribute-based), Streamable HTTP validation + negotiated version + stdio parse errors, SSE replay /
+`Last-Event-ID` resumption / multiple concurrent streams, principal-bound HTTP sessions with
+fail-closed limits, recursive JSON Schema validation + structured outputs, resource-template handlers,
+client completion/subscribe APIs, experimental tasks (tools, sampling, elicitation; owner-scoped),
+OAuth 401/refresh hardening + PRM/RFC 8414/OIDC discovery, multi-targeting `net8.0`/`net10.0`, and a
+conformance suite that validates output against the **official schema** and runs live **interop
+against the reference server** in CI. The full suite is green on Linux, macOS, and Windows.
 
-Phase 7 is **not** marked complete: several matrix rows remain partial/experimental (see the
-[compliance matrix](docs/compliance.md)), and the official-schema + cross-implementation conformance
-gate is not yet in place. The **ALPHA** and non-full-compliance wording above stays until those gates
-pass.
+Still **not** marked full-compliance: a few matrix rows remain partial/not-implemented (sampling
+tool-calling, OAuth dynamic client registration, stdio SIGTERM shutdown, SSE polling) — see the
+[compliance matrix](docs/compliance.md). The **ALPHA** wording stays until those close.
 
 ## License
 
