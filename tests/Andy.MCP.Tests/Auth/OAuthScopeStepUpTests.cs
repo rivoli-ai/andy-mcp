@@ -102,6 +102,27 @@ public class OAuthScopeStepUpTests
     }
 
     [Fact]
+    public async Task ForbiddenInsufficientScope_NewTokenMissingRequiredScopeIsRejectedAndNotPersisted()
+    {
+        var store = await StoreWithOldTokenAsync();
+        var provider = new CallbackProvider();
+        var transport = new StepUpTransport();
+        // The token endpoint returns a genuinely new access token, but its granted scope does not
+        // cover the required union (existing "openid" + challenged "email openid").
+        using var tokenClient = new HttpClient(new TokenHandler("""{"access_token":"new","token_type":"Bearer","scope":"email"}"""));
+        using var client = new HttpClient(new OAuthDelegatingHandler(
+            new OAuthClient(tokenClient, store, () => "state"), "https://api.example.com/mcp", Metadata(), "client-id", transport,
+            authorizationProvider: provider, authorizationRedirectUri: "https://client.example.com/oauth/callback"));
+
+        var response = await client.GetAsync("https://api.example.com/mcp");
+
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+        Assert.Equal(1, provider.Count);  // the interaction ran
+        Assert.Equal(1, transport.Count); // but the under-scoped token was never used to retry
+        Assert.Equal("old", (await store.LoadTokensAsync("https://api.example.com/mcp"))!.AccessToken);
+    }
+
+    [Fact]
     public async Task ConcurrentScopeStepUp_PerResourceRunsOneExternalInteraction()
     {
         var store = await StoreWithOldTokenAsync();

@@ -130,6 +130,35 @@ public class DynamicClientRegistrationManagementTests
         Assert.Equal(0, sendCount);
     }
 
+    [Theory]
+    [InlineData("client_id")]
+    [InlineData("client_secret")]
+    [InlineData("registration_access_token")]
+    [InlineData("registration_client_uri")]
+    [InlineData("client_id_issued_at")]
+    [InlineData("client_secret_expires_at")]
+    public async Task UpdateConfigurationAsync_RejectsReservedManagementFieldsBeforeSending(string reservedField)
+    {
+        var sendCount = 0;
+        using var httpClient = new HttpClient(new RecordingHandler(_ =>
+        {
+            sendCount++;
+            return Json(ResponseJson("registration-token-2", "client-secret-2"));
+        }));
+        var client = new DynamicClientRegistrationClient(httpClient);
+        var metadata = ReplacementMetadata() with
+        {
+            AdditionalMetadata = new Dictionary<string, JsonElement>(StringComparer.Ordinal)
+            {
+                [reservedField] = JsonSerializer.SerializeToElement("attacker-chosen-value")
+            }
+        };
+
+        await Assert.ThrowsAsync<ArgumentException>(() => client.UpdateConfigurationAsync(Registration(), metadata));
+
+        Assert.Equal(0, sendCount);
+    }
+
     [Fact]
     public async Task UpdateConfigurationAsync_RejectsChangedClientId()
     {

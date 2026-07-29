@@ -93,6 +93,63 @@ public class OAuthInteractiveAuthorizationTests
         Assert.Equal("email openid", (await store.LoadTokensAsync(Resource))!.Scope);
     }
 
+    [Theory]
+    [InlineData("http://client.example.com/oauth/callback?code=code&state=state-from-uri")]        // scheme mismatch
+    [InlineData("https://client.example.com:8443/oauth/callback?code=code&state=state-from-uri")]  // port mismatch
+    [InlineData("https://client.example.com/oauth/other?code=code&state=state-from-uri")]          // path mismatch
+    [InlineData("https://client.example.com/oauth/callback?code=code&state=state-from-uri#frag")]  // fragment present
+    [InlineData("https://user@client.example.com/oauth/callback?code=code&state=state-from-uri")]  // userinfo present
+    public async Task AuthorizeInteractiveAsync_CallbackWithMismatchedTargetLeavesStoredTokensUntouched(string callback)
+    {
+        var store = new InMemoryTokenStore();
+        await store.SaveTokensAsync(Resource, new OAuthTokens { AccessToken = "old", Scope = "openid" });
+        var client = new OAuthClient(new HttpClient(new TokenHandler()), store, () => "state-from-uri");
+
+        var result = await client.AuthorizeInteractiveAsync(
+            Metadata(), "client-id", RedirectUri, Resource, ["openid"],
+            new CallbackProvider(new Uri(callback)));
+
+        Assert.Null(result);
+        Assert.Equal("old", (await store.LoadTokensAsync(Resource))!.AccessToken);
+    }
+
+    [Fact]
+    public async Task AuthorizeInteractiveAsync_RejectsServerWithoutPkceS256()
+    {
+        var client = new OAuthClient(new HttpClient(new TokenHandler()), new InMemoryTokenStore(), () => "state-from-uri");
+        var metadata = Metadata() with { CodeChallengeMethodsSupported = ["plain"] };
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => client.AuthorizeInteractiveAsync(
+            metadata, "client-id", RedirectUri, Resource, ["openid"],
+            new CallbackProvider(new Uri(RedirectUri + "?code=code&state=state-from-uri"))));
+    }
+
+    [Theory]
+    [InlineData("http://client.example.com/callback")]        // non-loopback http
+    [InlineData("https://client.example.com/callback#frag")]  // fragment present
+    [InlineData("https://user@client.example.com/callback")]  // userinfo present
+    public async Task AuthorizeInteractiveAsync_RejectsUnsafeRedirectUri(string redirectUri)
+    {
+        var client = new OAuthClient(new HttpClient(new TokenHandler()), new InMemoryTokenStore(), () => "state-from-uri");
+
+        await Assert.ThrowsAsync<ArgumentException>(() => client.AuthorizeInteractiveAsync(
+            Metadata(), "client-id", redirectUri, Resource, ["openid"],
+            new CallbackProvider(new Uri(redirectUri.Split('#')[0] + "?code=code&state=state-from-uri"))));
+    }
+
+    [Theory]
+    [InlineData("bad scope")]    // embedded whitespace
+    [InlineData("bad\"quote")]   // quote character
+    [InlineData("bad\\slash")]   // backslash
+    public async Task AuthorizeInteractiveAsync_RejectsMalformedScopeTokens(string scope)
+    {
+        var client = new OAuthClient(new HttpClient(new TokenHandler()), new InMemoryTokenStore(), () => "state-from-uri");
+
+        await Assert.ThrowsAsync<ArgumentException>(() => client.AuthorizeInteractiveAsync(
+            Metadata(), "client-id", RedirectUri, Resource, [scope],
+            new CallbackProvider(new Uri(RedirectUri + "?code=code&state=state-from-uri"))));
+    }
+
     [Fact]
     public async Task AuthorizeInteractiveAsync_ProviderCancellationPropagates()
     {
