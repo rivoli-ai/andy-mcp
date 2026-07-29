@@ -70,7 +70,8 @@ Evidence: `Protocol/ProtocolRevisionTests.cs`, `Protocol/RevisionAwareJsonTests.
 | Fail-closed request body (413) and session (503) limits | Stable | `Transport/StreamableHttpLimitsTests.cs` |
 | OAuth: WWW-Authenticate parsing; correct 401 (no blind retry); safe concurrent refresh; expiry skew | Stable | `Auth/OAuthAuthorizationTests.cs` |
 | OAuth: PRM (RFC 9728) + authorization-server (RFC 8414 / OIDC) discovery, wired into the 401 flow | Stable | `Auth/OAuthDiscoveryTests.cs`, `Auth/OAuth401DiscoveryTests.cs` |
-| OAuth: Dynamic Client Registration, Client ID Metadata Documents, scope step-up | Not implemented | — |
+| OAuth: RFC 7592 registration management (GET/PUT/DELETE, credential rotation) and Client ID Metadata Documents (validation + deterministic selection) | Stable | `Auth/DynamicClientRegistrationManagementTests.cs`, `Auth/ClientIdMetadataDocumentTests.cs` |
+| OAuth: interactive authorization + one 403 `insufficient_scope` step-up (library-owned PKCE S256 / state / callback validation; host supplies external interaction only) | Stable — host-integrated, not browser-integrated; not a complete OAuth interoperability claim | `Auth/OAuthInteractiveAuthorizationTests.cs`, `Auth/OAuthScopeStepUpTests.cs` |
 
 See **[Security configuration](#security-configuration)** below for required application settings.
 
@@ -111,7 +112,13 @@ control (e.g. Origin, authentication). Configure the following for a secure depl
   10,000 → `503`) bound resource use; tune for your deployment.
 - **OAuth** — supply the resource, authorization-server metadata, and client id to
   `OAuthDelegatingHandler`; a `401` triggers a genuine refresh or surfaces the challenge, never a
-  blind retry. Do **not** forward user tokens upstream (no token passthrough).
+  blind retry. To enable interactive scope step-up, also supply an
+  `IOAuthAuthorizationProvider` and a validated redirect URI. Only a Bearer `403` challenge with
+  `error="insufficient_scope"` and non-empty scopes starts one PKCE S256 interaction; the library
+  requests the ordinal scope union, validates the callback and returned scope set, coordinates
+  authorization by resource, then retries once. The host receives neither verifier nor state and
+  returns only the callback URI; failures preserve the original `403` and stored token. Do **not**
+  forward user tokens upstream (no token passthrough).
 
 ## Local development
 

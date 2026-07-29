@@ -38,6 +38,11 @@ public sealed record AuthorizationServerMetadata
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? RegistrationEndpoint { get; init; }
 
+    /// <summary>Whether the authorization server supports OAuth Client ID Metadata Documents.</summary>
+    [JsonPropertyName("client_id_metadata_document_supported")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    public bool ClientIdMetadataDocumentSupported { get; init; }
+
     [JsonPropertyName("scopes_supported")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public IReadOnlyList<string>? ScopesSupported { get; init; }
