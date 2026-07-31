@@ -4,7 +4,7 @@
 
 ## Overview
 
-Andy.MCP is a .NET 8 library implementing the [Model Context Protocol](https://modelcontextprotocol.io/) (MCP). It negotiates **2025-11-25** (the latest revision) by default and negotiates down to 2025-06-18, 2025-03-26, and 2024-11-05 for older peers. It provides both client and server capabilities for building MCP-compatible applications.
+Andy.MCP is a .NET 10 library implementing the [Model Context Protocol](https://modelcontextprotocol.io/) (MCP). It negotiates **2025-11-25** (the latest revision) by default and negotiates down to 2025-06-18, 2025-03-26, and 2024-11-05 for older peers. It provides both client and server capabilities for building MCP-compatible applications.
 
 Feature support is granular (stable / experimental / partial) and documented with test evidence in the **[compliance matrix](docs/compliance.md)** — please read it before relying on any specific capability.
 
@@ -180,18 +180,15 @@ dotnet test
 
 ## .NET support policy
 
-Andy.MCP **multi-targets `net8.0` and `net10.0`** — both LTS releases. .NET 8 is supported through
-November 2026; .NET 10 through November 2028. Packages ship assemblies for both TFMs.
+Andy.MCP targets `net10.0`, the active LTS release supported through November 2028.
 
-- Building requires the **.NET 10 SDK** (it builds both target frameworks); running the `net8.0`
-  assemblies needs only the .NET 8 runtime. `global.json` rolls forward to the latest installed
-  major SDK.
+- Building requires the **.NET 10 SDK**; running the assemblies needs the .NET 10 runtime.
+  `global.json` rolls forward within the latest installed .NET 10 feature band.
 - Package versions are managed centrally via [`Directory.Packages.props`](Directory.Packages.props)
   (Central Package Management).
-- CI builds and tests **both target frameworks** on Linux, macOS, and Windows, collects code
+- CI builds and tests `net10.0` on Linux, macOS, and Windows, collects code
   coverage, and **fails the build on any known-vulnerable dependency** (`dotnet list package
   --vulnerable`).
-- **Plan:** drop `net8.0` after it reaches end of support in November 2026.
 
 See the [.NET support policy](https://dotnet.microsoft.com/en-us/platform/support/policy) for details.
 
@@ -214,7 +211,7 @@ attribute-based), Streamable HTTP validation + negotiated version + stdio parse 
 `Last-Event-ID` resumption / multiple concurrent streams, principal-bound HTTP sessions with
 fail-closed limits, recursive JSON Schema validation + structured outputs, resource-template handlers,
 client completion/subscribe APIs, experimental tasks (tools, sampling, elicitation; owner-scoped),
-OAuth 401/refresh hardening + PRM/RFC 8414/OIDC discovery, multi-targeting `net8.0`/`net10.0`, and a
+OAuth 401/refresh hardening + PRM/RFC 8414/OIDC discovery, the `net10.0` migration, and a
 conformance suite that validates output against the **official schema** and runs live **interop
 against the reference server** in CI. The full suite is green on Linux, macOS, and Windows.
 
