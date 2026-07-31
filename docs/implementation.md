@@ -5,7 +5,7 @@
 ```
 andy-mcp/
 ├── src/
-│   ├── Andy.MCP/                          # Core library (net8.0)
+│   ├── Andy.MCP/                          # Core library (net10.0)
 │   │   ├── Protocol/                      # Protocol types and serialization
 │   │   │   ├── JsonRpcMessage.cs          # Request, Response, Notification
 │   │   │   ├── JsonRpcMessageConverter.cs # Polymorphic deserialization
@@ -209,5 +209,5 @@ andy-mcp/
 
 - **CI workflow**: Build + test on Ubuntu, Windows, macOS
 - **Build and Release**: Pack NuGet, publish on tag
-- **Target**: .NET 8.0
+- **Target**: .NET 10.0
 - **Test runner**: xUnit 2.5.3 with Coverlet

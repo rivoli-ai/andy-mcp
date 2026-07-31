@@ -2,7 +2,7 @@
 
 ## Overview
 
-Andy.MCP is a .NET 8 library implementing the Model Context Protocol (MCP) specification version 2025-06-18. It provides both client and server capabilities for building MCP-compatible applications within the Andy ecosystem.
+Andy.MCP is a .NET 10 library implementing the Model Context Protocol (MCP) specification version 2025-06-18. It provides both client and server capabilities for building MCP-compatible applications within the Andy ecosystem.
 
 ## Specification Compliance
 
@@ -140,7 +140,7 @@ https://modelcontextprotocol.io/specification/2025-06-18
 
 ## Non-Functional Requirements
 
-- Target framework: .NET 8.0
+- Target framework: .NET 10.0
 - Thread-safe for concurrent operations
 - High-performance JSON serialization (System.Text.Json)
 - ASP.NET Core integration via separate package (Andy.MCP.AspNetCore)
