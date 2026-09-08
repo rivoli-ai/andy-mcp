@@ -200,6 +200,33 @@ public sealed class McpClient : IAsyncDisposable
 
     #region Public API
 
+    public Task<ReadResourceResult> ReadResourceAsync(ReadResourceRequestParams request, McpRequestOptions? options = null, CancellationToken ct = default)
+    {
+        RequireReady(); _session.RequireServerCapability("resources");
+        return SendRequestAsync<ReadResourceResult>(McpMethods.ResourcesRead, request, ct, requestOptions: options);
+    }
+    public Task<GetPromptResult> GetPromptAsync(GetPromptRequestParams request, McpRequestOptions? options = null, CancellationToken ct = default)
+    {
+        RequireReady(); _session.RequireServerCapability("prompts");
+        return SendRequestAsync<GetPromptResult>(McpMethods.PromptsGet, request, ct, requestOptions: options);
+    }
+    public Task SetLogLevelAsync(SetLogLevelParams request, McpRequestOptions? options = null, CancellationToken ct = default)
+    {
+        RequireReady(); _session.RequireServerCapability("logging");
+        return SendRequestAsync<JsonElement>(McpMethods.LoggingSetLevel, request, ct, requestOptions: options);
+    }
+    public Task SubscribeResourceAsync(SubscribeRequestParams request, McpRequestOptions? options = null, CancellationToken ct = default)
+    {
+        RequireReady(); RequireResourceSubscription();
+        return SendRequestAsync<JsonElement>(McpMethods.ResourcesSubscribe, request, ct, requestOptions: options);
+    }
+    public Task UnsubscribeResourceAsync(UnsubscribeRequestParams request, McpRequestOptions? options = null, CancellationToken ct = default)
+    {
+        RequireReady(); RequireResourceSubscription();
+        return SendRequestAsync<JsonElement>(McpMethods.ResourcesUnsubscribe, request, ct, requestOptions: options);
+    }
+
+
     /// <summary>Notify the server of root changes only when listChanged was advertised.</summary>
     public Task NotifyRootsChangedAsync(CancellationToken ct = default)
     {
@@ -263,12 +290,12 @@ public sealed class McpClient : IAsyncDisposable
     public Task<ReadResourceResult> ReadResourceAsync(string uri, McpRequestOptions options, CancellationToken ct = default)
     {
         RequireReady(); _session.RequireServerCapability("resources");
-        return SendRequestAsync<ReadResourceResult>(McpMethods.ResourcesRead, new { uri }, ct, requestOptions: options);
+        return SendRequestAsync<ReadResourceResult>(McpMethods.ResourcesRead, new ResourceRequestParams { Uri = uri }, ct, requestOptions: options);
     }
     public Task<GetPromptResult> GetPromptAsync(string name, IDictionary<string, string>? arguments, McpRequestOptions options, CancellationToken ct = default)
     {
         RequireReady(); _session.RequireServerCapability("prompts");
-        return SendRequestAsync<GetPromptResult>(McpMethods.PromptsGet, new { name, arguments }, ct, requestOptions: options);
+        return SendRequestAsync<GetPromptResult>(McpMethods.PromptsGet, new GetPromptRequestParams { Name = name, Arguments = arguments }, ct, requestOptions: options);
     }
     public Task<CompletionResult> CompleteAsync(CompletionRequest request, McpRequestOptions options, CancellationToken ct = default)
     {
@@ -278,17 +305,17 @@ public sealed class McpClient : IAsyncDisposable
     public Task SubscribeResourceAsync(string uri, McpRequestOptions options, CancellationToken ct = default)
     {
         RequireReady(); RequireResourceSubscription();
-        return SendRequestAsync<JsonElement>(McpMethods.ResourcesSubscribe, new { uri }, ct, requestOptions: options);
+        return SendRequestAsync<JsonElement>(McpMethods.ResourcesSubscribe, new ResourceRequestParams { Uri = uri }, ct, requestOptions: options);
     }
     public Task UnsubscribeResourceAsync(string uri, McpRequestOptions options, CancellationToken ct = default)
     {
         RequireReady(); RequireResourceSubscription();
-        return SendRequestAsync<JsonElement>(McpMethods.ResourcesUnsubscribe, new { uri }, ct, requestOptions: options);
+        return SendRequestAsync<JsonElement>(McpMethods.ResourcesUnsubscribe, new ResourceRequestParams { Uri = uri }, ct, requestOptions: options);
     }
     public Task SetLogLevelAsync(string level, McpRequestOptions options, CancellationToken ct = default)
     {
         RequireReady(); _session.RequireServerCapability("logging");
-        return SendRequestAsync<JsonElement>(McpMethods.LoggingSetLevel, new { level }, ct, requestOptions: options);
+        return SendRequestAsync<JsonElement>(McpMethods.LoggingSetLevel, new SetLogLevelParams { Level = JsonSerializer.Deserialize<McpLogLevel>(JsonSerializer.Serialize(level), McpJsonDefaults.Options) }, ct, requestOptions: options);
     }
 
     public Task PingAsync(CancellationToken ct = default) =>
@@ -384,7 +411,7 @@ public sealed class McpClient : IAsyncDisposable
     {
         _session.RequireServerCapability("resources");
         return await SendRequestAsync<ReadResourceResult>(McpMethods.ResourcesRead,
-            new { uri }, ct);
+            new ResourceRequestParams { Uri = uri }, ct);
     }
 
     public async Task<IReadOnlyList<Prompt>> ListPromptsAsync(CancellationToken ct = default)
@@ -408,13 +435,13 @@ public sealed class McpClient : IAsyncDisposable
     {
         _session.RequireServerCapability("prompts");
         return await SendRequestAsync<GetPromptResult>(McpMethods.PromptsGet,
-            new { name, arguments }, ct);
+            new GetPromptRequestParams { Name = name, Arguments = arguments }, ct);
     }
 
     public async Task SetLogLevelAsync(string level, CancellationToken ct = default)
     {
         _session.RequireServerCapability("logging");
-        await SendRequestAsync<JsonElement>(McpMethods.LoggingSetLevel, new { level }, ct);
+        await SendRequestAsync<JsonElement>(McpMethods.LoggingSetLevel, new SetLogLevelParams { Level = JsonSerializer.Deserialize<McpLogLevel>(JsonSerializer.Serialize(level), McpJsonDefaults.Options) }, ct);
     }
 
     /// <summary>Request argument completions. Requires the server's completions capability.</summary>
@@ -431,14 +458,14 @@ public sealed class McpClient : IAsyncDisposable
     public async Task SubscribeResourceAsync(string uri, CancellationToken ct = default)
     {
         RequireResourceSubscription();
-        await SendRequestAsync<JsonElement>(McpMethods.ResourcesSubscribe, new { uri }, ct);
+        await SendRequestAsync<JsonElement>(McpMethods.ResourcesSubscribe, new ResourceRequestParams { Uri = uri }, ct);
     }
 
     /// <summary>Unsubscribe from updates for a resource.</summary>
     public async Task UnsubscribeResourceAsync(string uri, CancellationToken ct = default)
     {
         RequireResourceSubscription();
-        await SendRequestAsync<JsonElement>(McpMethods.ResourcesUnsubscribe, new { uri }, ct);
+        await SendRequestAsync<JsonElement>(McpMethods.ResourcesUnsubscribe, new ResourceRequestParams { Uri = uri }, ct);
     }
 
     private void RequireResourceSubscription()

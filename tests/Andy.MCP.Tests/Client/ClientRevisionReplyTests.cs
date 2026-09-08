@@ -8,7 +8,6 @@ public class ClientRevisionReplyTests
 {
     [Theory]
     [InlineData("2024-11-05", JsonValueKind.Object)]
-    [InlineData("2025-03-26", JsonValueKind.Object)]
     [InlineData("2025-06-18", JsonValueKind.Object)]
     [InlineData("2025-11-25", JsonValueKind.Array)]
     public async Task SamplingReply_UsesNegotiatedRevision(string version, JsonValueKind expected)

@@ -28,7 +28,6 @@ public sealed record CancelledParams
 
     [JsonPropertyName("_meta")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    [SinceRevision("2025-11-25")]
     public JsonElement? Meta { get; init; }
 }
 
@@ -73,7 +72,6 @@ public sealed record ProgressParams
 
     [JsonPropertyName("_meta")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    [SinceRevision("2025-11-25")]
     public JsonElement? Meta { get; init; }
 }
 

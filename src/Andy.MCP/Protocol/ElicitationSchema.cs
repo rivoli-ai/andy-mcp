@@ -8,6 +8,7 @@ namespace Andy.MCP.Protocol;
 /// object whose top-level properties are primitive schema definitions. This is a typed builder
 /// for constructing well-formed requested schemas rather than assembling anonymous objects.
 /// </summary>
+[SinceRevision("2025-06-18")]
 public sealed record ElicitationSchema
 {
     [JsonPropertyName("$schema")]
@@ -74,6 +75,10 @@ public sealed record PrimitiveSchemaDefinition
     [JsonPropertyName("enum")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public IReadOnlyList<string>? Enum { get; init; }
+
+    /// <summary>Legacy display labels paired with enum values.</summary>
+    [JsonPropertyName("enumNames")]
+    public IReadOnlyList<string>? EnumNames { get; init; }
 
     /// <summary>Titled single-select enum options (each a value + display title).</summary>
     [JsonPropertyName("oneOf")]
@@ -179,6 +184,20 @@ public sealed record PrimitiveSchemaDefinition
             MaxItems = maxItems,
             Items = JsonSerializer.SerializeToElement(new { type = "string", @enum = values }),
             Default = @default is null ? null : JsonSerializer.SerializeToElement(@default)
+        };
+
+    /// <summary>A multiple-selection enum with display titles for each option.</summary>
+    public static PrimitiveSchemaDefinition TitledMultiSelectEnumField(IReadOnlyList<EnumOption> options,
+        string? title = null, string? description = null, int? minItems = null, int? maxItems = null,
+        IReadOnlyList<string>? @default = null) => new()
+        {
+            Type = "array",
+            Title = title,
+            Description = description,
+            MinItems = minItems,
+            MaxItems = maxItems,
+            Items = McpJsonDefaults.ToElement(new { anyOf = options }),
+            Default = @default is null ? null : McpJsonDefaults.ToElement(@default)
         };
 
     /// <summary>Unknown wire fields retained for protocol extensions.</summary>

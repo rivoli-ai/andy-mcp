@@ -9,10 +9,8 @@ namespace Andy.MCP.Tests.Transport;
 public class HttpRevisionIntegrationTests
 {
     [Theory]
-    [InlineData("2025-03-26", false)]
     [InlineData("2025-06-18", false)]
     [InlineData("2025-11-25", false)]
-    [InlineData("2025-03-26", true)]
     [InlineData("2025-06-18", true)]
     [InlineData("2025-11-25", true)]
     public async Task EveryHttpRevision_NegotiatesAndCompletesJsonOrSseRequests(string revision, bool sse)
@@ -59,14 +57,16 @@ public class HttpRevisionIntegrationTests
         protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken ct) => throw new InvalidOperationException("Legacy HTTP must not be sent.");
     }
 
-    [Fact]
-    public async Task LegacyHttpRevision_IsRejectedBeforeSending()
+    [Theory]
+    [InlineData("2024-11-05")]
+    [InlineData("2025-03-26")]
+    public async Task UnsupportedHttpRevision_IsRejectedBeforeSending(string revision)
     {
         using var http = new HttpClient(new NeverSend());
         await using var transport = new StreamableHttpClientTransport(new()
         { Endpoint = new Uri("https://example.com/mcp"), HttpClient = http, EnableServerSseStream = false });
         await transport.ConnectAsync();
         await Assert.ThrowsAsync<NotSupportedException>(() => transport.SendAsync(new JsonRpcRequest
-        { Id = 1, Method = "initialize", Params = McpJsonDefaults.ToElement(new { protocolVersion = "2024-11-05" }) }));
+        { Id = 1, Method = "initialize", Params = McpJsonDefaults.ToElement(new { protocolVersion = revision }) }));
     }
 }

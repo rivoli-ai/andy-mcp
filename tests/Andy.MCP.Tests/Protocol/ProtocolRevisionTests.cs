@@ -31,13 +31,12 @@ public class ProtocolRevisionTests
     [Fact]
     public void SessionSupportedVersions_MatchRevisions()
     {
-        Assert.Equal(ProtocolRevision.AllVersions, McpSession.SupportedProtocolVersions);
+        Assert.Equal(ProtocolRevision.SupportedVersions, McpSession.SupportedProtocolVersions);
     }
 
     [Theory]
     [InlineData("2025-11-25")]
     [InlineData("2025-06-18")]
-    [InlineData("2025-03-26")]
     [InlineData("2024-11-05")]
     public void TryGet_ResolvesSupportedRevisions(string version)
     {
@@ -148,4 +147,13 @@ public class ProtocolRevisionTests
     {
         Assert.Null(new McpSession().Revision);
     }
+    [Fact]
+    public void March2025_IsKnownForSchemaConversion_ButNeverNegotiatedWithoutBatchSupport()
+    {
+        Assert.NotNull(ProtocolRevision.TryGet("2025-03-26"));
+        Assert.DoesNotContain("2025-03-26", McpSession.SupportedProtocolVersions);
+        Assert.False(McpSession.IsVersionAcceptable("2025-03-26"));
+        Assert.Equal(McpSession.LatestProtocolVersion, McpSession.NegotiateVersion("2025-03-26"));
+    }
+
 }

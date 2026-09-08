@@ -18,8 +18,8 @@ Test links are relative to `tests/Andy.MCP.Tests/`.
 |----------|---------|-------|
 | **2025-11-25** | Stable (latest, negotiated) | Feature set below; revision-aware serialization strips newer fields from older sessions |
 | 2025-06-18 | Stable (negotiated down) | Core wire types; 2025-11-25-only fields omitted |
-| 2025-03-26 | Stable (negotiated down) | Core wire types |
-| 2024-11-05 | Stable (negotiated down) | Core wire types |
+| 2025-03-26 | Unsupported for negotiation | Mandatory receiving of JSON-RPC batches is not implemented; descriptor retained for schema conversion |
+| 2024-11-05 | Negotiated over stdio only | Legacy HTTP+SSE is not implemented |
 
 Evidence: `Protocol/ProtocolRevisionTests.cs`, `Protocol/RevisionAwareJsonTests.cs`,
 `Protocol/LifecycleTests.cs`.

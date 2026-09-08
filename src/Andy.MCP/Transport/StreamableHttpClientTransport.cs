@@ -135,8 +135,8 @@ public sealed class StreamableHttpClientTransport : IClientTransport
         _recoveryGate.Release();
         if (message is JsonRpcRequest { Method: "initialize" } initialize)
         {
-            if (initialize.Params is { } parameters && parameters.TryGetProperty("protocolVersion", out var version) && version.GetString() == "2024-11-05")
-                throw new NotSupportedException("Streamable HTTP does not implement legacy 2024-11-05 HTTP+SSE. Use stdio or a supported Streamable HTTP revision.");
+            if (initialize.Params is { } parameters && parameters.TryGetProperty("protocolVersion", out var version) && version.GetString() is "2024-11-05" or "2025-03-26")
+                throw new NotSupportedException("This HTTP revision is unsupported: legacy HTTP+SSE and March 2025 batching are not implemented.");
             _initializeId = initialize.Id;
             _initializeRequest = initialize;
         }
@@ -364,8 +364,7 @@ public sealed class StreamableHttpClientTransport : IClientTransport
         if (message is JsonRpcResponse { Result: { } result } response && response.Id == _initializeId &&
             result.TryGetProperty("protocolVersion", out var pv) &&
             pv.ValueKind == JsonValueKind.String &&
-            pv.GetString() is { } version &&
-            McpSession.SupportedProtocolVersions.Contains(version))
+            pv.GetString() is { } version)
         {
             if (!StreamableHttpProtocol.SupportedVersions.Contains(version)) throw new NotSupportedException("The negotiated revision is not supported by Streamable HTTP.");
             _negotiatedVersion = version;

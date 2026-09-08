@@ -689,7 +689,7 @@ public sealed class McpServer : IAsyncDisposable
         var allTools = _tools.Values.Select(h => h.Tool).ToList();
         var page = _pagination.GetPage(allTools, paginatedReq.Cursor);
 
-        var result = new { tools = page.Items, nextCursor = page.NextCursor };
+        var result = new ToolsListResult { Tools = page.Items, NextCursor = page.NextCursor };
         return JsonRpcResponse.Success(request.Id, ToWire(result));
     }
 
@@ -942,13 +942,13 @@ public sealed class McpServer : IAsyncDisposable
         var allResources = _resources.Values.Select(h => h.Resource).ToList();
         var page = _pagination.GetPage(allResources, paginatedReq.Cursor);
 
-        var result = new { resources = page.Items, nextCursor = page.NextCursor };
+        var result = new ResourcesListResult { Resources = page.Items, NextCursor = page.NextCursor };
         return JsonRpcResponse.Success(request.Id, ToWire(result));
     }
 
     private async Task<JsonRpcResponse> HandleResourcesReadAsync(JsonRpcRequest request, CancellationToken ct)
     {
-        var uri = request.Params?.GetProperty("uri").GetString();
+        var uri = request.GetParams<ResourceRequestParams>()?.Uri;
         if (uri is null)
             return JsonRpcResponse.Failure(request.Id, JsonRpcError.InvalidParams("Missing 'uri' parameter"));
 
@@ -976,13 +976,13 @@ public sealed class McpServer : IAsyncDisposable
         var paginatedReq = request.GetParams<PaginatedRequest>() ?? new PaginatedRequest();
         var page = _pagination.GetPage(_resourceTemplates, paginatedReq.Cursor);
 
-        var result = new { resourceTemplates = page.Items, nextCursor = page.NextCursor };
+        var result = new ResourceTemplatesListResult { ResourceTemplates = page.Items, NextCursor = page.NextCursor };
         return JsonRpcResponse.Success(request.Id, ToWire(result));
     }
 
     private JsonRpcResponse HandleResourcesSubscribe(JsonRpcRequest request)
     {
-        var uri = request.Params?.GetProperty("uri").GetString();
+        var uri = request.GetParams<ResourceRequestParams>()?.Uri;
         if (uri is null)
             return JsonRpcResponse.Failure(request.Id, JsonRpcError.InvalidParams("Missing 'uri' parameter"));
 
@@ -992,7 +992,7 @@ public sealed class McpServer : IAsyncDisposable
 
     private JsonRpcResponse HandleResourcesUnsubscribe(JsonRpcRequest request)
     {
-        var uri = request.Params?.GetProperty("uri").GetString();
+        var uri = request.GetParams<ResourceRequestParams>()?.Uri;
         if (uri is null)
             return JsonRpcResponse.Failure(request.Id, JsonRpcError.InvalidParams("Missing 'uri' parameter"));
 
@@ -1006,22 +1006,21 @@ public sealed class McpServer : IAsyncDisposable
         var allPrompts = _prompts.Values.Select(h => h.Prompt).ToList();
         var page = _pagination.GetPage(allPrompts, paginatedReq.Cursor);
 
-        var result = new { prompts = page.Items, nextCursor = page.NextCursor };
+        var result = new PromptsListResult { Prompts = page.Items, NextCursor = page.NextCursor };
         return JsonRpcResponse.Success(request.Id, ToWire(result));
     }
 
     private async Task<JsonRpcResponse> HandlePromptsGetAsync(JsonRpcRequest request, CancellationToken ct)
     {
-        var name = request.Params?.GetProperty("name").GetString();
+        var parameters = request.GetParams<GetPromptRequestParams>();
+        var name = parameters?.Name;
         if (name is null)
             return JsonRpcResponse.Failure(request.Id, JsonRpcError.InvalidParams("Missing 'name' parameter"));
 
         if (!_prompts.TryGetValue(name, out var handler))
             return JsonRpcResponse.Failure(request.Id, JsonRpcError.InvalidParams($"Unknown prompt: '{name}'"));
 
-        var arguments = request.Params?.TryGetProperty("arguments", out var args) == true
-            ? JsonSerializer.Deserialize<Dictionary<string, string>>(args, McpJsonDefaults.Options)
-            : null;
+        var arguments = parameters?.Arguments;
 
         foreach (var argument in handler.Prompt.Arguments ?? [])
             if (argument.Required == true && (arguments is null || !arguments.ContainsKey(argument.Name)))
@@ -1181,7 +1180,7 @@ public sealed class McpServer : IAsyncDisposable
             await SendMessageAsync(new JsonRpcNotification
             {
                 Method = McpMethods.NotificationsResourcesUpdated,
-                Params = McpJsonDefaults.ToElement(new { uri })
+                Params = ToWire(new ResourceUpdatedParams { Uri = uri })
             });
         }
     }

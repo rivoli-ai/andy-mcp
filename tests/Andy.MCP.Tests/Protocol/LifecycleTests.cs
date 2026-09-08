@@ -455,7 +455,7 @@ public class McpSessionTests
     public void IsVersionAcceptable_SupportedVersion()
     {
         Assert.True(McpSession.IsVersionAcceptable("2025-06-18"));
-        Assert.True(McpSession.IsVersionAcceptable("2025-03-26"));
+        Assert.False(McpSession.IsVersionAcceptable("2025-03-26"));
         Assert.True(McpSession.IsVersionAcceptable("2024-11-05"));
     }
 
