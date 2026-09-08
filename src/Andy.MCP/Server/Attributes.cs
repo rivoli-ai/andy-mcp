@@ -17,6 +17,16 @@ public sealed class McpToolAttribute : Attribute
     public bool ReadOnly { get; set; }
     public bool Destructive { get; set; } = true;
     public bool Idempotent { get; set; }
+    public bool OpenWorld { get; set; } = true;
+    /// <summary>JSON object overriding the generated input schema.</summary>
+    public string? InputSchemaJson { get; set; }
+    public string? OutputSchemaJson { get; set; }
+    /// <summary>JSON array of protocol icons.</summary>
+    public string? IconsJson { get; set; }
+    public string? MetaJson { get; set; }
+    public string TaskSupport { get; set; } = "optional";
+    /// <summary>Complete protocol Tool JSON; permits annotation and extension fields as well.</summary>
+    public string? DefinitionJson { get; set; }
 }
 
 /// <summary>

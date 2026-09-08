@@ -76,27 +76,45 @@ public sealed class McpServer : IAsyncDisposable
     public McpServer AddTool(string name, string description, JsonElement inputSchema,
         Func<JsonElement?, IProgress<McpProgress>, CancellationToken, Task<CallToolResult>> handler,
         ToolAnnotations? annotations = null, JsonElement? outputSchema = null)
-    {
-        // Reject a malformed input/output schema at registration rather than at call time.
-        var schemaErrors = JsonSchemaValidator.ValidateSchema(inputSchema);
-        if (outputSchema is { } os)
-            schemaErrors = schemaErrors.Concat(JsonSchemaValidator.ValidateSchema(os)).ToList();
-        if (schemaErrors.Count > 0)
-            throw new ArgumentException($"Invalid schema for tool '{name}': {string.Join("; ", schemaErrors)}");
-
-        _tools[name] = new ToolHandler
+        => AddTool(new Tool
         {
-            Tool = new Tool
-            {
-                Name = name,
-                Description = description,
-                InputSchema = inputSchema,
-                OutputSchema = outputSchema,
-                Annotations = annotations
-            },
-            Handler = handler
-        };
+            Name = name,
+            Description = description,
+            InputSchema = inputSchema,
+            OutputSchema = outputSchema,
+            Annotations = annotations,
+            Execution = new ToolExecution { TaskSupport = "optional" }
+        }, handler);
+
+    /// <summary>Register a complete protocol tool definition, including extension metadata.</summary>
+    public McpServer AddTool(Tool tool, Func<JsonElement?, CancellationToken, Task<CallToolResult>> handler) =>
+        AddTool(tool, (args, _, ct) => handler(args, ct));
+
+    /// <summary>Register a complete protocol tool definition with progress reporting.</summary>
+    public McpServer AddTool(Tool tool,
+        Func<JsonElement?, IProgress<McpProgress>, CancellationToken, Task<CallToolResult>> handler)
+    {
+        ArgumentNullException.ThrowIfNull(tool);
+        ArgumentNullException.ThrowIfNull(handler);
+        ArgumentException.ThrowIfNullOrWhiteSpace(tool.Name);
+        ValidateToolSchema(tool.InputSchema, tool.Name);
+        if (tool.OutputSchema is { } output) ValidateToolSchema(output, tool.Name);
+        if (tool.Execution?.TaskSupport is { } support && support is not ("optional" or "required" or "forbidden"))
+            throw new ArgumentException("Invalid taskSupport.", nameof(tool));
+        if (tool.Meta is { ValueKind: not JsonValueKind.Object })
+            throw new ArgumentException("Tool _meta must be an object.", nameof(tool));
+        _tools[tool.Name] = new ToolHandler { Tool = tool, Handler = handler };
         return this;
+    }
+
+    private static void ValidateToolSchema(JsonElement schema, string name)
+    {
+        var errors = JsonSchemaValidator.ValidateSchema(schema).ToList();
+        if (schema.ValueKind != JsonValueKind.Object || !schema.TryGetProperty("type", out var type) ||
+            type.ValueKind != JsonValueKind.String || type.GetString() != "object")
+            errors.Add("Tool schema type must be object.");
+        if (errors.Count > 0)
+            throw new ArgumentException($"Invalid schema for tool '{name}': {string.Join("; ", errors)}");
     }
 
     public McpServer AddTool(string name, string description,
@@ -553,15 +571,23 @@ public sealed class McpServer : IAsyncDisposable
         var validationErrors = JsonSchemaValidator.Validate(callReq.Arguments, handler.Tool.InputSchema);
         if (validationErrors.Count > 0)
         {
-            return JsonRpcResponse.Failure(request.Id,
-                JsonRpcError.InvalidParams($"Input validation failed: {string.Join("; ", validationErrors)}"));
+            var message = $"Input validation failed: {string.Join("; ", validationErrors)}";
+            return (_session.Revision ?? ProtocolRevision.Latest).AtLeast(ProtocolRevision.V2025_11_25)
+                ? JsonRpcResponse.Success(request.Id, ToWire(CallToolResult.Error(message)))
+                : JsonRpcResponse.Failure(request.Id, JsonRpcError.InvalidParams(message));
         }
+
+        var augmented = TryGetTaskMetadata(request.Params, out var taskMetadata);
+        var taskSupport = handler.Tool.Execution?.TaskSupport ?? "forbidden";
+        if ((augmented && (taskSupport == "forbidden" || !(_session.Revision ?? ProtocolRevision.Latest).AtLeast(ProtocolRevision.V2025_11_25))) ||
+            (!augmented && taskSupport == "required"))
+            return JsonRpcResponse.Failure(request.Id, JsonRpcError.InvalidParams("Tool task augmentation does not match its execution requirements."));
 
         var reporter = CreateProgressReporter(callReq.Meta);
 
         // Task augmentation (experimental): run in the background and return a CreateTaskResult
         // immediately; the real result is retrieved later via tasks/result.
-        if (TryGetTaskMetadata(request.Params, out var taskMetadata))
+        if (augmented)
         {
             var task = _taskStore.Create(taskMetadata, TaskOwnerKey);
             RunToolAsTask(task.TaskId, handler, callReq.Arguments, reporter);
@@ -577,7 +603,7 @@ public sealed class McpServer : IAsyncDisposable
             if (outputError is not null)
                 return JsonRpcResponse.Failure(request.Id, JsonRpcError.InternalError(outputError));
 
-            return JsonRpcResponse.Success(request.Id, ToWire(result));
+            return JsonRpcResponse.Success(request.Id, ToWire(WithStructuredText(result)));
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
@@ -607,13 +633,26 @@ public sealed class McpServer : IAsyncDisposable
 
     private static string? ValidateToolOutput(ToolHandler handler, CallToolResult result)
     {
-        if (handler.Tool.OutputSchema is { } outputSchema && result.StructuredContent is { } structured)
+        if (result.IsError == true) return null;
+        if (result.StructuredContent is { ValueKind: not JsonValueKind.Object })
+            return "Tool structuredContent must be an object.";
+        if (handler.Tool.OutputSchema is { } outputSchema)
         {
+            if (result.StructuredContent is not { } structured)
+                return "Tool output schema requires structuredContent.";
             var errors = JsonSchemaValidator.Validate(structured, outputSchema);
             if (errors.Count > 0)
                 return $"Tool output did not conform to its output schema: {string.Join("; ", errors)}";
         }
         return null;
+    }
+
+    private static CallToolResult WithStructuredText(CallToolResult result)
+    {
+        if (result.StructuredContent is not { } structured) return result;
+        var json = structured.GetRawText();
+        if (result.Content.OfType<TextContent>().Any(t => t.Text == json)) return result;
+        return result with { Content = [.. result.Content, new TextContent(json)] };
     }
 
     private void RunToolAsTask(string taskId,
@@ -629,7 +668,7 @@ public sealed class McpServer : IAsyncDisposable
                 if (outputError is not null)
                     _taskStore.SetFailed(taskId, outputError);
                 else
-                    _taskStore.SetResult(taskId, McpJsonDefaults.ToElement(result));
+                    _taskStore.SetResult(taskId, McpJsonDefaults.ToElement(WithStructuredText(result)));
             }
             catch (Exception ex)
             {

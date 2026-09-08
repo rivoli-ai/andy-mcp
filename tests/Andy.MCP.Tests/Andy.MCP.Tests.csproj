@@ -35,6 +35,7 @@
 
   <ItemGroup>
     <None Update="xunit.runner.json" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="Conformance/json-schema/*.json" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="Conformance/schemas/*.json" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 

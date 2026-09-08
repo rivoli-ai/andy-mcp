@@ -23,9 +23,9 @@ P3 = experimental features, ecosystem integrations, and long-term full-complianc
 - [x] #43 Cancellation, progress and timeout cleanup
 
 - [ ] #44 Transport compliance and process shutdown
-- [ ] #47 Full JSON Schema validation and registration surface
+- [x] #47 Full JSON Schema validation and registration surface
   - [x] Complete 2020-12 runtime/meta-schema validation with network fetches disabled
-  - [ ] Complete registration metadata fields
+  - [x] Complete registration metadata fields
 - [ ] #48 Complete high-level client/server operations
 - [ ] #50 Conformance gates and coverage
 - [ ] #51 Evidence-backed documentation
@@ -50,3 +50,7 @@ HTTP bidirectional traffic, overlapping-ID cancellation and repeated concurrent 
 2026-09-08: OAuth acceptance audit verifies actual path-aware RFC 8414 and both OIDC fallback
 flows, challenge refresh/rotation, CIMD/DCR, PKCE callbacks and concurrent scope upgrades.
 
+
+2026-09-08: completed Tool-definition registration, attribute metadata and ValueTask support,
+revision-specific validation errors, output-schema enforcement and structured text fallback.
+Pinned official JSON Schema fixtures supplement adversarial validation tests.
