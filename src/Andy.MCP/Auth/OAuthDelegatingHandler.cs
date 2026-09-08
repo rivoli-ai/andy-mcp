@@ -111,17 +111,16 @@ public sealed class OAuthDelegatingHandler : DelegatingHandler
         if (_discovery is null)
             return null;
 
-        if (!WwwAuthenticateChallenge.TryParse(
-                response.Headers.WwwAuthenticate.FirstOrDefault()?.ToString(), out var challenge) ||
-            challenge.ResourceMetadata is null ||
-            !Uri.TryCreate(challenge.ResourceMetadata, UriKind.Absolute, out var prmUrl))
-        {
-            return null;
-        }
-
         try
         {
-            var prm = await _discovery.FetchProtectedResourceMetadataAsync(prmUrl, cancellationToken);
+            var challenge = response.Headers.WwwAuthenticate
+                .Select(value => WwwAuthenticateChallenge.TryParse(value.ToString(), out var parsed) ? parsed : null)
+                .FirstOrDefault(value => value is not null);
+            var resource = new Uri(_resource);
+            var prm = challenge?.ResourceMetadata is { } metadataUrl
+                ? await _discovery.FetchProtectedResourceMetadataAsync(new Uri(metadataUrl), cancellationToken)
+                : await _discovery.DiscoverProtectedResourceMetadataAsync(resource, cancellationToken);
+            OAuthMetadataDiscovery.ValidateResource(prm, resource);
             if (prm.AuthorizationServers.Count == 0 ||
                 !Uri.TryCreate(prm.AuthorizationServers[0], UriKind.Absolute, out var issuer))
             {
@@ -131,7 +130,7 @@ public sealed class OAuthDelegatingHandler : DelegatingHandler
             _discoveredMetadata = await _discovery.DiscoverAuthorizationServerMetadataAsync(issuer, cancellationToken);
             return _discoveredMetadata;
         }
-        catch (Exception ex) when (ex is HttpRequestException or InvalidOperationException)
+        catch (Exception ex) when (ex is HttpRequestException or InvalidOperationException or UriFormatException)
         {
             return null; // discovery failed; surface the original 401
         }
@@ -177,7 +176,7 @@ public sealed class OAuthDelegatingHandler : DelegatingHandler
             cancellationToken.ThrowIfCancellationRequested();
             return true;
         }
-        catch (Exception ex) when (ex is HttpRequestException or InvalidOperationException)
+        catch (Exception ex) when (ex is HttpRequestException or InvalidOperationException or UriFormatException)
         {
             return false;
         }

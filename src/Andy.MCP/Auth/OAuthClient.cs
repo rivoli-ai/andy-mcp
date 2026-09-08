@@ -20,7 +20,7 @@ public sealed class OAuthClient
 
     public OAuthClient(HttpClient? httpClient = null, ITokenStore? tokenStore = null, Func<string>? stateGenerator = null)
     {
-        _httpClient = httpClient ?? new HttpClient();
+        _httpClient = httpClient ?? OAuthHttpTransport.CreateClient();
         _tokenStore = tokenStore ?? new InMemoryTokenStore();
         _stateGenerator = stateGenerator ?? PkceHelper.GenerateState;
     }
@@ -31,23 +31,13 @@ public sealed class OAuthClient
     public async Task<ProtectedResourceMetadata> DiscoverResourceMetadataAsync(
         Uri serverUri, CancellationToken ct = default)
     {
-        var wellKnownUrl = new Uri(serverUri, "/.well-known/oauth-protected-resource");
-        var json = await _httpClient.GetStringAsync(wellKnownUrl, ct);
-        return JsonSerializer.Deserialize<ProtectedResourceMetadata>(json)
-            ?? throw new InvalidOperationException("Failed to parse Protected Resource Metadata.");
+        return await new OAuthMetadataDiscovery(_httpClient).DiscoverProtectedResourceMetadataAsync(serverUri, ct);
     }
 
-    /// <summary>
-    /// Discover Authorization Server Metadata (RFC 8414).
-    /// </summary>
-    public async Task<AuthorizationServerMetadata> DiscoverAuthServerMetadataAsync(
-        string authServerUrl, CancellationToken ct = default)
-    {
-        var uri = new Uri(authServerUrl.TrimEnd('/') + "/.well-known/oauth-authorization-server");
-        var json = await _httpClient.GetStringAsync(uri, ct);
-        return JsonSerializer.Deserialize<AuthorizationServerMetadata>(json)
-            ?? throw new InvalidOperationException("Failed to parse Authorization Server Metadata.");
-    }
+    /// <summary>Discover RFC 8414 or OIDC metadata using the MCP fallback sequence.</summary>
+    public Task<AuthorizationServerMetadata> DiscoverAuthServerMetadataAsync(
+        string authServerUrl, CancellationToken ct = default) =>
+        new OAuthMetadataDiscovery(_httpClient).DiscoverAuthorizationServerMetadataAsync(new Uri(authServerUrl), ct);
 
     /// <summary>
     /// Build the authorization URL for the OAuth code flow.

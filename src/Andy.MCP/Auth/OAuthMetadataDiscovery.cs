@@ -15,7 +15,7 @@ public sealed class OAuthMetadataDiscovery
 
     public OAuthMetadataDiscovery(HttpClient? httpClient = null, bool requireHttps = true)
     {
-        _httpClient = httpClient ?? new HttpClient();
+        _httpClient = httpClient ?? OAuthHttpTransport.CreateClient();
         _requireHttps = requireHttps;
     }
 
@@ -48,10 +48,14 @@ public sealed class OAuthMetadataDiscovery
         if (path.Length > 0)
         {
             urls.Add(new Uri($"{prefix}/.well-known/oauth-authorization-server/{path}"));
+            urls.Add(new Uri($"{prefix}/.well-known/openid-configuration/{path}"));
             urls.Add(new Uri($"{prefix}/{path}/.well-known/openid-configuration"));
         }
-        urls.Add(new Uri($"{prefix}/.well-known/oauth-authorization-server"));
-        urls.Add(new Uri($"{prefix}/.well-known/openid-configuration"));
+        else
+        {
+            urls.Add(new Uri($"{prefix}/.well-known/oauth-authorization-server"));
+            urls.Add(new Uri($"{prefix}/.well-known/openid-configuration"));
+        }
         return urls;
     }
 
@@ -64,7 +68,10 @@ public sealed class OAuthMetadataDiscovery
         {
             var metadata = await TryFetchAsync<ProtectedResourceMetadata>(url, ct);
             if (metadata is not null && metadata.AuthorizationServers.Count > 0)
+            {
+                ValidateResource(metadata, resource);
                 return metadata;
+            }
         }
         throw new InvalidOperationException($"No protected resource metadata found for '{resource}'.");
     }
@@ -111,7 +118,7 @@ public sealed class OAuthMetadataDiscovery
         RequireSecureEndpoint(metadata.TokenEndpoint, "token_endpoint");
 
         var methods = metadata.CodeChallengeMethodsSupported;
-        if (methods is not null && methods.Count > 0 && !methods.Contains("S256"))
+        if (methods is null || !methods.Contains("S256", StringComparer.Ordinal))
             throw new InvalidOperationException("Authorization server does not support PKCE S256.");
     }
 
@@ -128,6 +135,8 @@ public sealed class OAuthMetadataDiscovery
             if (!response.IsSuccessStatusCode)
                 return null; // try the next candidate
 
+            if (response.RequestMessage?.RequestUri is { } finalUri && finalUri != url)
+                throw new InvalidOperationException("OAuth metadata redirects are not permitted.");
             var json = await response.Content.ReadAsStringAsync(ct);
             return JsonSerializer.Deserialize<T>(json);
         }
@@ -139,18 +148,21 @@ public sealed class OAuthMetadataDiscovery
 
     private void RequireSecureEndpoint(string endpoint, string name)
     {
-        if (!Uri.TryCreate(endpoint, UriKind.Absolute, out var uri))
-            throw new InvalidOperationException($"{name} is not an absolute URI: '{endpoint}'.");
-        if (_requireHttps && uri.Scheme != Uri.UriSchemeHttps && !uri.IsLoopback)
-            throw new InvalidOperationException($"{name} must use HTTPS: '{endpoint}'.");
+        var validation = SecurityHelpers.ValidateUrl(endpoint, _requireHttps);
+        if (!validation.IsValid)
+            throw new InvalidOperationException($"{name}: {validation.Error}");
+    }
+
+    internal static void ValidateResource(ProtectedResourceMetadata metadata, Uri expected)
+    {
+        if (!string.Equals(metadata.Resource, expected.AbsoluteUri, StringComparison.Ordinal))
+            throw new InvalidOperationException("Protected-resource metadata identifies a different resource.");
     }
 
     private static bool IssuerMatches(string metadataIssuer, Uri expectedIssuer)
     {
         if (!Uri.TryCreate(metadataIssuer, UriKind.Absolute, out var actual))
             return false;
-        // Compare scheme/host/port/path, ignoring a trailing slash.
-        static string Normalize(Uri u) => $"{u.Scheme}://{u.Authority}{u.AbsolutePath.TrimEnd('/')}";
-        return string.Equals(Normalize(actual), Normalize(expectedIssuer), StringComparison.Ordinal);
+        return string.Equals(metadataIssuer, expectedIssuer.OriginalString, StringComparison.Ordinal);
     }
 }
