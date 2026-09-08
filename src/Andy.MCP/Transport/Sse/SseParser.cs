@@ -91,7 +91,7 @@ public static class SseParser
                         id = value;
                     break;
                 case "retry":
-                    if (int.TryParse(value, out var retryMs))
+                    if (value.Length > 0 && value.All(c => c is >= '0' and <= '9') && int.TryParse(value, out var retryMs))
                         retry = retryMs;
                     break;
                     // Unknown fields are ignored per spec
