@@ -23,7 +23,7 @@ P3 = experimental features, ecosystem integrations, and long-term full-complianc
   - [ ] Finish protocol shape validation and complete official-type coverage mapping
 - [x] #43 Cancellation, progress and timeout cleanup
 
-- [ ] #44 Transport compliance and process shutdown
+- [x] #44 Transport compliance and process shutdown
   - [x] Stdio EOF/SIGTERM/kill escalation and bounded GET SSE polling
   - [x] POST SSE cursor isolation, resumption and terminal-response completion
   - [x] Bound HTTP queues/replay and state the three supported HTTP revisions
@@ -95,3 +95,6 @@ Abandoned handlers release their POST state; global GET streams cannot claim POS
 use typed models. Base request and notification metadata remain available on all four revisions.
 Older elicitation retains boolean defaults and legacy titled enums; URL and multi-select modes
 fail explicitly when unavailable. Typed URL-elicitation-required errors validate their mode.
+2026-09-08: final transport audit exercises every supported HTTP revision against a real server
+in JSON and POST SSE modes. Stdio uses explicit UTF-8 and LF framing in both directions, with
+literal Unicode, escaped-newline and invalid-byte tests. HTTP legacy fallback is explicitly unsupported.
