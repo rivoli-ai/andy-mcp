@@ -1,6 +1,5 @@
 using System.Globalization;
 using System.Text.Json;
-using System.Text.Json.Nodes;
 using Json.Schema;
 
 namespace Andy.MCP.Server;
@@ -12,12 +11,9 @@ public static class JsonSchemaValidator
     {
         var options = new EvaluationOptions
         {
-            EvaluateAs = SpecVersion.Draft202012,
             OutputFormat = OutputFormat.List,
             Culture = CultureInfo.InvariantCulture
         };
-        // Schemas are untrusted input: never fetch external references over the network.
-        options.SchemaRegistry.Fetch = uri => throw new InvalidOperationException($"External schema reference is not registered: {uri}");
         return options;
     }
 
@@ -26,8 +22,11 @@ public static class JsonSchemaValidator
     {
         try
         {
-            var parsed = JsonSchema.FromText(schema.GetRawText());
-            var instance = arguments is { } value ? JsonNode.Parse(value.GetRawText()) : new JsonObject();
+            var build = new BuildOptions { Dialect = Dialect.Draft202012, SchemaRegistry = new() };
+            // Never fetch references supplied by a remote tool. Keep registrations local to this call.
+            build.SchemaRegistry.Fetch = (uri, _) => throw new InvalidOperationException($"External schema reference is not registered: {uri}");
+            var parsed = JsonSchema.Build(schema, build);
+            var instance = arguments ?? JsonSerializer.SerializeToElement(new { });
             return Errors(parsed.Evaluate(instance, Options()));
         }
         catch (Exception ex) when (ex is JsonException or InvalidOperationException or ArgumentException or JsonSchemaException or RefResolutionException)
@@ -41,7 +40,7 @@ public static class JsonSchemaValidator
     {
         try
         {
-            return Errors(MetaSchemas.Draft202012.Evaluate(JsonNode.Parse(schema.GetRawText()), Options()));
+            return Errors(MetaSchemas.Draft202012.Evaluate(schema, Options()));
         }
         catch (Exception ex) when (ex is JsonException or InvalidOperationException or ArgumentException or JsonSchemaException)
         {

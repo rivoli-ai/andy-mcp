@@ -153,3 +153,8 @@ per-tool task modes, unsupported augmentation fallback, signed pagination in bot
 invalid-input outcome parity, immutable states, TTL and owner isolation, related input routing,
 and disk-backed client/server result retrieval. Full local suite: 2,894 passed, zero skipped;
 all coverage gates and both API checks passed. Phase 7/8 release/compliance audits remain open.
+
+2026-09-08: #19 integration testing reproduced a JsonSchema.Net 7/9 runtime mismatch
+that prevented current MCP clients from initializing in Andy CLI. Migrated validation
+to 9.3.0 with local build registries and explicit Draft 2020-12 selection. Added
+repeated-schema-ID isolation coverage; ecosystem adapter acceptance remains open.

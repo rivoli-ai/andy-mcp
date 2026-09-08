@@ -1,5 +1,4 @@
 using System.Text.Json;
-using System.Text.Json.Nodes;
 using Andy.MCP.Client;
 using Andy.MCP.Protocol;
 using Json.Schema;
@@ -15,27 +14,28 @@ namespace Andy.MCP.Tests.Conformance;
 public class OfficialSchemaConformanceTests
 {
     private static readonly Uri SchemaUri = new("https://modelcontextprotocol.io/schema/2025-11-25/schema.json");
-    private static readonly EvaluationOptions Options = BuildOptions();
+    private static readonly EvaluationOptions Options = new() { OutputFormat = OutputFormat.List };
+    private static readonly BuildOptions Build = CreateBuildOptions();
 
-    private static EvaluationOptions BuildOptions()
+    private static BuildOptions CreateBuildOptions()
     {
         var path = Path.Combine(AppContext.BaseDirectory, "Conformance", "schemas", "schema-2025-11-25.json");
-        var schema = JsonSchema.FromText(File.ReadAllText(path));
-        var options = new EvaluationOptions { OutputFormat = OutputFormat.List };
+        var options = new BuildOptions { Dialect = Dialect.Draft202012, SchemaRegistry = new() };
+        var schema = JsonSchema.FromText(File.ReadAllText(path), options, SchemaUri);
         options.SchemaRegistry.Register(SchemaUri, schema);
         return options;
     }
 
     private static void AssertConforms(string defName, string json)
     {
-        var wrapper = new JsonSchemaBuilder().Ref($"{SchemaUri}#/$defs/{defName}").Build();
-        var node = JsonNode.Parse(json);
+        var wrapper = new JsonSchemaBuilder().Ref($"{SchemaUri}#/$defs/{defName}").Build(Build);
+        var node = JsonSerializer.Deserialize<JsonElement>(json);
         var result = wrapper.Evaluate(node, Options);
 
         if (!result.IsValid)
         {
             var errors = string.Join("; ", (result.Details ?? [])
-                .Where(d => d.HasErrors)
+                .Where(d => d.Errors is { Count: > 0 })
                 .SelectMany(d => d.Errors!.Select(e => $"{d.InstanceLocation}: {e.Value}")));
             Assert.Fail($"'{defName}' output does not conform to the official schema.\nJSON: {json}\nErrors: {errors}");
         }
@@ -43,8 +43,8 @@ public class OfficialSchemaConformanceTests
 
     private static bool Conforms(string defName, string json)
     {
-        var wrapper = new JsonSchemaBuilder().Ref($"{SchemaUri}#/$defs/{defName}").Build();
-        return wrapper.Evaluate(JsonNode.Parse(json), Options).IsValid;
+        var wrapper = new JsonSchemaBuilder().Ref($"{SchemaUri}#/$defs/{defName}").Build(Build);
+        return wrapper.Evaluate(JsonSerializer.Deserialize<JsonElement>(json), Options).IsValid;
     }
 
     private static string Ser<T>(T value) => JsonSerializer.Serialize(value, McpJsonDefaults.Options);
