@@ -206,6 +206,12 @@ See the `docs/` directory:
 **2026-09-08 package update:** .NET 10 dependencies and test tooling are refreshed, restores
 are locked, and release gates verify both NuGet packages. See [maintenance policy](docs/package-maintenance.md)
 for dependency updates, runtime migration and trimming limitations.
+**2026-09-08 RPC update:** invalid message envelopes are rejected before dispatch; transport
+errors without usable IDs remain uncorrelated. Readiness is checked in arrival order and
+duplicate in-flight requests preserve the original cancellation registration.
+**2026-09-08 schema validation update:** tool validation uses JSON Schema 2020-12, including local
+references, conditionals, dependent properties and unevaluated locations. External schema fetches
+are disabled. Registration schemas are checked against the complete meta-schema.
 
 
 **2026-09-08 HTTP authorization update:** protected HTTP endpoints require an explicit resource/issuer

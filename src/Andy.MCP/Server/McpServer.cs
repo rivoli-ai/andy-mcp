@@ -220,8 +220,20 @@ public sealed class McpServer : IAsyncDisposable
 
     private async Task HandleMessageAsync(JsonRpcMessage message, CancellationToken ct)
     {
+        // Check readiness in arrival order, before dispatch can be delayed by the scheduler.
+        if (message is JsonRpcRequest early && early.Method != McpMethods.Initialize &&
+            early.Method != McpMethods.Ping && !_initialized)
+        {
+            await SendMessageAsync(JsonRpcResponse.Failure(early.Id,
+                JsonRpcError.InvalidRequest("Initialization is not complete.")), ct);
+            return;
+        }
+
         switch (message)
         {
+            case JsonRpcUncorrelatedError error:
+                _logger.LogWarning("Peer reported uncorrelated protocol error {Code}", error.Error.Code);
+                break;
             case JsonRpcRequest { Method: McpMethods.Initialize } initialize:
                 // Handle the lifecycle-critical initialize in order, before any later message.
                 await HandleAndSendAsync(initialize, ct);
@@ -248,7 +260,12 @@ public sealed class McpServer : IAsyncDisposable
     private void DispatchRequest(JsonRpcRequest request, CancellationToken loopCt)
     {
         var cts = CancellationTokenSource.CreateLinkedTokenSource(loopCt);
-        _inflight[request.Id] = cts;
+        if (!_inflight.TryAdd(request.Id, cts))
+        {
+            cts.Dispose();
+            _logger.LogWarning("Ignoring duplicate in-flight request {Id}", request.Id);
+            return; // Preserve the original request's cancellation registration and response.
+        }
 
         _ = Task.Run(async () =>
         {

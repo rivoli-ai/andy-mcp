@@ -140,7 +140,10 @@
         }
       },
       "andy.mcp": {
-        "type": "Project"
+        "type": "Project",
+        "dependencies": {
+          "JsonSchema.Net": "[7.3.4, )"
+        }
       },
       "andy.mcp.aspnetcore": {
         "type": "Project",
