@@ -209,6 +209,10 @@ addresses. Custom injected HTTP clients must provide equivalent connection and r
 Issuer/resource identities and PKCE advertisement are validated; path-aware RFC 8414/OIDC
 fallbacks are shared by both discovery APIs. Full compliance remains in progress.
 
+**2026-09-08 release-gate update:** package creation and publication now require the same-commit
+Linux/macOS/Windows tests, reference-server interop, and dependency security jobs. Documented
+in-process examples run in the test matrix. Phase 7/8 compliance remains in progress.
+
 
 **Phase 7 + Phase 8 (Full MCP 2025-11-25 compliance) — in progress (updated 2026-07-25).**
 
