@@ -16,6 +16,9 @@ public sealed record McpClientOptions
     public Implementation ClientInfo { get; init; } = new("Andy.MCP", "0.1.0");
     public ClientCapabilities Capabilities { get; init; } = new();
     public TimeSpan RequestTimeout { get; init; } = TimeSpan.FromSeconds(30);
+    /// <summary>Hard deadline that progress cannot extend. Null disables the hard deadline.</summary>
+    public TimeSpan? MaximumRequestDuration { get; init; } = TimeSpan.FromMinutes(5);
+    public TimeProvider TimeProvider { get; init; } = TimeProvider.System;
 
     /// <summary>
     /// Root provider for the roots capability. If set, roots capability is declared.
@@ -64,6 +67,8 @@ public sealed class McpClient : IAsyncDisposable
     private readonly ILogger _logger;
     private readonly McpSession _session = new();
     private readonly PendingRequestTracker _tracker = new();
+    private readonly InboundRequestRegistry _inbound = new();
+    private readonly InboundRequestRegistry _background = new();
     private readonly ITaskStore _taskStore = new InMemoryTaskStore();
     private long _nextId;
     private Task? _messageLoop;
@@ -382,7 +387,7 @@ public sealed class McpClient : IAsyncDisposable
             Params = @params is not null ? McpJsonDefaults.ToElement(@params) : null
         };
 
-        var pending = _tracker.Track(id, _options.RequestTimeout);
+        var pending = _tracker.Track(id, _options.RequestTimeout, _options.MaximumRequestDuration, _options.TimeProvider);
         if (progress is not null && progressToken is { } token)
         {
             pending.ProgressToken = token;
@@ -433,7 +438,12 @@ public sealed class McpClient : IAsyncDisposable
     {
         try
         {
-            await SendNotificationAsync(McpMethods.NotificationsCancelled, new CancelledParams { RequestId = id });
+            using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(1));
+            await _transport.SendAsync(new JsonRpcNotification
+            {
+                Method = McpMethods.NotificationsCancelled,
+                Params = McpJsonDefaults.ToElement(new CancelledParams { RequestId = id })
+            }, timeout.Token);
         }
         catch
         {
@@ -555,28 +565,31 @@ public sealed class McpClient : IAsyncDisposable
     {
         var p = notification.GetParams<CancelledParams>();
         if (p is null) return;
-        _tracker.TryCancel(p.RequestId, p.Reason);
+        _inbound.Cancel(p.RequestId);
     }
 
     private void HandleServerRequest(JsonRpcRequest request)
     {
-        _ = Task.Run(async () =>
+        if (!_inbound.Run(request.Id, _cts?.Token ?? CancellationToken.None, async ct =>
         {
             try
             {
-                var response = await DispatchServerRequestAsync(request);
-                await _transport.SendAsync(response);
+                JsonRpcResponse response;
+                try { response = await DispatchServerRequestAsync(request, ct); }
+                catch (OperationCanceledException) when (ct.IsCancellationRequested) { return; }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Error handling server request '{Method}'", request.Method);
+                    response = JsonRpcResponse.Failure(request.Id, JsonRpcError.InternalError(ex.Message));
+                }
+                if (!ct.IsCancellationRequested) await _transport.SendAsync(response, ct);
             }
-            catch (Exception ex)
-            {
-                _logger.LogWarning(ex, "Error handling server request '{Method}'", request.Method);
-                await _transport.SendAsync(JsonRpcResponse.Failure(request.Id,
-                    JsonRpcError.InternalError(ex.Message)));
-            }
-        });
+            catch (OperationCanceledException) { }
+            catch (Exception ex) { _logger.LogWarning(ex, "Error sending handler response"); }
+        })) _logger.LogWarning("Ignoring duplicate or closed inbound request {Id}", request.Id);
     }
 
-    private async Task<JsonRpcResponse> DispatchServerRequestAsync(JsonRpcRequest request)
+    private async Task<JsonRpcResponse> DispatchServerRequestAsync(JsonRpcRequest request, CancellationToken ct)
     {
         switch (request.Method)
         {
@@ -602,7 +615,7 @@ public sealed class McpClient : IAsyncDisposable
                     RunHandlerAsTask(task.TaskId, ct => _options.SamplingHandler.HandleAsync(samplingReq, ct));
                     return JsonRpcResponse.Success(request.Id, McpJsonDefaults.ToElement(new CreateTaskResult { Task = task }));
                 }
-                var samplingResult = await _options.SamplingHandler.HandleAsync(samplingReq, _cts?.Token ?? CancellationToken.None);
+                var samplingResult = await _options.SamplingHandler.HandleAsync(samplingReq, ct);
                 return JsonRpcResponse.Success(request.Id, McpJsonDefaults.ToElement(samplingResult));
 
             case McpMethods.ElicitationCreate:
@@ -616,7 +629,7 @@ public sealed class McpClient : IAsyncDisposable
                     RunHandlerAsTask(task.TaskId, ct => _options.ElicitationHandler.HandleAsync(elicitReq, ct));
                     return JsonRpcResponse.Success(request.Id, McpJsonDefaults.ToElement(new CreateTaskResult { Task = task }));
                 }
-                var elicitResult = await _options.ElicitationHandler.HandleAsync(elicitReq, _cts?.Token ?? CancellationToken.None);
+                var elicitResult = await _options.ElicitationHandler.HandleAsync(elicitReq, ct);
                 return JsonRpcResponse.Success(request.Id, McpJsonDefaults.ToElement(elicitResult));
 
             case McpMethods.TasksGet:
@@ -648,18 +661,18 @@ public sealed class McpClient : IAsyncDisposable
 
     private void RunHandlerAsTask<T>(string taskId, Func<CancellationToken, Task<T>> handler)
     {
-        _ = Task.Run(async () =>
+        _background.Run(taskId, _cts?.Token ?? CancellationToken.None, async ct =>
         {
             try
             {
-                var result = await handler(_cts?.Token ?? CancellationToken.None);
+                var result = await handler(ct);
                 _taskStore.SetResult(taskId, McpJsonDefaults.ToElement(result));
             }
             catch (Exception ex)
             {
                 _taskStore.SetFailed(taskId, ex.Message);
             }
-        }, CancellationToken.None);
+        });
     }
 
     private JsonRpcResponse HandleClientTaskGet(JsonRpcRequest request)
@@ -698,6 +711,7 @@ public sealed class McpClient : IAsyncDisposable
     private void OnTransportDisconnected(object? sender, TransportDisconnectedEventArgs e)
     {
         _tracker.CancelAll("Transport disconnected");
+        _cts?.Cancel();
         Disconnected?.Invoke(this, e);
     }
 
@@ -711,6 +725,8 @@ public sealed class McpClient : IAsyncDisposable
 
         try { if (_messageLoop is not null) await _messageLoop; } catch { }
 
+        await _inbound.StopAsync();
+        await _background.StopAsync();
         _tracker.Dispose();
         await _transport.DisposeAsync();
         _cts?.Dispose();

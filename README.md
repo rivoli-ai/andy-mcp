@@ -203,6 +203,11 @@ See the `docs/` directory:
 
 ## Project status
 
+**2026-09-08 request lifetime update:** idle timeouts reset on increasing progress, bounded by
+MaximumRequestDuration. Inbound cancellation is isolated from outbound IDs, and shutdown awaits
+handler cleanup. Progress is sent in order before successful tool responses.
+
+
 **2026-09-08 package update:** .NET 10 dependencies and test tooling are refreshed, restores
 are locked, and release gates verify both NuGet packages. See [maintenance policy](docs/package-maintenance.md)
 for dependency updates, runtime migration and trimming limitations.
