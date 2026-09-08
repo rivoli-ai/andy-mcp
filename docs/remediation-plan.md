@@ -38,7 +38,7 @@ P3 = experimental features, ecosystem integrations, and long-term full-complianc
   - [x] Complete safe extension APIs, per-call controls and explicit pagination
   - [x] Complete remaining protocol shape validation with #41
 - [x] #50 Conformance gates and coverage
-- [ ] #51 Evidence-backed documentation
+- [x] #51 Evidence-backed documentation
 - [x] #71 URI-template resolution
 - [x] #73 SSE stream closure and polling
 - [x] #74 Official-schema corpus and independent client/server interop
@@ -113,3 +113,9 @@ no longer require a capability flag absent from that revision.
 client/server interoperability over stdio and HTTP JSON/SSE, and per-surface line/branch
 coverage gates. Independent tests verify nested sampling and prompted scalar singleton output
 for reference-SDK compatibility. The CI gate rejects missing prerequisites and reports.
+
+2026-09-08: completed the P1/P2 documentation audit after PR116. Replaced stale binary
+claims/type counts with revision-specific evidence, corrected fail-closed security defaults,
+documented migration/host responsibilities and experimental limits, and compiled/executed
+the OAuth discovery/DCR example in .NET tests. Phase7/8 full-compliance epics remain open
+with P3 tasks and ecosystem work; this completes stable remediation, not every epic child.

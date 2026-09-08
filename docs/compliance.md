@@ -10,13 +10,28 @@ approval belong to the host.
 | Revision | Stdio | Streamable HTTP | Evidence / limitation |
 |---|---|---|---|
 | 2025-11-25 | Supported; default | Supported | [Complete schema corpus](../tests/Andy.MCP.Tests/Conformance/CompleteProtocolSchemaTests.cs), [real HTTP matrix](../tests/Andy.MCP.Tests/Transport/HttpRevisionIntegrationTests.cs) |
-| 2025-06-18 | Supported | Supported | Same corpus/HTTP matrix; newer fields are removed or rejected by revision serializers |
+| 2025-06-18 | Supported | Supported | [Schema corpus](../tests/Andy.MCP.Tests/Conformance/CompleteProtocolSchemaTests.cs) and [HTTP matrix](../tests/Andy.MCP.Tests/Transport/HttpRevisionIntegrationTests.cs); newer fields are removed or rejected |
 | 2024-11-05 | Supported | Unsupported | [Revision replies](../tests/Andy.MCP.Tests/Client/ClientRevisionReplyTests.cs); legacy HTTP+SSE is absent |
 | 2025-03-26 | Unsupported | Unsupported | Receiving batches is mandatory in this revision and absent; its descriptor is retained only for conversion/audit |
 
 Every definition in the three negotiated revisions is exercised against frozen official
 schemas. [Revision conversion](../tests/Andy.MCP.Tests/Protocol/RevisionAwareJsonTests.cs)
 checks newer-field exclusion. Negotiation support is not a full-feature certification.
+
+## Feature availability by revision
+
+Availability still requires the negotiated capability. “Absent” fields are omitted or rejected
+under that revision; unknown vendor extension data is retained independently.
+
+| Feature | 2024-11-05 | 2025-06-18 | 2025-11-25 | Evidence |
+|---|---|---|---|---|
+| Core tools/resources/prompts, roots and completions | Available; completions has no flag | Available | Available | [Boundary/legacy completion tests](../tests/Andy.MCP.Tests/Conformance/ProtocolBoundaryTests.cs) |
+| Tool annotations, titles, structured outputs, resource links and audio | Absent | Available | Available | [Revision serialization](../tests/Andy.MCP.Tests/Protocol/RevisionAwareJsonTests.cs) |
+| Basic sampling | One text/image block | One text/image/audio block | Scalar or array of allowed blocks | [Sampling tests](../tests/Andy.MCP.Tests/Protocol/SamplingContentTests.cs), [revision replies](../tests/Andy.MCP.Tests/Client/ClientRevisionReplyTests.cs) |
+| Sampling tools/toolChoice and context sub-capability | Absent | Absent | Available models and capability checks | [Peer contracts](../tests/Andy.MCP.Tests/Server/HighLevelContractTests.cs) |
+| Form elicitation | Absent | Available with legacy enums/defaults | Available including richer enums/defaults | [Typed/legacy parameters](../tests/Andy.MCP.Tests/Protocol/TypedParameterTests.cs) |
+| URL elicitation, icons and extended implementation metadata | Absent | Absent | Available | [Complete definition corpus](../tests/Andy.MCP.Tests/Conformance/CompleteProtocolSchemaTests.cs) |
+| Task augmentation | Absent | Absent | Experimental/partial | [Task tests](../tests/Andy.MCP.Tests/Server/TaskAugmentedToolTests.cs) |
 
 ## Stable features and experimental boundaries
 
