@@ -101,6 +101,15 @@ public sealed class McpSession
         Transition(McpSessionState.Ready);
     }
 
+    internal void RefreshInitialization(InitializeResult result)
+    {
+        if (State != McpSessionState.Ready) throw new McpSessionException("Only a ready client session can be recovered.");
+        ProtocolVersion = result.ProtocolVersion;
+        ServerCapabilities = result.Capabilities;
+        RemoteInfo = result.ServerInfo;
+        Instructions = result.Instructions;
+    }
+
     /// <summary>
     /// Mark initialization as complete from the server's perspective.
     /// Stores the client's request info and transitions to Ready.

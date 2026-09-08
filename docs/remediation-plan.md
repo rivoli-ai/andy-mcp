@@ -26,7 +26,8 @@ P3 = experimental features, ecosystem integrations, and long-term full-complianc
   - [x] Stdio EOF/SIGTERM/kill escalation and bounded GET SSE polling
   - [x] POST SSE cursor isolation, resumption and terminal-response completion
   - [x] Bound HTTP queues/replay and state the three supported HTTP revisions
-  - [ ] Finish HTTP session recovery and server POST SSE
+  - [x] Automatically recover expired HTTP sessions with a fresh handshake and capability refresh
+  - [ ] Complete server POST SSE
 - [x] #47 Full JSON Schema validation and registration surface
   - [x] Complete 2020-12 runtime/meta-schema validation with network fetches disabled
   - [x] Complete registration metadata fields
@@ -80,3 +81,7 @@ waiters or losing pending events. Replay gaps and inconsistent session revision 
 2026-09-08: extension requests/notifications use existing lifecycle and correlation safety,
 manual page APIs preserve cursors and result metadata, and per-call deadlines interrupt blocked
 HTTP POSTs as well as response waits. Reserved standard method namespaces cannot be overridden.
+
+2026-09-08: automatic HTTP session recovery coordinates concurrent 404s, restarts GET polling,
+refreshes peer capabilities, and cancels old inbound handlers. Recovery obeys call deadlines; an
+expired in-progress POST SSE result reports unknown outcome without repeating the operation.

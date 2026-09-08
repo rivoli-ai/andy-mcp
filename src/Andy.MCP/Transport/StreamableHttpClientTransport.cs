@@ -52,7 +52,13 @@ public sealed class StreamableHttpClientTransport : IClientTransport
     private readonly ILogger _logger;
     private readonly HttpClient _httpClient;
     private readonly bool _ownsHttpClient;
-    private readonly Channel<JsonRpcMessage> _incoming;
+    private readonly Channel<IncomingMessage> _incoming;
+    private sealed record IncomingMessage(JsonRpcMessage Message, int Generation);
+    private readonly SemaphoreSlim _recoveryGate = new(1, 1);
+    private JsonRpcRequest? _initializeRequest;
+    private int _generation;
+    private CancellationTokenSource _generationCancellation = new();
+    internal event Action<InitializeResult>? SessionReinitialized;
     private string? _sessionId;
     private string? _negotiatedVersion;
     private RequestId? _initializeId;
@@ -88,7 +94,7 @@ public sealed class StreamableHttpClientTransport : IClientTransport
             _ownsHttpClient = true;
         }
 
-        _incoming = Channel.CreateBounded<JsonRpcMessage>(new BoundedChannelOptions(_options.IncomingQueueCapacity)
+        _incoming = Channel.CreateBounded<IncomingMessage>(new BoundedChannelOptions(_options.IncomingQueueCapacity)
         {
             SingleWriter = false,
             SingleReader = false
@@ -116,12 +122,23 @@ public sealed class StreamableHttpClientTransport : IClientTransport
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
         if (!_connected) throw new InvalidOperationException("Transport is not connected.");
+        using var lifetime = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, _cts!.Token);
+        await SendCoreAsync(message, true, lifetime.Token);
+    }
 
+    private async Task SendCoreAsync(JsonRpcMessage message, bool recover, CancellationToken cancellationToken)
+    {
+        await _recoveryGate.WaitAsync(cancellationToken);
+        var generation = Volatile.Read(ref _generation);
+        var sessionId = _sessionId;
+        var originalVersion = _negotiatedVersion;
+        _recoveryGate.Release();
         if (message is JsonRpcRequest { Method: "initialize" } initialize)
         {
             if (initialize.Params is { } parameters && parameters.TryGetProperty("protocolVersion", out var version) && version.GetString() == "2024-11-05")
                 throw new NotSupportedException("Streamable HTTP does not implement legacy 2024-11-05 HTTP+SSE. Use stdio or a supported Streamable HTTP revision.");
             _initializeId = initialize.Id;
+            _initializeRequest = initialize;
         }
         var json = McpJsonDefaults.Serialize(message);
         using var request = new HttpRequestMessage(HttpMethod.Post, _options.Endpoint)
@@ -129,7 +146,7 @@ public sealed class StreamableHttpClientTransport : IClientTransport
             Content = new StringContent(json, Encoding.UTF8, "application/json")
         };
 
-        ApplyHeaders(request);
+        ApplyHeaders(request, sessionId, originalVersion);
         request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
         request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("text/event-stream"));
 
@@ -157,7 +174,16 @@ public sealed class StreamableHttpClientTransport : IClientTransport
             // Handle 404 (expired session)
             if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
             {
-                _sessionId = null;
+                if (recover && sessionId is not null && message is not JsonRpcRequest { Method: "initialize" })
+                {
+                    await RecoverSessionAsync(sessionId, cancellationToken);
+                    if (originalVersion != _negotiatedVersion)
+                        throw new McpSessionExpiredException("The recovered session negotiated a different revision. Issue a new typed request.");
+                    if (message is not JsonRpcRequest)
+                        throw new McpSessionExpiredException("Session recovered; messages tied to the expired session were not replayed.");
+                    await SendCoreAsync(message, false, cancellationToken);
+                    return;
+                }
                 throw new McpSessionExpiredException("Session expired. Server returned 404.");
             }
 
@@ -175,7 +201,7 @@ public sealed class StreamableHttpClientTransport : IClientTransport
                 var responseJson = await response.Content.ReadAsStringAsync(cancellationToken);
                 var responseMessage = McpJsonDefaults.Deserialize(responseJson);
                 CaptureNegotiatedVersion(responseMessage);
-                await _incoming.Writer.WriteAsync(responseMessage, cancellationToken);
+                await _incoming.Writer.WriteAsync(new IncomingMessage(responseMessage, generation), cancellationToken);
             }
             else if (contentType == "text/event-stream")
             {
@@ -183,22 +209,27 @@ public sealed class StreamableHttpClientTransport : IClientTransport
                 var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
                 var state = new SseStreamState();
                 var expected = message is JsonRpcRequest posted ? posted.Id : (RequestId?)null;
-                var complete = await ProcessSseStreamAsync(stream, cancellationToken, state, expected);
+                var complete = await ProcessSseStreamAsync(stream, cancellationToken, state, expected, generation);
                 while (!complete && expected is not null)
                 {
                     if (state.Cursor is null)
                         throw new IOException("POST SSE ended without a response or resumable event ID.");
                     await Task.Delay(state.Retry ?? _options.SseReconnectDelay, cancellationToken);
                     using var resume = new HttpRequestMessage(HttpMethod.Get, _options.Endpoint);
-                    ApplyHeaders(resume);
+                    ApplyHeaders(resume, sessionId, originalVersion);
                     resume.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("text/event-stream"));
                     resume.Headers.TryAddWithoutValidation("Last-Event-ID", state.Cursor);
                     using var resumed = await _httpClient.SendAsync(resume, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
+                    if (resumed.StatusCode == System.Net.HttpStatusCode.NotFound)
+                    {
+                        if (sessionId is not null) await RecoverSessionAsync(sessionId, cancellationToken);
+                        throw new McpSessionExpiredException("The POST stream expired before its result was received. The operation outcome is unknown; it was not replayed.");
+                    }
                     resumed.EnsureSuccessStatusCode();
                     if (resumed.Content.Headers.ContentType?.MediaType != "text/event-stream")
                         throw new IOException("POST SSE resumption requires text/event-stream.");
                     await using var resumedStream = await resumed.Content.ReadAsStreamAsync(cancellationToken);
-                    complete = await ProcessSseStreamAsync(resumedStream, cancellationToken, state, expected);
+                    complete = await ProcessSseStreamAsync(resumedStream, cancellationToken, state, expected, generation);
                 }
             }
             else
@@ -215,7 +246,8 @@ public sealed class StreamableHttpClientTransport : IClientTransport
     {
         await foreach (var message in _incoming.Reader.ReadAllAsync(cancellationToken))
         {
-            yield return message;
+            if (message.Message is JsonRpcResponse || message.Generation == Volatile.Read(ref _generation))
+                yield return message.Message;
         }
     }
 
@@ -229,17 +261,24 @@ public sealed class StreamableHttpClientTransport : IClientTransport
 
         while (!ct.IsCancellationRequested && _connected)
         {
+            await _recoveryGate.WaitAsync(ct);
+            var sessionId = _sessionId;
+            var generation = Volatile.Read(ref _generation);
+            var version = _negotiatedVersion;
+            var cursor = _lastEventId;
+            using var streamLifetime = CancellationTokenSource.CreateLinkedTokenSource(ct, _generationCancellation.Token);
+            _recoveryGate.Release();
             try
             {
                 using var request = new HttpRequestMessage(HttpMethod.Get, _options.Endpoint);
-                ApplyHeaders(request);
+                ApplyHeaders(request, sessionId, version);
                 request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("text/event-stream"));
 
-                if (_lastEventId is not null)
-                    request.Headers.TryAddWithoutValidation("Last-Event-ID", _lastEventId);
+                if (cursor is not null)
+                    request.Headers.TryAddWithoutValidation("Last-Event-ID", cursor);
 
                 using var response = await _httpClient.SendAsync(request,
-                    HttpCompletionOption.ResponseHeadersRead, ct);
+                    HttpCompletionOption.ResponseHeadersRead, streamLifetime.Token);
 
                 if (response.StatusCode == System.Net.HttpStatusCode.MethodNotAllowed)
                 {
@@ -250,16 +289,18 @@ public sealed class StreamableHttpClientTransport : IClientTransport
                 if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
                 {
                     _logger.LogWarning("Session expired on GET SSE stream (404)");
-                    _sessionId = null;
-                    return;
+                    if (sessionId is null) return;
+                    await RecoverSessionAsync(sessionId, ct);
+                    continue;
                 }
 
                 response.EnsureSuccessStatusCode();
 
-                var stream = await response.Content.ReadAsStreamAsync(ct);
-                await ProcessSseStreamAsync(stream, ct);
+                var stream = await response.Content.ReadAsStreamAsync(streamLifetime.Token);
+                await ProcessSseStreamAsync(stream, streamLifetime.Token, generation: generation);
                 await Task.Delay(_serverRetry ?? _options.SseReconnectDelay, ct);
             }
+            catch (OperationCanceledException) when (!ct.IsCancellationRequested) { continue; }
             catch (OperationCanceledException) { return; }
             catch (Exception ex)
             {
@@ -277,19 +318,19 @@ public sealed class StreamableHttpClientTransport : IClientTransport
     }
 
     private async Task<bool> ProcessSseStreamAsync(Stream stream, CancellationToken ct,
-        SseStreamState? state = null, RequestId? expected = null)
+        SseStreamState? state = null, RequestId? expected = null, int generation = 0)
     {
         await foreach (var evt in SseParser.ParseAsync(stream, ct))
         {
             if (evt.Retry is { } retry && retry >= 0)
             {
                 var delay = TimeSpan.FromMilliseconds(Math.Clamp(retry, 10, 60_000));
-                if (state is null) _serverRetry = delay; else state.Retry = delay;
+                if (state is null && generation == Volatile.Read(ref _generation)) _serverRetry = delay; else if (state is not null) state.Retry = delay;
             }
             if (evt.Id is not null)
             {
                 var cursor = string.IsNullOrEmpty(evt.Id) ? null : evt.Id;
-                if (state is null) _lastEventId = cursor; else state.Cursor = cursor;
+                if (state is null && generation == Volatile.Read(ref _generation)) _lastEventId = cursor; else if (state is not null) state.Cursor = cursor;
             }
 
             if (evt.EventType != "message" || string.IsNullOrEmpty(evt.Data))
@@ -299,7 +340,7 @@ public sealed class StreamableHttpClientTransport : IClientTransport
             {
                 var message = McpJsonDefaults.Deserialize(evt.Data);
                 CaptureNegotiatedVersion(message);
-                await _incoming.Writer.WriteAsync(message, ct);
+                await _incoming.Writer.WriteAsync(new IncomingMessage(message, generation), ct);
                 if (expected is { } id && message is JsonRpcResponse terminal && terminal.Id == id)
                     return true;
             }
@@ -332,13 +373,83 @@ public sealed class StreamableHttpClientTransport : IClientTransport
         }
     }
 
-    private void ApplyHeaders(HttpRequestMessage request)
+    private async Task RecoverSessionAsync(string expiredSession, CancellationToken ct)
+    {
+        using var recoveryTimeout = CancellationTokenSource.CreateLinkedTokenSource(ct, _cts!.Token);
+        recoveryTimeout.CancelAfter(TimeSpan.FromSeconds(30));
+        ct = recoveryTimeout.Token;
+        await _recoveryGate.WaitAsync(ct);
+        try
+        {
+            if (_sessionId != expiredSession) return; // Another caller completed the handshake.
+            var original = _initializeRequest ?? throw new McpSessionExpiredException("No initialization request is available for recovery.");
+            var initialize = original with { Id = (RequestId)Guid.NewGuid().ToString("N") };
+            using var request = RecoveryPost(initialize, null, McpSession.LatestProtocolVersion);
+            using var response = await _httpClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, ct);
+            response.EnsureSuccessStatusCode();
+            JsonRpcResponse? initialized = null;
+            if (response.Content.Headers.ContentType?.MediaType == "application/json")
+                initialized = McpJsonDefaults.Deserialize(await response.Content.ReadAsStringAsync(ct)) as JsonRpcResponse;
+            else if (response.Content.Headers.ContentType?.MediaType == "text/event-stream")
+            {
+                await using var stream = await response.Content.ReadAsStreamAsync(ct);
+                var count = 0;
+                await foreach (var evt in SseParser.ParseAsync(stream, ct))
+                {
+                    if (++count > 256) throw new IOException("Initialization SSE frame limit exceeded.");
+                    if (string.IsNullOrEmpty(evt.Data)) continue;
+                    if (McpJsonDefaults.Deserialize(evt.Data) is JsonRpcResponse result && result.Id == initialize.Id)
+                    { initialized = result; break; }
+                }
+            }
+            if (initialized?.Id != initialize.Id || initialized.Error is not null || initialized.Result is null)
+                throw new IOException("Session recovery did not return a successful initialize result.");
+            var info = initialized.Result.Value.Deserialize<InitializeResult>(McpJsonDefaults.Options)
+                ?? throw new IOException("Missing initialize result.");
+            if (!StreamableHttpProtocol.SupportedVersions.Contains(info.ProtocolVersion))
+                throw new NotSupportedException("Recovered HTTP session selected an unsupported revision.");
+            var newSession = response.Headers.TryGetValues("Mcp-Session-Id", out var ids) ? ids.Single() : null;
+            using var ready = RecoveryPost(new JsonRpcNotification { Method = McpMethods.NotificationsInitialized }, newSession, info.ProtocolVersion);
+            using var accepted = await _httpClient.SendAsync(ready, HttpCompletionOption.ResponseHeadersRead, ct);
+            accepted.EnsureSuccessStatusCode();
+
+            _sessionId = newSession;
+            _negotiatedVersion = info.ProtocolVersion;
+            Interlocked.Increment(ref _generation);
+            _lastEventId = null;
+            _serverRetry = null;
+            var previous = _generationCancellation;
+            _generationCancellation = new CancellationTokenSource();
+            previous.Cancel();
+            previous.Dispose();
+            SessionReinitialized?.Invoke(info);
+        }
+        finally { _recoveryGate.Release(); }
+    }
+
+    private HttpRequestMessage RecoveryPost(JsonRpcMessage message, string? session, string version)
+    {
+        var request = new HttpRequestMessage(HttpMethod.Post, _options.Endpoint)
+        { Content = new StringContent(McpJsonDefaults.Serialize(message), Encoding.UTF8, "application/json") };
+        ApplyHeaders(request);
+        request.Headers.Remove("Mcp-Session-Id");
+        request.Headers.Remove("MCP-Protocol-Version");
+        if (session is not null) request.Headers.TryAddWithoutValidation("Mcp-Session-Id", session);
+        request.Headers.TryAddWithoutValidation("MCP-Protocol-Version", version);
+        request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
+        request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("text/event-stream"));
+        return request;
+    }
+
+    private void ApplyHeaders(HttpRequestMessage request) => ApplyHeaders(request, _sessionId, _negotiatedVersion);
+
+    private void ApplyHeaders(HttpRequestMessage request, string? sessionId, string? negotiatedVersion)
     {
         request.Headers.TryAddWithoutValidation("MCP-Protocol-Version",
-            _negotiatedVersion ?? McpSession.LatestProtocolVersion);
+            negotiatedVersion ?? McpSession.LatestProtocolVersion);
 
-        if (_sessionId is not null)
-            request.Headers.TryAddWithoutValidation("Mcp-Session-Id", _sessionId);
+        if (sessionId is not null)
+            request.Headers.TryAddWithoutValidation("Mcp-Session-Id", sessionId);
 
         if (_options.AdditionalHeaders is not null)
         {
@@ -354,6 +465,9 @@ public sealed class StreamableHttpClientTransport : IClientTransport
         if (_disposed) return;
         _disposed = true;
         _connected = false;
+        _cts?.Cancel();
+        await _recoveryGate.WaitAsync();
+        _recoveryGate.Release();
 
         // Send DELETE to terminate session
         if (_sessionId is not null)
@@ -378,6 +492,7 @@ public sealed class StreamableHttpClientTransport : IClientTransport
 
         if (_ownsHttpClient) _httpClient.Dispose();
         _cts?.Dispose();
+        _generationCancellation.Dispose();
     }
 }
 
