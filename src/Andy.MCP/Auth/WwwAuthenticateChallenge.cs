@@ -47,7 +47,8 @@ public sealed record WwwAuthenticateChallenge
 
         header = header.Trim();
         const string scheme = "Bearer";
-        if (!header.StartsWith(scheme, StringComparison.OrdinalIgnoreCase))
+        if (!header.StartsWith(scheme, StringComparison.OrdinalIgnoreCase) ||
+            (header.Length > scheme.Length && !char.IsWhiteSpace(header[scheme.Length])))
             return false;
 
         var rest = header.Length > scheme.Length ? header[scheme.Length..] : string.Empty;

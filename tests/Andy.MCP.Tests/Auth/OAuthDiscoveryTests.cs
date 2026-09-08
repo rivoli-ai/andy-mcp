@@ -39,9 +39,8 @@ public class OAuthDiscoveryTests
         Assert.Equal(new[]
         {
             "https://auth.example.com/.well-known/oauth-authorization-server/tenant1",
+            "https://auth.example.com/.well-known/openid-configuration/tenant1",
             "https://auth.example.com/tenant1/.well-known/openid-configuration",
-            "https://auth.example.com/.well-known/oauth-authorization-server",
-            "https://auth.example.com/.well-known/openid-configuration",
         }, urls.Select(u => u.AbsoluteUri));
     }
 
