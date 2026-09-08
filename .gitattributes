@@ -1,0 +1,3 @@
+# Frozen upstream schemas are byte-for-byte provenance artifacts.
+/src/Andy.MCP/Protocol/Schemas/schema-*.json -text
+/tests/Andy.MCP.Tests/Conformance/schemas/*.json -text

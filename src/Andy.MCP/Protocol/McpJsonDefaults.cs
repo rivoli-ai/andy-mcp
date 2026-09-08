@@ -17,6 +17,7 @@ public static class McpJsonDefaults
             DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
             WriteIndented = false,
             PropertyNameCaseInsensitive = true,
+            AllowOutOfOrderMetadataProperties = true,
         };
         options.Converters.Add(new JsonRpcMessageConverter());
         options.Converters.Add(new RequestIdJsonConverter());

@@ -539,6 +539,7 @@ public sealed class McpClient : IAsyncDisposable
             request = request with { Params = ExtensionMethods.WithProgress(request.Params, progressToken.Value) };
         }
         ExtensionMethods.ObjectParameters(request.Params);
+        ProtocolShapeValidation.Request(request, _session.Revision ?? ProtocolRevision.Latest);
         var pending = _tracker.Track(id, requestOptions?.Timeout ?? _options.RequestTimeout,
             requestOptions?.MaximumDuration ?? _options.MaximumRequestDuration, _options.TimeProvider);
         if (progress is not null && progressToken is { } token)
@@ -565,6 +566,7 @@ public sealed class McpClient : IAsyncDisposable
                 throw ex;
             }
 
+            ProtocolShapeValidation.Result(request, response.Result, _session.Revision ?? ProtocolRevision.Latest);
             McpDiagnostics.SetSuccess(activity);
 
             if (response.Result is null)
@@ -618,6 +620,7 @@ public sealed class McpClient : IAsyncDisposable
             Method = method,
             Params = @params is not null ? ToWire(@params) : null
         };
+        ProtocolShapeValidation.Notification(notification, _session.Revision ?? ProtocolRevision.Latest);
         await _transport.SendAsync(notification);
     }
 
@@ -675,6 +678,7 @@ public sealed class McpClient : IAsyncDisposable
 
     private void HandleNotification(JsonRpcNotification notification)
     {
+        ProtocolShapeValidation.Notification(notification, _session.Revision ?? ProtocolRevision.Latest);
         switch (notification.Method)
         {
             case McpMethods.NotificationsElicitationComplete:
@@ -762,6 +766,20 @@ public sealed class McpClient : IAsyncDisposable
     }
 
     private async Task<JsonRpcResponse> DispatchServerRequestAsync(JsonRpcRequest request, CancellationToken ct)
+    {
+        if (_session.State != McpSessionState.Ready && request.Method != McpMethods.Ping)
+            return JsonRpcResponse.Failure(request.Id, JsonRpcError.InvalidRequest("The MCP session is not ready."));
+        ProtocolShapeValidation.Request(request, _session.Revision ?? ProtocolRevision.Latest);
+        var response = await DispatchServerRequestCoreAsync(request, ct);
+        if (!response.IsError)
+        {
+            try { ProtocolShapeValidation.Result(request, response.Result, _session.Revision ?? ProtocolRevision.Latest); }
+            catch (JsonException ex) { return JsonRpcResponse.Failure(request.Id, JsonRpcError.InternalError(ex.Message)); }
+        }
+        return response;
+    }
+
+    private async Task<JsonRpcResponse> DispatchServerRequestCoreAsync(JsonRpcRequest request, CancellationToken ct)
     {
         if (_session.State != McpSessionState.Ready && request.Method != McpMethods.Ping)
             return JsonRpcResponse.Failure(request.Id, JsonRpcError.InvalidRequest("The MCP session is not ready."));
