@@ -19,10 +19,6 @@
     <PackageRequireLicenseAcceptance>false</PackageRequireLicenseAcceptance>
   </PropertyGroup>
 
-  <ItemGroup>
-    <None Include="../../assets/andy_mcp_icon.png" Pack="true" PackagePath="/" />
-    <None Include="../../README.md" Pack="true" PackagePath="/" />
-  </ItemGroup>
 
   <ItemGroup>
     <InternalsVisibleTo Include="Andy.MCP.Tests" />

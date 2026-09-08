@@ -203,6 +203,11 @@ See the `docs/` directory:
 
 ## Project status
 
+**2026-09-08 package update:** .NET 10 dependencies and test tooling are refreshed, restores
+are locked, and release gates verify both NuGet packages. See [maintenance policy](docs/package-maintenance.md)
+for dependency updates, runtime migration and trimming limitations.
+
+
 **2026-09-08 HTTP authorization update:** protected HTTP endpoints require an explicit resource/issuer
 policy and an ASP.NET Core authenticated principal with matching audience and scopes. Present
 Origin headers are denied unless allowed. Trusted local callers can explicitly select
