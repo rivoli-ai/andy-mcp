@@ -92,8 +92,8 @@ public sealed class StdioClientTransport : IClientTransport
             RedirectStandardOutput = true,
             RedirectStandardError = true,
             CreateNoWindow = true,
-            StandardInputEncoding = new UTF8Encoding(false),
-            StandardOutputEncoding = new UTF8Encoding(false),
+            StandardInputEncoding = new UTF8Encoding(false, true),
+            StandardOutputEncoding = new UTF8Encoding(false, true),
             StandardErrorEncoding = new UTF8Encoding(false),
         };
 
@@ -190,8 +190,7 @@ public sealed class StdioClientTransport : IClientTransport
             await foreach (var message in _outgoing.Reader.ReadAllAsync(ct))
             {
                 var json = McpJsonDefaults.Serialize(message);
-                await writer.WriteLineAsync(json.AsMemory(), ct);
-                await writer.FlushAsync(ct);
+                await StdioFraming.WriteAsync(writer, json, ct);
             }
         }
         catch (OperationCanceledException) { }
