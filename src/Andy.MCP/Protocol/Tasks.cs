@@ -30,6 +30,7 @@ public enum McpTaskStatus
 /// An experimental MCP task representing a durable request tracked for polling and deferred
 /// result retrieval (MCP 2025-11-25).
 /// </summary>
+[SinceRevision("2025-11-25")]
 public sealed record McpTask
 {
     [JsonPropertyName("taskId")]
@@ -52,24 +53,35 @@ public sealed record McpTask
 
     /// <summary>Actual retention duration from creation in milliseconds, or null for unlimited.</summary>
     [JsonPropertyName("ttl")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.Never)]
     public long? Ttl { get; init; }
 
     /// <summary>Suggested polling interval in milliseconds.</summary>
     [JsonPropertyName("pollInterval")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public int? PollInterval { get; init; }
+
+    /// <summary>Unknown wire fields retained for protocol extensions.</summary>
+    [JsonExtensionData]
+    public Dictionary<string, JsonElement>? ExtensionData { get; init; }
 }
 
 /// <summary>Task augmentation metadata attached to a request to run it as a task.</summary>
+[SinceRevision("2025-11-25")]
 public sealed record TaskMetadata
 {
     /// <summary>Requested retention duration in milliseconds from creation.</summary>
     [JsonPropertyName("ttl")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public long? Ttl { get; init; }
+
+    /// <summary>Unknown wire fields retained for protocol extensions.</summary>
+    [JsonExtensionData]
+    public Dictionary<string, JsonElement>? ExtensionData { get; init; }
 }
 
 /// <summary>Result returned immediately when a request is executed as a task.</summary>
+[SinceRevision("2025-11-25")]
 public sealed record CreateTaskResult
 {
     [JsonPropertyName("task")]
@@ -78,9 +90,14 @@ public sealed record CreateTaskResult
     [JsonPropertyName("_meta")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public JsonElement? Meta { get; init; }
+
+    /// <summary>Unknown wire fields retained for protocol extensions.</summary>
+    [JsonExtensionData]
+    public Dictionary<string, JsonElement>? ExtensionData { get; init; }
 }
 
 /// <summary>Result of tasks/list.</summary>
+[SinceRevision("2025-11-25")]
 public sealed record ListTasksResult : PaginatedResult
 {
     [JsonPropertyName("tasks")]
@@ -92,6 +109,10 @@ public sealed record TaskIdParams
 {
     [JsonPropertyName("taskId")]
     public required string TaskId { get; init; }
+
+    /// <summary>Unknown wire fields retained for protocol extensions.</summary>
+    [JsonExtensionData]
+    public Dictionary<string, JsonElement>? ExtensionData { get; init; }
 }
 
 /// <summary>Serializes <see cref="McpTaskStatus"/> to its wire string form.</summary>

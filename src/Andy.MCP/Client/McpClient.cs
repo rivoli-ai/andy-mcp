@@ -41,13 +41,25 @@ public sealed record McpClientOptions
         {
             Roots = RootProvider is not null
                 ? new RootsCapability { ListChanged = true }
-                : Capabilities.Roots,
+                : null,
             Sampling = SamplingHandler is not null
                 ? Capabilities.Sampling ?? new SamplingCapability()
-                : Capabilities.Sampling,
+                : null,
             Elicitation = ElicitationHandler is not null
-                ? new EmptyCapability()
-                : Capabilities.Elicitation,
+                ? Capabilities.Elicitation ?? new ElicitationCapability { Form = new EmptyCapability() }
+                : null,
+            Tasks = SamplingHandler is not null || ElicitationHandler is not null ? new ClientTasksCapability
+            {
+                List = new(),
+                Cancel = new(),
+                Requests = new()
+                {
+                    Sampling = SamplingHandler is not null ? new SamplingTaskRequests { CreateMessage = new() } : null,
+                    Elicitation = ElicitationHandler is not null ? new ElicitationTaskRequests { Create = new() } : null
+                }
+            } : null,
+            Extensions = Capabilities.Extensions,
+            ExtensionData = Capabilities.ExtensionData,
             Experimental = Capabilities.Experimental
         };
     }
@@ -366,6 +378,9 @@ public sealed class McpClient : IAsyncDisposable
 
     #region Message Sending
 
+    private JsonElement ToWire<T>(T value) =>
+        RevisionAwareJson.ToElementForRevision(value, _session.Revision ?? ProtocolRevision.Latest);
+
     private RequestId NextId() => (RequestId)Interlocked.Increment(ref _nextId);
 
     private async Task<T> SendRequestAsync<T>(string method, object? @params, CancellationToken ct,
@@ -379,7 +394,7 @@ public sealed class McpClient : IAsyncDisposable
         {
             Id = id,
             Method = method,
-            Params = @params is not null ? McpJsonDefaults.ToElement(@params) : null
+            Params = @params is not null ? ToWire(@params) : null
         };
 
         var pending = _tracker.Track(id, _options.RequestTimeout);
@@ -446,7 +461,7 @@ public sealed class McpClient : IAsyncDisposable
         var notification = new JsonRpcNotification
         {
             Method = method,
-            Params = @params is not null ? McpJsonDefaults.ToElement(@params) : null
+            Params = @params is not null ? ToWire(@params) : null
         };
         await _transport.SendAsync(notification);
     }
@@ -589,7 +604,7 @@ public sealed class McpClient : IAsyncDisposable
 
                 var roots = _options.RootProvider.GetRoots();
                 return JsonRpcResponse.Success(request.Id,
-                    McpJsonDefaults.ToElement(new ListRootsResult { Roots = roots }));
+                    ToWire(new ListRootsResult { Roots = roots }));
 
             case McpMethods.SamplingCreateMessage:
                 if (_options.SamplingHandler is null)
@@ -600,10 +615,10 @@ public sealed class McpClient : IAsyncDisposable
                 {
                     var task = _taskStore.Create(samplingTaskMeta, null);
                     RunHandlerAsTask(task.TaskId, ct => _options.SamplingHandler.HandleAsync(samplingReq, ct));
-                    return JsonRpcResponse.Success(request.Id, McpJsonDefaults.ToElement(new CreateTaskResult { Task = task }));
+                    return JsonRpcResponse.Success(request.Id, ToWire(new CreateTaskResult { Task = task }));
                 }
                 var samplingResult = await _options.SamplingHandler.HandleAsync(samplingReq, _cts?.Token ?? CancellationToken.None);
-                return JsonRpcResponse.Success(request.Id, McpJsonDefaults.ToElement(samplingResult));
+                return JsonRpcResponse.Success(request.Id, ToWire(samplingResult));
 
             case McpMethods.ElicitationCreate:
                 if (_options.ElicitationHandler is null)
@@ -614,16 +629,16 @@ public sealed class McpClient : IAsyncDisposable
                 {
                     var task = _taskStore.Create(elicitTaskMeta, null);
                     RunHandlerAsTask(task.TaskId, ct => _options.ElicitationHandler.HandleAsync(elicitReq, ct));
-                    return JsonRpcResponse.Success(request.Id, McpJsonDefaults.ToElement(new CreateTaskResult { Task = task }));
+                    return JsonRpcResponse.Success(request.Id, ToWire(new CreateTaskResult { Task = task }));
                 }
                 var elicitResult = await _options.ElicitationHandler.HandleAsync(elicitReq, _cts?.Token ?? CancellationToken.None);
-                return JsonRpcResponse.Success(request.Id, McpJsonDefaults.ToElement(elicitResult));
+                return JsonRpcResponse.Success(request.Id, ToWire(elicitResult));
 
             case McpMethods.TasksGet:
                 return HandleClientTaskGet(request);
             case McpMethods.TasksList:
                 return JsonRpcResponse.Success(request.Id,
-                    McpJsonDefaults.ToElement(new ListTasksResult { Tasks = _taskStore.List(null) }));
+                    ToWire(new ListTasksResult { Tasks = _taskStore.List(null) }));
             case McpMethods.TasksResult:
                 return HandleClientTaskResult(request);
             case McpMethods.TasksCancel:
@@ -668,7 +683,7 @@ public sealed class McpClient : IAsyncDisposable
         var task = _taskStore.Get(taskId, null);
         return task is null
             ? JsonRpcResponse.Failure(request.Id, JsonRpcError.InvalidParams($"Unknown task: '{taskId}'"))
-            : JsonRpcResponse.Success(request.Id, McpJsonDefaults.ToElement(task));
+            : JsonRpcResponse.Success(request.Id, ToWire(task));
     }
 
     private JsonRpcResponse HandleClientTaskResult(JsonRpcRequest request)
@@ -690,7 +705,7 @@ public sealed class McpClient : IAsyncDisposable
         var task = _taskStore.Cancel(taskId, null);
         return task is null
             ? JsonRpcResponse.Failure(request.Id, JsonRpcError.InvalidParams($"Unknown task: '{taskId}'"))
-            : JsonRpcResponse.Success(request.Id, McpJsonDefaults.ToElement(task));
+            : JsonRpcResponse.Success(request.Id, ToWire(task));
     }
 
     #endregion

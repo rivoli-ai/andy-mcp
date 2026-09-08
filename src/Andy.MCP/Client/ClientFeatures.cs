@@ -37,7 +37,12 @@ public sealed record Root
     /// <summary>Reserved protocol metadata (_meta), preserved round-trip.</summary>
     [JsonPropertyName("_meta")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    [SinceRevision("2025-06-18")]
     public JsonElement? Meta { get; init; }
+
+    /// <summary>Unknown wire fields retained for protocol extensions.</summary>
+    [JsonExtensionData]
+    public Dictionary<string, JsonElement>? ExtensionData { get; init; }
 }
 
 public sealed record ListRootsResult
@@ -49,6 +54,10 @@ public sealed record ListRootsResult
     [JsonPropertyName("_meta")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public JsonElement? Meta { get; init; }
+
+    /// <summary>Unknown wire fields retained for protocol extensions.</summary>
+    [JsonExtensionData]
+    public Dictionary<string, JsonElement>? ExtensionData { get; init; }
 }
 
 /// <summary>
@@ -100,6 +109,11 @@ public interface ISamplingHandler
 
 public sealed record CreateMessageRequest
 {
+    [JsonPropertyName("task")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    [SinceRevision("2025-11-25")]
+    public TaskMetadata? Task { get; init; }
+
     [JsonPropertyName("messages")]
     public required IReadOnlyList<SamplingMessage> Messages { get; init; }
 
@@ -143,7 +157,12 @@ public sealed record CreateMessageRequest
     /// <summary>Reserved protocol metadata (_meta), preserved round-trip.</summary>
     [JsonPropertyName("_meta")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    [SinceRevision("2025-11-25")]
     public JsonElement? Meta { get; init; }
+
+    /// <summary>Unknown wire fields retained for protocol extensions.</summary>
+    [JsonExtensionData]
+    public Dictionary<string, JsonElement>? ExtensionData { get; init; }
 }
 
 public sealed record SamplingMessage
@@ -162,7 +181,12 @@ public sealed record SamplingMessage
 
     [JsonPropertyName("_meta")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    [SinceRevision("2025-11-25")]
     public JsonElement? Meta { get; init; }
+
+    /// <summary>Unknown wire fields retained for protocol extensions.</summary>
+    [JsonExtensionData]
+    public Dictionary<string, JsonElement>? ExtensionData { get; init; }
 }
 
 public sealed record ModelPreferences
@@ -182,12 +206,21 @@ public sealed record ModelPreferences
     [JsonPropertyName("intelligencePriority")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public double? IntelligencePriority { get; init; }
+
+    /// <summary>Unknown wire fields retained for protocol extensions.</summary>
+    [JsonExtensionData]
+    public Dictionary<string, JsonElement>? ExtensionData { get; init; }
 }
 
 public sealed record ModelHint
 {
     [JsonPropertyName("name")]
-    public required string Name { get; init; }
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? Name { get; init; }
+
+    /// <summary>Unknown wire fields retained for protocol extensions.</summary>
+    [JsonExtensionData]
+    public Dictionary<string, JsonElement>? ExtensionData { get; init; }
 }
 
 public sealed record CreateMessageResult
@@ -215,6 +248,10 @@ public sealed record CreateMessageResult
     [JsonPropertyName("_meta")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public JsonElement? Meta { get; init; }
+
+    /// <summary>Unknown wire fields retained for protocol extensions.</summary>
+    [JsonExtensionData]
+    public Dictionary<string, JsonElement>? ExtensionData { get; init; }
 }
 
 #endregion
@@ -229,8 +266,18 @@ public interface IElicitationHandler
     Task<ElicitResult> HandleAsync(ElicitRequest request, CancellationToken cancellationToken);
 }
 
+[SinceRevision("2025-06-18")]
 public sealed record ElicitRequest
 {
+    [JsonPropertyName("_meta")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public JsonElement? Meta { get; init; }
+
+    [JsonPropertyName("task")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    [SinceRevision("2025-11-25")]
+    public TaskMetadata? Task { get; init; }
+
     /// <summary>
     /// Elicitation mode: "form" (default when omitted) collects input against
     /// <see cref="RequestedSchema"/>; "url" (MCP 2025-11-25) directs the user to
@@ -242,11 +289,13 @@ public sealed record ElicitRequest
     public string? Mode { get; init; }
 
     [JsonPropertyName("message")]
+    [SinceRevision("2025-06-18")]
     public required string Message { get; init; }
 
     /// <summary>The requested schema (form mode only). Absent for URL-mode elicitation.</summary>
     [JsonPropertyName("requestedSchema")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    [SinceRevision("2025-06-18")]
     public JsonElement? RequestedSchema { get; init; }
 
     /// <summary>Opaque identifier correlating a URL-mode elicitation (URL mode only).</summary>
@@ -283,20 +332,28 @@ public sealed record ElicitRequest
             ElicitationId = elicitationId,
             Url = url
         };
+
+    /// <summary>Unknown wire fields retained for protocol extensions.</summary>
+    [JsonExtensionData]
+    public Dictionary<string, JsonElement>? ExtensionData { get; init; }
 }
 
+[SinceRevision("2025-06-18")]
 public sealed record ElicitResult
 {
     [JsonPropertyName("action")]
+    [SinceRevision("2025-06-18")]
     public required string Action { get; init; } // "accept", "decline", "cancel"
 
     [JsonPropertyName("content")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    [SinceRevision("2025-06-18")]
     public JsonElement? Content { get; init; }
 
     /// <summary>Reserved protocol metadata (_meta), preserved round-trip.</summary>
     [JsonPropertyName("_meta")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    [SinceRevision("2025-06-18")]
     public JsonElement? Meta { get; init; }
 
     public static ElicitResult Accept(JsonElement content) =>
@@ -307,6 +364,10 @@ public sealed record ElicitResult
 
     public static ElicitResult Cancel() =>
         new() { Action = "cancel" };
+
+    /// <summary>Unknown wire fields retained for protocol extensions.</summary>
+    [JsonExtensionData]
+    public Dictionary<string, JsonElement>? ExtensionData { get; init; }
 }
 
 #endregion

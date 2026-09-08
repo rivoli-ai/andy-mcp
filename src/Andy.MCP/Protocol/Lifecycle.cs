@@ -21,7 +21,12 @@ public sealed record InitializeParams
     /// <summary>Reserved protocol metadata (_meta), preserved round-trip.</summary>
     [JsonPropertyName("_meta")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    [SinceRevision("2025-11-25")]
     public JsonElement? Meta { get; init; }
+
+    /// <summary>Unknown wire fields retained for protocol extensions.</summary>
+    [JsonExtensionData]
+    public Dictionary<string, JsonElement>? ExtensionData { get; init; }
 }
 
 /// <summary>
@@ -50,6 +55,10 @@ public sealed record InitializeResult
     [JsonPropertyName("_meta")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public JsonElement? Meta { get; init; }
+
+    /// <summary>Unknown wire fields retained for protocol extensions.</summary>
+    [JsonExtensionData]
+    public Dictionary<string, JsonElement>? ExtensionData { get; init; }
 }
 
 /// <summary>
@@ -65,6 +74,7 @@ public sealed record Implementation
 
     [JsonPropertyName("title")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    [SinceRevision("2025-06-18")]
     public string? Title { get; init; }
 
     /// <summary>
@@ -95,6 +105,10 @@ public sealed record Implementation
 
     [SetsRequiredMembers]
     public Implementation(string name, string version) { Name = name; Version = version; }
+
+    /// <summary>Unknown wire fields retained for protocol extensions.</summary>
+    [JsonExtensionData]
+    public Dictionary<string, JsonElement>? ExtensionData { get; init; }
 }
 
 /// <summary>
@@ -102,6 +116,11 @@ public sealed record Implementation
 /// </summary>
 public sealed record ClientCapabilities
 {
+    [JsonPropertyName("tasks")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    [SinceRevision("2025-11-25")]
+    public ClientTasksCapability? Tasks { get; init; }
+
     [JsonPropertyName("roots")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public RootsCapability? Roots { get; init; }
@@ -112,6 +131,7 @@ public sealed record ClientCapabilities
 
     [JsonPropertyName("elicitation")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    [SinceRevision("2025-06-18")]
     public EmptyCapability? Elicitation { get; init; }
 
     [JsonPropertyName("experimental")]
@@ -121,6 +141,10 @@ public sealed record ClientCapabilities
     [JsonPropertyName("extensions")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public Dictionary<string, JsonElement>? Extensions { get; init; }
+
+    /// <summary>Unknown wire fields retained for protocol extensions.</summary>
+    [JsonExtensionData]
+    public Dictionary<string, JsonElement>? ExtensionData { get; init; }
 }
 
 /// <summary>
@@ -128,6 +152,11 @@ public sealed record ClientCapabilities
 /// </summary>
 public sealed record ServerCapabilities
 {
+    [JsonPropertyName("tasks")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    [SinceRevision("2025-11-25")]
+    public ServerTasksCapability? Tasks { get; init; }
+
     [JsonPropertyName("prompts")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public ListChangedCapability? Prompts { get; init; }
@@ -146,6 +175,7 @@ public sealed record ServerCapabilities
 
     [JsonPropertyName("completions")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    [SinceRevision("2025-03-26")]
     public EmptyCapability? Completions { get; init; }
 
     [JsonPropertyName("experimental")]
@@ -155,12 +185,34 @@ public sealed record ServerCapabilities
     [JsonPropertyName("extensions")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public Dictionary<string, JsonElement>? Extensions { get; init; }
+
+    /// <summary>Unknown wire fields retained for protocol extensions.</summary>
+    [JsonExtensionData]
+    public Dictionary<string, JsonElement>? ExtensionData { get; init; }
 }
 
 /// <summary>
 /// An empty capability object, indicating support without sub-options.
 /// </summary>
-public sealed record EmptyCapability;
+public record EmptyCapability
+{
+    [JsonPropertyName("form")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    [SinceRevision("2025-11-25")]
+    public EmptyCapability? Form { get; init; }
+
+    [JsonPropertyName("url")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    [SinceRevision("2025-11-25")]
+    public EmptyCapability? Url { get; init; }
+
+    /// <summary>Unknown wire fields retained for protocol extensions.</summary>
+    [JsonExtensionData]
+    public Dictionary<string, JsonElement>? ExtensionData { get; init; }
+}
+
+/// <summary>Explicit form/URL elicitation sub-capabilities; compatible with the existing capability property.</summary>
+public sealed record ElicitationCapability : EmptyCapability;
 
 /// <summary>
 /// Capability with optional listChanged flag.
@@ -170,6 +222,10 @@ public sealed record ListChangedCapability
     [JsonPropertyName("listChanged")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public bool? ListChanged { get; init; }
+
+    /// <summary>Unknown wire fields retained for protocol extensions.</summary>
+    [JsonExtensionData]
+    public Dictionary<string, JsonElement>? ExtensionData { get; init; }
 }
 
 /// <summary>
@@ -188,6 +244,10 @@ public sealed record SamplingCapability
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     [SinceRevision("2025-11-25")]
     public EmptyCapability? Tools { get; init; }
+
+    /// <summary>Unknown wire fields retained for protocol extensions.</summary>
+    [JsonExtensionData]
+    public Dictionary<string, JsonElement>? ExtensionData { get; init; }
 }
 
 /// <summary>
@@ -198,6 +258,10 @@ public sealed record RootsCapability
     [JsonPropertyName("listChanged")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public bool? ListChanged { get; init; }
+
+    /// <summary>Unknown wire fields retained for protocol extensions.</summary>
+    [JsonExtensionData]
+    public Dictionary<string, JsonElement>? ExtensionData { get; init; }
 }
 
 /// <summary>
@@ -212,4 +276,8 @@ public sealed record ResourcesCapability
     [JsonPropertyName("listChanged")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public bool? ListChanged { get; init; }
+
+    /// <summary>Unknown wire fields retained for protocol extensions.</summary>
+    [JsonExtensionData]
+    public Dictionary<string, JsonElement>? ExtensionData { get; init; }
 }

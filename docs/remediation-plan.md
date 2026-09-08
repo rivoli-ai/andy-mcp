@@ -17,6 +17,8 @@ P3 = experimental features, ecosystem integrations, and long-term full-complianc
 
 ## P2
 - [ ] #41 Complete revision-aware wire models
+  - [x] Preserve extension fields, add capability/tool execution metadata, and correct older sampling serialization
+  - [ ] Complete remaining typed parameter/union and high-level sub-capability checks
 - [ ] #43 Cancellation, progress and timeout cleanup
 - [ ] #44 Transport compliance and process shutdown
 - [ ] #47 Full JSON Schema validation and registration surface

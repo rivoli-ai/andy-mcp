@@ -1,3 +1,4 @@
+using System.Text.Json;
 using System.Text.Json.Serialization;
 
 namespace Andy.MCP.Server;
@@ -21,6 +22,9 @@ public sealed record CompletionValues
     public required IReadOnlyList<string> Values { get; init; }
     public int? Total { get; init; }
     public bool HasMore { get; init; }
+
+    [JsonExtensionData]
+    public Dictionary<string, JsonElement>? ExtensionData { get; init; }
 }
 
 /// <summary>
@@ -35,7 +39,15 @@ public sealed record CompletionRequest
     public required CompletionArgument Argument { get; init; }
 
     [JsonPropertyName("context")]
+    [Andy.MCP.Protocol.SinceRevision("2025-06-18")]
     public CompletionContext? Context { get; init; }
+
+    [JsonExtensionData]
+    public Dictionary<string, JsonElement>? ExtensionData { get; init; }
+
+    [JsonPropertyName("_meta")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public JsonElement? Meta { get; init; }
 }
 
 public sealed record CompletionRef
@@ -50,6 +62,9 @@ public sealed record CompletionRef
     [JsonPropertyName("uri")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? Uri { get; init; }
+
+    [JsonExtensionData]
+    public Dictionary<string, JsonElement>? ExtensionData { get; init; }
 }
 
 public sealed record CompletionArgument
@@ -59,18 +74,31 @@ public sealed record CompletionArgument
 
     [JsonPropertyName("value")]
     public required string Value { get; init; }
+
+    [JsonExtensionData]
+    public Dictionary<string, JsonElement>? ExtensionData { get; init; }
 }
 
 public sealed record CompletionContext
 {
     [JsonPropertyName("arguments")]
     public IDictionary<string, string>? Arguments { get; init; }
+
+    [JsonExtensionData]
+    public Dictionary<string, JsonElement>? ExtensionData { get; init; }
 }
 
 public sealed record CompletionResult
 {
     [JsonPropertyName("completion")]
     public required CompletionData Completion { get; init; }
+
+    [JsonExtensionData]
+    public Dictionary<string, JsonElement>? ExtensionData { get; init; }
+
+    [JsonPropertyName("_meta")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public JsonElement? Meta { get; init; }
 }
 
 public sealed record CompletionData
@@ -84,4 +112,7 @@ public sealed record CompletionData
 
     [JsonPropertyName("hasMore")]
     public bool HasMore { get; init; }
+
+    [JsonExtensionData]
+    public Dictionary<string, JsonElement>? ExtensionData { get; init; }
 }
