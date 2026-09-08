@@ -66,7 +66,7 @@ public class StreamableHttpServerTransportTests
         _ = session.RegisterResponseWaiter((RequestId)1, CancellationToken.None);
 
         // The waiter is rejected synchronously (before any task is returned).
-        Assert.Throws<InvalidOperationException>(
+        Assert.Throws<McpHttpRequestRejectedException>(
             () => { _ = session.RegisterResponseWaiter((RequestId)1, CancellationToken.None); });
     }
 

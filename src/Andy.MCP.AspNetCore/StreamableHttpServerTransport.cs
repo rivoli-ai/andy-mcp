@@ -48,6 +48,7 @@ public sealed record StreamableHttpServerOptions
     /// <summary>Reconnection delay sent in the SSE priming event.</summary>
     public int SseRetryMilliseconds { get; init; } = 1000;
     public int MaxConcurrentStreamsPerSession { get; init; } = 16;
+    public int MaxConcurrentRequestsPerSession { get; init; } = 256;
 }
 
 /// <summary>
@@ -77,7 +78,7 @@ public sealed class StreamableHttpHandler : IDisposable
         _options = options ?? new StreamableHttpServerOptions();
         _logger = logger ?? Microsoft.Extensions.Logging.Abstractions.NullLogger<StreamableHttpHandler>.Instance;
         if (_options.SessionTimeout <= TimeSpan.Zero || _options.MaxSessions <= 0 || _options.MaxRequestBodyBytes <= 0 ||
-            _options.SsePollTimeout <= TimeSpan.Zero || _options.SseRetryMilliseconds < 0 || _options.MaxConcurrentStreamsPerSession <= 0)
+            _options.SsePollTimeout <= TimeSpan.Zero || _options.SseRetryMilliseconds < 0 || _options.MaxConcurrentStreamsPerSession <= 0 || _options.MaxConcurrentRequestsPerSession <= 0)
             throw new ArgumentOutOfRangeException(nameof(options));
         _options.Authorization?.Validate();
         var interval = TimeSpan.FromMilliseconds(Math.Clamp(_options.SessionTimeout.TotalMilliseconds, 100, 60_000));
@@ -123,28 +124,36 @@ public sealed class StreamableHttpHandler : IDisposable
         RemoveExpiredSessions();
 
         // Validate protocol version
-        var version = context.Request.Headers["MCP-Protocol-Version"].FirstOrDefault();
-        if (version is not null && !McpSession.SupportedProtocolVersions.Contains(version))
+        var versions = context.Request.Headers["MCP-Protocol-Version"];
+        var version = versions.FirstOrDefault();
+        if (versions.Count > 1 || (version is not null && !StreamableHttpProtocol.SupportedVersions.Contains(version)))
         {
             context.Response.StatusCode = 400;
             await context.Response.WriteAsync("Unsupported protocol version");
             return;
         }
 
-        switch (context.Request.Method)
+        try
         {
-            case "POST":
-                await HandlePostAsync(context);
-                break;
-            case "GET":
-                await HandleGetAsync(context);
-                break;
-            case "DELETE":
-                HandleDelete(context);
-                break;
-            default:
-                context.Response.StatusCode = 405;
-                break;
+            switch (context.Request.Method)
+            {
+                case "POST":
+                    await HandlePostAsync(context);
+                    break;
+                case "GET":
+                    await HandleGetAsync(context);
+                    break;
+                case "DELETE":
+                    HandleDelete(context);
+                    break;
+                default:
+                    context.Response.StatusCode = 405;
+                    break;
+            }
+        }
+        catch (McpHttpRequestRejectedException ex)
+        {
+            context.Response.StatusCode = ex.StatusCode;
         }
     }
 
@@ -189,6 +198,13 @@ public sealed class StreamableHttpHandler : IDisposable
         // Handle initialize — create new session
         if (message is JsonRpcRequest { Method: McpMethods.Initialize } initRequest)
         {
+            if (context.Request.Headers.ContainsKey("Mcp-Session-Id") ||
+                (initRequest.Params is { } initParams && initParams.TryGetProperty("protocolVersion", out var requestedVersion) &&
+                 requestedVersion.ValueKind == JsonValueKind.String && requestedVersion.GetString() == "2024-11-05"))
+            {
+                context.Response.StatusCode = 400;
+                return;
+            }
             StreamableHttpSession session;
             string sessionId;
             lock (_sessionGate)
@@ -202,6 +218,7 @@ public sealed class StreamableHttpHandler : IDisposable
                 session = new StreamableHttpSession(sessionId, GetUserKey(context));
                 session.LastActivity = _options.TimeProvider.GetUtcNow();
                 session.MaxConcurrentStreams = _options.MaxConcurrentStreamsPerSession;
+                session.MaxPendingResponses = _options.MaxConcurrentRequestsPerSession;
                 _sessions[sessionId] = session;
             }
 
@@ -219,7 +236,8 @@ public sealed class StreamableHttpHandler : IDisposable
             // server loop, then deliver the request. This ordering closes the race where a
             // fast server response could miss the waiter and leak onto the SSE stream.
             var responseTask = session.RegisterResponseWaiter(initRequest.Id, context.RequestAborted);
-            await session.ReceiveMessageAsync(message);
+            try { await session.ReceiveMessageAsync(message); }
+            catch { session.CancelWaiter(initRequest.Id); throw; }
 
             JsonRpcResponse response;
             try
@@ -231,6 +249,9 @@ public sealed class StreamableHttpHandler : IDisposable
                 // Client aborted before the response arrived; the waiter is already removed.
                 return;
             }
+
+            if (response.Result is { } result && result.TryGetProperty("protocolVersion", out var negotiated))
+                session.ProtocolVersion = negotiated.GetString();
 
             context.Response.ContentType = "application/json";
             await context.Response.WriteAsync(McpJsonDefaults.Serialize(response));
@@ -254,7 +275,8 @@ public sealed class StreamableHttpHandler : IDisposable
         {
             // Register the waiter before delivering the request (see initialize path).
             var responseTask = existingSession.RegisterResponseWaiter(request.Id, context.RequestAborted);
-            await existingSession.ReceiveMessageAsync(message);
+            try { await existingSession.ReceiveMessageAsync(message); }
+            catch { existingSession.CancelWaiter(request.Id); throw; }
 
             JsonRpcResponse response;
             try
@@ -372,8 +394,16 @@ public sealed class StreamableHttpHandler : IDisposable
             return null;
         }
 
+        var requestedVersion = context.Request.Headers["MCP-Protocol-Version"].FirstOrDefault();
+        if (requestedVersion is not null && session.ProtocolVersion is not null && requestedVersion != session.ProtocolVersion)
+        {
+            context.Response.StatusCode = 400;
+            return null;
+        }
+
         session.LastActivity = _options.TimeProvider.GetUtcNow();
         session.MaxConcurrentStreams = _options.MaxConcurrentStreamsPerSession;
+        session.MaxPendingResponses = _options.MaxConcurrentRequestsPerSession;
         return session;
     }
 
@@ -488,6 +518,7 @@ public sealed class StreamableHttpSession : IServerTransport
     private long _seq;
     private readonly Dictionary<string, CancellationTokenSource> _activeStreams = new(StringComparer.Ordinal);
     private readonly HashSet<string> _knownStreams = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, long> _replayFloors = new(StringComparer.Ordinal);
     internal int MaxConcurrentStreams { get; set; } = 16;
     internal int ActiveStreamCount { get { lock (_sseSync) return _activeStreams.Count; } }
     private const int MaxReplayEvents = 256;
@@ -506,6 +537,7 @@ public sealed class StreamableHttpSession : IServerTransport
     private readonly object _sync = new();
     private readonly Dictionary<RequestId, TaskCompletionSource<JsonRpcResponse>> _pendingResponses = new();
     private readonly Dictionary<RequestId, JsonRpcResponse> _bufferedResponses = new();
+    internal int MaxPendingResponses { get; set; } = 256;
     private volatile bool _connected = true;
 
     // Test-only visibility into correlation state to assert no waiters/buffers are leaked.
@@ -519,6 +551,7 @@ public sealed class StreamableHttpSession : IServerTransport
         set => Interlocked.Exchange(ref _lastActivityTicks, value.UtcTicks);
     }
     public string SessionId { get; }
+    internal string? ProtocolVersion { get; set; }
 
     /// <summary>
     /// A stable key for the principal that created this session, or null if it was created
@@ -533,7 +566,7 @@ public sealed class StreamableHttpSession : IServerTransport
     {
         SessionId = sessionId;
         UserKey = userKey;
-        _incoming = Channel.CreateUnbounded<JsonRpcMessage>();
+        _incoming = Channel.CreateBounded<JsonRpcMessage>(new BoundedChannelOptions(256) { FullMode = BoundedChannelFullMode.Wait });
     }
 
     public Task StartAsync(CancellationToken cancellationToken = default) => Task.CompletedTask;
@@ -561,6 +594,8 @@ public sealed class StreamableHttpSession : IServerTransport
                 // POST handler registers its waiter before the request becomes visible
                 // to the server loop, reaching here is unexpected; buffer the response
                 // so a (racing) waiter can still claim it rather than dropping it.
+                if (_bufferedResponses.Count >= MaxPendingResponses && !_bufferedResponses.ContainsKey(response.Id))
+                    throw new McpHttpRequestRejectedException(429, "Response buffer capacity exceeded.");
                 _bufferedResponses[response.Id] = response;
             }
             return Task.CompletedTask;
@@ -576,10 +611,17 @@ public sealed class StreamableHttpSession : IServerTransport
         TaskCompletionSource signal;
         lock (_sseSync)
         {
+            while (_replay.Count >= MaxReplayEvents)
+            {
+                var delivered = _replay.First;
+                while (delivered is not null && delivered.Value.ClaimedBy is null) delivered = delivered.Next;
+                if (delivered is null) throw new McpHttpRequestRejectedException(429, "Undelivered SSE queue capacity exceeded.");
+                var owner = delivered.Value.ClaimedBy!;
+                if (_knownStreams.Contains(owner)) _replayFloors[owner] = Math.Max(_replayFloors.GetValueOrDefault(owner), delivered.Value.Seq);
+                _replay.Remove(delivered);
+            }
             _seq++;
             _replay.AddLast(new SseEntry { Seq = _seq, Message = message });
-            while (_replay.Count > MaxReplayEvents)
-                _replay.RemoveFirst();
 
             signal = _sseSignal;
             _sseSignal = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -616,7 +658,7 @@ public sealed class StreamableHttpSession : IServerTransport
         var dot = eventId.LastIndexOf('.');
         if (dot <= 0)
             return false;
-        if (!long.TryParse(eventId[(dot + 1)..], out seq) || seq < 0)
+        if (!long.TryParse(eventId[(dot + 1)..], System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out seq))
             return false;
         streamId = eventId[..dot];
         return true;
@@ -631,13 +673,13 @@ public sealed class StreamableHttpSession : IServerTransport
         close = null; status = 200;
         lock (_sseSync)
         {
-            if (after < 0 || after > _seq || (resume && !_knownStreams.Contains(id))) { status = 400; return false; }
+            if (after < 0 || after > _seq || after < _replayFloors.GetValueOrDefault(id) || (resume && !_knownStreams.Contains(id))) { status = 400; return false; }
             if (_activeStreams.ContainsKey(id)) { status = 409; return false; }
             if (_activeStreams.Count >= MaxConcurrentStreams) { status = 429; return false; }
             if (_knownStreams.Count >= Math.Max(MaxReplayEvents, MaxConcurrentStreams) && !_knownStreams.Contains(id))
             {
                 var oldest = _knownStreams.FirstOrDefault(s => !_activeStreams.ContainsKey(s));
-                if (oldest is not null) _knownStreams.Remove(oldest);
+                if (oldest is not null) { _knownStreams.Remove(oldest); _replayFloors.Remove(oldest); }
             }
             _knownStreams.Add(id);
             close = new CancellationTokenSource(); _activeStreams.Add(id, close); return true;
@@ -735,9 +777,10 @@ public sealed class StreamableHttpSession : IServerTransport
     /// <see cref="RegisterResponseWaiter"/> before calling this, so the response cannot
     /// be produced before a waiter exists.
     /// </summary>
-    internal async Task ReceiveMessageAsync(JsonRpcMessage message)
+    internal Task ReceiveMessageAsync(JsonRpcMessage message)
     {
-        await _incoming.Writer.WriteAsync(message);
+        if (!_incoming.Writer.TryWrite(message)) throw new McpHttpRequestRejectedException(_connected ? 429 : 404, "Session incoming queue is unavailable.");
+        return Task.CompletedTask;
     }
 
     /// <summary>
@@ -766,9 +809,9 @@ public sealed class StreamableHttpSession : IServerTransport
             }
 
             if (_pendingResponses.ContainsKey(requestId))
-                throw new InvalidOperationException(
-                    $"A request with id '{requestId}' is already awaiting a response on this session.");
-
+                throw new McpHttpRequestRejectedException(409, $"A request with id '{requestId}' is already awaiting a response on this session.");
+            if (_pendingResponses.Count >= MaxPendingResponses)
+                throw new McpHttpRequestRejectedException(429, "Session concurrent request capacity exceeded.");
             _pendingResponses[requestId] = tcs;
         }
 
@@ -793,7 +836,7 @@ public sealed class StreamableHttpSession : IServerTransport
         return tcs.Task;
     }
 
-    private void CancelWaiter(RequestId requestId)
+    internal void CancelWaiter(RequestId requestId)
     {
         TaskCompletionSource<JsonRpcResponse>? tcs;
         lock (_sync)
@@ -835,4 +878,9 @@ public sealed class StreamableHttpSession : IServerTransport
         Close();
         return ValueTask.CompletedTask;
     }
+}
+
+internal sealed class McpHttpRequestRejectedException(int statusCode, string message) : InvalidOperationException(message)
+{
+    public int StatusCode { get; } = statusCode;
 }

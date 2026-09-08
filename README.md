@@ -4,7 +4,7 @@
 
 ## Overview
 
-Andy.MCP is a .NET 10 library implementing the [Model Context Protocol](https://modelcontextprotocol.io/) (MCP). It negotiates **2025-11-25** (the latest revision) by default and negotiates down to 2025-06-18, 2025-03-26, and 2024-11-05 for older peers. It provides both client and server capabilities for building MCP-compatible applications.
+Andy.MCP is a .NET 10 library implementing the [Model Context Protocol](https://modelcontextprotocol.io/) (MCP). It negotiates **2025-11-25** (the latest revision) by default and negotiates down to 2025-06-18, 2025-03-26, and 2024-11-05 over stdio. Streamable HTTP supports the three 2025 revisions; legacy 2024-11-05 HTTP+SSE is not implemented. It provides both client and server capabilities for building MCP-compatible applications.
 
 Feature support is granular (stable / experimental / partial) and documented with test evidence in the **[compliance matrix](docs/compliance.md)** — please read it before relying on any specific capability.
 
@@ -202,6 +202,8 @@ See the `docs/` directory:
 - [Implementation](docs/implementation.md) -- project structure, type inventory, test breakdown
 
 ## Project status
+
+**2026-09-08 HTTP bounds update:** request queues, response correlation and replay retention are bounded. Overload returns 429; expired replay cursors and conflicting negotiated-version headers are rejected. Undelivered events are never silently evicted.
 
 **2026-09-08 wire model update:** unknown protocol fields survive round trips, capability
 sub-options are explicit, and older sampling replies use the required scalar content shape.

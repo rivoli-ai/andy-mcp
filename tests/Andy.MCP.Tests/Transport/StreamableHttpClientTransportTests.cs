@@ -265,7 +265,7 @@ public class StreamableHttpClientTransportTests
 
         var transport = new StreamableHttpClientTransport(options);
         await transport.ConnectAsync();
-        await transport.SendAsync(new JsonRpcRequest { Id = 1, Method = "init" });
+        await transport.SendAsync(new JsonRpcRequest { Id = 1, Method = "initialize" });
         await foreach (var _ in transport.Messages) { break; }
 
         await transport.DisposeAsync();

@@ -39,6 +39,7 @@ public sealed record StreamableHttpClientTransportOptions
     /// Delay before reconnecting the SSE stream after disconnect.
     /// </summary>
     public TimeSpan SseReconnectDelay { get; init; } = TimeSpan.FromSeconds(3);
+    public int IncomingQueueCapacity { get; init; } = 256;
 }
 
 /// <summary>
@@ -87,7 +88,7 @@ public sealed class StreamableHttpClientTransport : IClientTransport
             _ownsHttpClient = true;
         }
 
-        _incoming = Channel.CreateUnbounded<JsonRpcMessage>(new UnboundedChannelOptions
+        _incoming = Channel.CreateBounded<JsonRpcMessage>(new BoundedChannelOptions(_options.IncomingQueueCapacity)
         {
             SingleWriter = false,
             SingleReader = false
@@ -116,7 +117,12 @@ public sealed class StreamableHttpClientTransport : IClientTransport
         ObjectDisposedException.ThrowIf(_disposed, this);
         if (!_connected) throw new InvalidOperationException("Transport is not connected.");
 
-        if (message is JsonRpcRequest { Method: "initialize" } initialize) _initializeId = initialize.Id;
+        if (message is JsonRpcRequest { Method: "initialize" } initialize)
+        {
+            if (initialize.Params is { } parameters && parameters.TryGetProperty("protocolVersion", out var version) && version.GetString() == "2024-11-05")
+                throw new NotSupportedException("Streamable HTTP does not implement legacy 2024-11-05 HTTP+SSE. Use stdio or a supported Streamable HTTP revision.");
+            _initializeId = initialize.Id;
+        }
         var json = McpJsonDefaults.Serialize(message);
         using var request = new HttpRequestMessage(HttpMethod.Post, _options.Endpoint)
         {
@@ -142,7 +148,7 @@ public sealed class StreamableHttpClientTransport : IClientTransport
         using (response)
         {
             // Capture session ID from initialize response
-            if (response.Headers.TryGetValues("Mcp-Session-Id", out var sessionIds))
+            if (message is JsonRpcRequest { Method: "initialize" } && response.Headers.TryGetValues("Mcp-Session-Id", out var sessionIds))
             {
                 _sessionId = sessionIds.FirstOrDefault();
                 _logger.LogDebug("Session ID: {SessionId}", _sessionId);
@@ -320,6 +326,7 @@ public sealed class StreamableHttpClientTransport : IClientTransport
             pv.GetString() is { } version &&
             McpSession.SupportedProtocolVersions.Contains(version))
         {
+            if (!StreamableHttpProtocol.SupportedVersions.Contains(version)) throw new NotSupportedException("The negotiated revision is not supported by Streamable HTTP.");
             _negotiatedVersion = version;
             _sessionReady.TrySetResult();
         }
