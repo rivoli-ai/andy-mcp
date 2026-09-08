@@ -35,8 +35,8 @@ P3 = experimental features, ecosystem integrations, and long-term full-complianc
   - [ ] Complete safe extension APIs, per-call controls and remaining protocol shape validation
 - [ ] #50 Conformance gates and coverage
 - [ ] #51 Evidence-backed documentation
-- [ ] #71 URI-template resolution
-- [ ] #73 SSE stream closure and polling
+- [x] #71 URI-template resolution
+- [x] #73 SSE stream closure and polling
 - [ ] #74 Official-schema corpus and independent client/server interop
 - [x] #75 Attribute schema generation (PR96; merged-state 769 tests passed)
 
@@ -66,3 +66,9 @@ Pinned official JSON Schema fixtures supplement adversarial validation tests.
 2026-09-08: server registration freezes atomically at RunAsync; required prompt arguments
 are checked before literal handler binding. Sampling/elicitation modes honor peer sub-capabilities.
 Root subscriptions detach on disposal and URL elicitation completion is exposed as a typed event.
+2026-09-08: resource templates recognize all RFC6570 operators, prefixes and composite expansions,
+reject malformed templates before registration, and retain static-resource precedence.
+Upstream RFC example corpus and multi-content/error-channel integration tests verify matching.
+2026-09-08: verified two simultaneously active HTTP GET streams route live notifications once,
+retain independent stream identities, and release reservations after polling. Resumption and
+explicit server closure are covered by SseReplayTests and SsePollingTests.

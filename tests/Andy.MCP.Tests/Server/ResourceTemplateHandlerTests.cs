@@ -19,6 +19,32 @@ public class ResourceTemplateHandlerTests
         return await McpClient.ConnectAsync(clientTransport, cancellationToken: ct);
     }
 
+    [Theory]
+    [InlineData("file:///users/%zz")]
+    [InlineData("file:///users/name/extra")]
+    public async Task InvalidTemplateRead_DoesNotInvokeHandler(string uri)
+    {
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(15));
+        var called = false;
+        await using var client = await ConnectAsync(s => s.AddResourceTemplate("file:///users/{id}", "users",
+            (_, _, _) => { called = true; return Task.FromResult<IReadOnlyList<ResourceContents>>([]); }), timeout.Token);
+        var error = await Assert.ThrowsAsync<McpException>(() => client.ReadResourceAsync(uri, timeout.Token));
+        Assert.Equal(McpErrorCodes.ResourceNotFound, error.ErrorCode);
+        Assert.False(called);
+    }
+
+    [Fact]
+    public async Task QueryTemplateRead_ExtractsAndReturnsMultipleEntries()
+    {
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(15));
+        await using var client = await ConnectAsync(s => s.AddResourceTemplate("https://example.com/search{?q,lang}", "search",
+            (uri, vars, _) => Task.FromResult<IReadOnlyList<ResourceContents>>([
+                new TextResourceContents { Uri = uri, Text = vars["q"] },
+                new TextResourceContents { Uri = uri, Text = vars["lang"] }])), timeout.Token);
+        var result = await client.ReadResourceAsync("https://example.com/search?q=a%20b&lang=en", timeout.Token);
+        Assert.Equal(new[] { "a b", "en" }, result.Contents.Cast<TextResourceContents>().Select(c => c.Text));
+    }
+
     [Fact]
     public async Task TemplateRead_ResolvesVariables_AndReturnsContent()
     {
@@ -62,8 +88,8 @@ public class ResourceTemplateHandlerTests
                     new[] { new TextResourceContents { Uri = uri, Text = "x" } })),
             cts.Token);
 
-        await Assert.ThrowsAsync<McpException>(() =>
-            client.ReadResourceAsync("https://other/thing", cts.Token));
+        var error = await Assert.ThrowsAsync<McpException>(() => client.ReadResourceAsync("https://other/thing", cts.Token));
+        Assert.Equal(McpErrorCodes.ResourceNotFound, error.ErrorCode);
     }
 
     [Fact]

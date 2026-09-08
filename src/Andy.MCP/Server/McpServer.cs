@@ -177,6 +177,7 @@ public sealed class McpServer : IAsyncDisposable
         {
             if (_registrationFrozen) throw new InvalidOperationException("Registration is frozen after RunAsync starts.");
 
+            _ = new UriTemplate(uriTemplate); // Validate before publishing the descriptor.
             _resourceTemplates.Add(new ResourceTemplate
             {
                 UriTemplate = uriTemplate,
