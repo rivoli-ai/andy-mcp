@@ -11,15 +11,17 @@ P3 = experimental features, ecosystem integrations, and long-term full-complianc
   - [x] Require same-commit cross-platform tests, interop and security before pack/publish
   - [x] Run the documented example in CI and upload symbol packages
   - [x] Finish dependency, API compatibility and package-content validation
-- [ ] #42 Strict bidirectional JSON-RPC and lifecycle enforcement
-- [ ] #45 OAuth discovery and token lifecycle security
-- [ ] #46 ASP.NET Core authorization, Origin and principal-bound isolation
+- [x] #42 Strict bidirectional JSON-RPC and lifecycle enforcement
+- [x] #45 OAuth discovery and token lifecycle security
+- [x] #46 ASP.NET Core authorization, Origin and principal-bound isolation
+
 
 ## P2
 - [ ] #41 Complete revision-aware wire models
   - [x] Preserve extension fields, add capability/tool execution metadata, and correct older sampling serialization
   - [ ] Complete remaining typed parameter/union and high-level sub-capability checks
-- [ ] #43 Cancellation, progress and timeout cleanup
+- [x] #43 Cancellation, progress and timeout cleanup
+
 - [ ] #44 Transport compliance and process shutdown
 - [ ] #47 Full JSON Schema validation and registration surface
   - [x] Complete 2020-12 runtime/meta-schema validation with network fetches disabled
@@ -41,3 +43,10 @@ P3 = experimental features, ecosystem integrations, and long-term full-complianc
 2026-09-08: verified the merged ancestors behind closures #40 (e10e6e6), #69 (98042ae)
 and #76 (superseded by .NET 10-only migration 2f41cd6). Priority labels assigned to all
 23 remaining issues. Release safety implementation recorded above; overall work is in progress.
+
+2026-09-08: completed strict RPC/lifecycle and request deadline/cleanup checks, including real
+HTTP bidirectional traffic, overlapping-ID cancellation and repeated concurrent shutdown.
+
+2026-09-08: OAuth acceptance audit verifies actual path-aware RFC 8414 and both OIDC fallback
+flows, challenge refresh/rotation, CIMD/DCR, PKCE callbacks and concurrent scope upgrades.
+

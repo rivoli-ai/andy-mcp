@@ -29,7 +29,9 @@ public sealed class McpServer : IAsyncDisposable
     private readonly ITaskStore _taskStore;
     private readonly PendingRequestTracker _tracker = new();
     // Cancellation sources for inbound requests currently being handled, keyed by request id.
-    private readonly ConcurrentDictionary<RequestId, CancellationTokenSource> _inflight = new();
+    private readonly InboundRequestRegistry _inflight = new();
+    private readonly InboundRequestRegistry _background = new();
+    private Task? _messageLoop;
     // Serializes outbound transport writes across concurrently-completing handlers.
     private readonly SemaphoreSlim _writeLock = new(1, 1);
     private long _nextId;
@@ -196,7 +198,14 @@ public sealed class McpServer : IAsyncDisposable
         await _transport.StartAsync(_cts.Token);
         _logger.LogInformation("MCP server started: {Name} v{Version}", _options.ServerInfo.Name, _options.ServerInfo.Version);
 
-        await MessageLoopAsync(_cts.Token);
+        _messageLoop = MessageLoopAsync(_cts.Token);
+        try { await _messageLoop; }
+        finally
+        {
+            _tracker.CancelAll("Transport closed");
+            await _inflight.StopAsync();
+            await _background.StopAsync();
+        }
     }
 
     private async Task MessageLoopAsync(CancellationToken ct)
@@ -259,34 +268,16 @@ public sealed class McpServer : IAsyncDisposable
 
     private void DispatchRequest(JsonRpcRequest request, CancellationToken loopCt)
     {
-        var cts = CancellationTokenSource.CreateLinkedTokenSource(loopCt);
-        if (!_inflight.TryAdd(request.Id, cts))
-        {
-            cts.Dispose();
-            _logger.LogWarning("Ignoring duplicate in-flight request {Id}", request.Id);
-            return; // Preserve the original request's cancellation registration and response.
-        }
-
-        _ = Task.Run(async () =>
+        if (!_inflight.Run(request.Id, loopCt, async ct =>
         {
             try
             {
-                var response = await HandleRequestAsync(request, cts.Token);
-                // A request cancelled via notifications/cancelled gets no response.
-                if (!cts.IsCancellationRequested)
-                    await SendMessageAsync(response, loopCt);
+                var response = await HandleRequestAsync(request, ct);
+                if (!ct.IsCancellationRequested) await SendMessageAsync(response, ct);
             }
             catch (OperationCanceledException) { }
-            catch (Exception ex)
-            {
-                _logger.LogWarning(ex, "Unhandled error dispatching {Method}", request.Method);
-            }
-            finally
-            {
-                if (_inflight.TryRemove(request.Id, out var removed))
-                    removed.Dispose();
-            }
-        }, CancellationToken.None);
+            catch (Exception ex) { _logger.LogWarning(ex, "Error dispatching {Method}", request.Method); }
+        })) _logger.LogWarning("Ignoring duplicate or closed inbound request {Id}", request.Id);
     }
 
     private async Task HandleAndSendAsync(JsonRpcRequest request, CancellationToken ct)
@@ -417,7 +408,11 @@ public sealed class McpServer : IAsyncDisposable
             Params = @params is not null ? ToWire(@params) : null
         };
 
-        var pending = _tracker.Track(id, _options.RequestTimeout);
+        var pending = _tracker.Track(id, _options.RequestTimeout, _options.MaximumRequestDuration, _options.TimeProvider);
+        if (request.Params is { } parameters && parameters.TryGetProperty("_meta", out var metadata) &&
+            metadata.ValueKind == JsonValueKind.Object && metadata.TryGetProperty("progressToken", out var token))
+            pending.ProgressToken = token.ValueKind == JsonValueKind.String ? (RequestId)token.GetString()! :
+                token.ValueKind == JsonValueKind.Number && token.TryGetInt64(out var number) ? (RequestId)number : (RequestId?)null;
         try
         {
             await SendMessageAsync(request, ct);
@@ -430,10 +425,21 @@ public sealed class McpServer : IAsyncDisposable
                 ? default!
                 : JsonSerializer.Deserialize<T>(response.Result.Value, McpJsonDefaults.Options)!;
         }
-        finally
+        catch (Exception ex) when (ex is OperationCanceledException or TimeoutException)
         {
-            pending.Dispose();
+            using var sendTimeout = new CancellationTokenSource(TimeSpan.FromSeconds(1));
+            try
+            {
+                await SendMessageAsync(new JsonRpcNotification
+                {
+                    Method = McpMethods.NotificationsCancelled,
+                    Params = McpJsonDefaults.ToElement(new CancelledParams { RequestId = id })
+                }, sendTimeout.Token);
+            }
+            catch { }
+            throw;
         }
+        finally { pending.Dispose(); }
     }
 
     /// <summary>Ping the client and wait for its acknowledgement.</summary>
@@ -565,6 +571,7 @@ public sealed class McpServer : IAsyncDisposable
         try
         {
             var result = await handler.Handler(callReq.Arguments, reporter, ct);
+            if (reporter is ServerProgress reports) await reports.CompleteAsync();
 
             var outputError = ValidateToolOutput(handler, result);
             if (outputError is not null)
@@ -612,11 +619,12 @@ public sealed class McpServer : IAsyncDisposable
     private void RunToolAsTask(string taskId,
         ToolHandler handler, JsonElement? arguments, IProgress<McpProgress> reporter)
     {
-        _ = Task.Run(async () =>
+        _background.Run(taskId, _cts?.Token ?? CancellationToken.None, async ct =>
         {
             try
             {
-                var result = await handler.Handler(arguments, reporter, _cts?.Token ?? CancellationToken.None);
+                var result = await handler.Handler(arguments, reporter, ct);
+                if (reporter is ServerProgress reports) await reports.CompleteAsync();
                 var outputError = ValidateToolOutput(handler, result);
                 if (outputError is not null)
                     _taskStore.SetFailed(taskId, outputError);
@@ -627,7 +635,7 @@ public sealed class McpServer : IAsyncDisposable
             {
                 _taskStore.SetFailed(taskId, ex.Message);
             }
-        }, CancellationToken.None);
+        });
     }
 
     private JsonRpcResponse HandleTasksGet(JsonRpcRequest request)
@@ -714,6 +722,8 @@ public sealed class McpServer : IAsyncDisposable
         private readonly RequestId _token;
         private readonly object _gate = new();
         private double _last = double.NegativeInfinity;
+        private Task _delivery = Task.CompletedTask;
+        private bool _complete;
 
         public ServerProgress(McpServer server, RequestId token)
         {
@@ -726,11 +736,22 @@ public sealed class McpServer : IAsyncDisposable
             lock (_gate)
             {
                 // Progress MUST increase monotonically; drop out-of-order reports.
-                if (value.Progress <= _last)
+                if (_complete || !double.IsFinite(value.Progress) || value.Progress < 0 || value.Progress <= _last)
                     return;
                 _last = value.Progress;
+                _delivery = DeliverAfterAsync(_delivery, value);
             }
-            _ = _server.SendProgressAsync(_token, value);
+        }
+
+        public Task CompleteAsync()
+        {
+            lock (_gate) { _complete = true; return _delivery; }
+        }
+
+        private async Task DeliverAfterAsync(Task previous, McpProgress value)
+        {
+            await previous;
+            await _server.SendProgressAsync(_token, value);
         }
     }
 
@@ -892,16 +913,17 @@ public sealed class McpServer : IAsyncDisposable
         switch (notification.Method)
         {
             case McpMethods.NotificationsInitialized:
+                if (_session.State != McpSessionState.Ready) break;
                 _initialized = true;
                 _logger.LogInformation("Client initialized");
                 break;
+            case McpMethods.NotificationsProgress:
+                var progress = notification.GetParams<ProgressParams>();
+                if (progress is not null) _tracker.TryReportProgress(progress.ProgressToken, progress.Progress, progress.Total, progress.Message);
+                break;
             case McpMethods.NotificationsCancelled:
                 var cancelled = notification.GetParams<CancelledParams>();
-                if (cancelled is not null && _inflight.TryGetValue(cancelled.RequestId, out var inflightCts))
-                {
-                    _logger.LogDebug("Cancelling request {Id}: {Reason}", cancelled.RequestId, cancelled.Reason);
-                    inflightCts.Cancel();
-                }
+                if (cancelled is not null) _inflight.Cancel(cancelled.RequestId);
                 break;
             default:
                 _logger.LogDebug("Unhandled notification: {Method}", notification.Method);
@@ -993,17 +1015,16 @@ public sealed class McpServer : IAsyncDisposable
         if (_disposed) return;
         _disposed = true;
         _cts?.Cancel();
-        // Deterministically cancel/dispose in-flight inbound handlers and pending outbound requests.
-        foreach (var kvp in _inflight)
-            kvp.Value.Cancel();
-        foreach (var kvp in _inflight)
-            kvp.Value.Dispose();
-        _inflight.Clear();
+        _session.TryTransition(McpSessionState.ShuttingDown);
+        if (_messageLoop is not null) await _messageLoop;
+        await _inflight.StopAsync();
+        await _background.StopAsync();
         _tracker.CancelAll("Server disposing");
         _tracker.Dispose();
         _writeLock.Dispose();
         await _transport.DisposeAsync();
         _cts?.Dispose();
+        _session.TryTransition(McpSessionState.Closed);
     }
 
     #region Internal types
@@ -1046,6 +1067,9 @@ public sealed record McpServerOptions
 
     /// <summary>Timeout for server-initiated requests. Null means no timeout.</summary>
     public TimeSpan? RequestTimeout { get; init; }
+    /// <summary>Hard deadline that progress cannot extend. Null disables the hard deadline.</summary>
+    public TimeSpan? MaximumRequestDuration { get; init; } = TimeSpan.FromMinutes(5);
+    public TimeProvider TimeProvider { get; init; } = TimeProvider.System;
 
     /// <summary>
     /// Store backing experimental task execution. Defaults to an in-memory store. Share one store

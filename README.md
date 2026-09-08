@@ -206,6 +206,9 @@ See the `docs/` directory:
 **2026-09-08 wire model update:** unknown protocol fields survive round trips, capability
 sub-options are explicit, and older sampling replies use the required scalar content shape.
 Frozen official schemas and client reply tests cover every advertised revision.
+**2026-09-08 request lifetime update:** idle timeouts reset on increasing progress, bounded by
+MaximumRequestDuration. Inbound cancellation is isolated from outbound IDs, and shutdown awaits
+handler cleanup. Progress is sent in order before successful tool responses.
 
 
 **2026-09-08 package update:** .NET 10 dependencies and test tooling are refreshed, restores

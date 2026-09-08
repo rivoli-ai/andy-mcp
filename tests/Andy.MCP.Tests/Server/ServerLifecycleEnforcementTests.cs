@@ -102,6 +102,17 @@ public class ServerLifecycleEnforcementTests
     }
 
     [Fact]
+    public async Task EarlyInitializedNotification_DoesNotBypassHandshake()
+    {
+        await using var h = await Harness.StartAsync();
+        await h.SendInitializedAsync();
+        await h.SendInitializeAsync();
+        await h.ReadResponseAsync();
+        await h.SendAsync(new JsonRpcRequest { Id = 2, Method = McpMethods.ToolsList });
+        Assert.Equal(McpErrorCodes.InvalidRequest, (await h.ReadResponseAsync()).Error!.Code);
+    }
+
+    [Fact]
     public async Task DuplicateInitialize_IsRejected()
     {
         await using var h = await Harness.StartAsync();
