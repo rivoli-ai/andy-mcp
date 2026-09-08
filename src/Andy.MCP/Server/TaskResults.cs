@@ -23,6 +23,8 @@ internal static class TaskResults
                 await Task.Delay(TimeSpan.FromMilliseconds(25), cancellationToken);
                 continue;
             }
+            var error = store.GetError(taskId, owner);
+            if (error is not null) return JsonRpcResponse.Failure(request.Id, TaskExecutionContext.RelateError(error, taskId));
             var payload = store.GetResult(taskId, owner);
             if (payload is { } result)
             {

@@ -741,7 +741,7 @@ public sealed class McpServer : IAsyncDisposable
         if (augmented)
         {
             var task = _taskStore.Create(taskMetadata, TaskOwnerKey);
-            RunToolAsTask(task.TaskId, handler, callReq.Arguments, reporter);
+            RunToolAsTask(task.TaskId, request, handler, callReq.Arguments, reporter);
             return JsonRpcResponse.Success(request.Id, ToWire(new CreateTaskResult { Task = task }));
         }
 
@@ -769,7 +769,8 @@ public sealed class McpServer : IAsyncDisposable
     /// multiple connections share a store, set a distinct key per session/principal so one session
     /// cannot list, inspect, cancel, or retrieve another's tasks.
     /// </summary>
-    private string? TaskOwnerKey => _options.TaskOwnerKey;
+    private readonly string _connectionTaskOwner = Guid.NewGuid().ToString("N");
+    private string TaskOwnerKey => _options.TaskOwnerKey ?? _connectionTaskOwner;
 
     private static bool TryGetTaskMetadata(JsonElement? @params, out TaskMetadata? metadata)
     {
@@ -806,7 +807,7 @@ public sealed class McpServer : IAsyncDisposable
         return result with { Content = [.. result.Content, new TextContent(json)] };
     }
 
-    private void RunToolAsTask(string taskId,
+    private void RunToolAsTask(string taskId, JsonRpcRequest request,
         ToolHandler handler, JsonElement? arguments, IProgress<McpProgress> reporter)
     {
         _background.Run(taskId, _cts?.Token ?? CancellationToken.None, async ct =>
@@ -820,11 +821,26 @@ public sealed class McpServer : IAsyncDisposable
                 if (outputError is not null)
                     _taskStore.SetFailed(taskId, outputError);
                 else
-                    _taskStore.SetResult(taskId, McpJsonDefaults.ToElement(WithStructuredText(result)));
+                {
+                    var payload = ToWire(WithStructuredText(result));
+                    var parameters = System.Text.Json.Nodes.JsonNode.Parse(request.Params!.Value.GetRawText())!.AsObject();
+                    parameters.Remove("task");
+                    try
+                    {
+                        ProtocolShapeValidation.Result(request with { Params = JsonSerializer.SerializeToElement(parameters) }, payload,
+                            _session.Revision ?? ProtocolRevision.Latest);
+                        _taskStore.SetResult(taskId, payload);
+                    }
+                    catch (JsonException ex) { _taskStore.SetError(taskId, JsonRpcError.InternalError(ex.Message)); }
+                }
+            }
+            catch (OperationCanceledException ex)
+            {
+                _taskStore.SetFailed(taskId, ex.Message);
             }
             catch (Exception ex)
             {
-                _taskStore.SetFailed(taskId, ex.Message);
+                _taskStore.SetResult(taskId, ToWire(CallToolResult.Error(ex.Message)));
             }
         });
     }

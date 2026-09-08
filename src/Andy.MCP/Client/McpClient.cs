@@ -19,6 +19,10 @@ public sealed record McpClientOptions
     /// <summary>Hard deadline that progress cannot extend. Null disables the hard deadline.</summary>
     public TimeSpan? MaximumRequestDuration { get; init; } = TimeSpan.FromMinutes(5);
     public TimeProvider TimeProvider { get; init; } = TimeProvider.System;
+    /// <summary>Experimental task store. Defaults to an in-memory store.</summary>
+    public ITaskStore? TaskStore { get; init; }
+    /// <summary>Trusted ownership scope for retained tasks. Null isolates each connection/session.</summary>
+    public string? TaskOwnerKey { get; init; }
     /// <summary>Extension request handlers copied when the client is created.</summary>
     public IReadOnlyDictionary<string, Func<JsonElement?, CancellationToken, Task<JsonElement>>> CustomRequestHandlers { get; init; } =
         new Dictionary<string, Func<JsonElement?, CancellationToken, Task<JsonElement>>>();
@@ -54,7 +58,7 @@ public sealed record McpClientOptions
             Elicitation = ElicitationHandler is not null
                 ? Capabilities.Elicitation ?? new ElicitationCapability { Form = new EmptyCapability() }
                 : null,
-            Tasks = SamplingHandler is not null || ElicitationHandler is not null ? new ClientTasksCapability
+            Tasks = SamplingHandler is not null || ElicitationHandler is not null || TaskStore is not null ? new ClientTasksCapability
             {
                 List = new(),
                 Cancel = new(),
@@ -85,7 +89,8 @@ public sealed class McpClient : IAsyncDisposable
     private InboundRequestRegistry _inbound = new();
     private InboundRequestRegistry _background = new();
     private readonly List<Task> _retiredHandlers = new();
-    private readonly ITaskStore _taskStore = new InMemoryTaskStore();
+    private readonly ITaskStore _taskStore;
+    private string _taskOwnerKey;
     private long _nextId;
     private Task? _messageLoop;
     private CancellationTokenSource? _cts;
@@ -115,6 +120,8 @@ public sealed class McpClient : IAsyncDisposable
     {
         _transport = transport;
         _options = options;
+        _taskStore = options.TaskStore ?? new InMemoryTaskStore();
+        _taskOwnerKey = options.TaskOwnerKey ?? Guid.NewGuid().ToString("N");
         _customHandlers = new(options.CustomRequestHandlers, StringComparer.Ordinal);
         foreach (var method in _customHandlers.Keys) ExtensionMethods.RequireCustom(method);
         _logger = logger ?? NullLogger.Instance;
@@ -805,8 +812,8 @@ public sealed class McpClient : IAsyncDisposable
                 PeerRequestValidation.Sampling(samplingReq, _options.BuildCapabilities(), _session.Revision ?? ProtocolRevision.Latest);
                 if (TryGetTaskMetadata(request.Params, out var samplingTaskMeta))
                 {
-                    var task = _taskStore.Create(samplingTaskMeta, null);
-                    RunHandlerAsTask(task.TaskId, ct => _options.SamplingHandler.HandleAsync(samplingReq, ct));
+                    var task = _taskStore.Create(samplingTaskMeta, _taskOwnerKey);
+                    RunHandlerAsTask(task.TaskId, request, ct => _options.SamplingHandler.HandleAsync(samplingReq, ct));
                     return JsonRpcResponse.Success(request.Id, ToWire(new CreateTaskResult { Task = task }));
                 }
                 var samplingResult = await _options.SamplingHandler.HandleAsync(samplingReq, ct);
@@ -821,8 +828,8 @@ public sealed class McpClient : IAsyncDisposable
                 PeerRequestValidation.Elicitation(elicitReq, _options.BuildCapabilities(), _session.Revision ?? ProtocolRevision.Latest);
                 if (TryGetTaskMetadata(request.Params, out var elicitTaskMeta))
                 {
-                    var task = _taskStore.Create(elicitTaskMeta, null);
-                    RunHandlerAsTask(task.TaskId, ct => _options.ElicitationHandler.HandleAsync(elicitReq, ct));
+                    var task = _taskStore.Create(elicitTaskMeta, _taskOwnerKey);
+                    RunHandlerAsTask(task.TaskId, request, ct => _options.ElicitationHandler.HandleAsync(elicitReq, ct));
                     return JsonRpcResponse.Success(request.Id, ToWire(new CreateTaskResult { Task = task }));
                 }
                 var elicitResult = await _options.ElicitationHandler.HandleAsync(elicitReq, ct);
@@ -833,9 +840,9 @@ public sealed class McpClient : IAsyncDisposable
                 return HandleClientTaskGet(request);
             case McpMethods.TasksList:
                 return JsonRpcResponse.Success(request.Id,
-                    ToWire(new ListTasksResult { Tasks = _taskStore.List(null) }));
+                    ToWire(new ListTasksResult { Tasks = _taskStore.List(_taskOwnerKey) }));
             case McpMethods.TasksResult:
-                return await TaskResults.WaitAsync(_taskStore, null, request, ct);
+                return await TaskResults.WaitAsync(_taskStore, _taskOwnerKey, request, ct);
             case McpMethods.TasksCancel:
                 return HandleClientTaskCancel(request);
 
@@ -858,7 +865,7 @@ public sealed class McpClient : IAsyncDisposable
         return false;
     }
 
-    private void RunHandlerAsTask<T>(string taskId, Func<CancellationToken, Task<T>> handler)
+    private void RunHandlerAsTask<T>(string taskId, JsonRpcRequest request, Func<CancellationToken, Task<T>> handler)
     {
         _background.Run(taskId, _cts?.Token ?? CancellationToken.None, async ct =>
         {
@@ -866,11 +873,21 @@ public sealed class McpClient : IAsyncDisposable
             try
             {
                 var result = await handler(ct);
-                _taskStore.SetResult(taskId, McpJsonDefaults.ToElement(result));
+                var payload = ToWire(result);
+                var parameters = System.Text.Json.Nodes.JsonNode.Parse(request.Params!.Value.GetRawText())!.AsObject();
+                parameters.Remove("task");
+                try
+                {
+                    ProtocolShapeValidation.Result(request with { Params = JsonSerializer.SerializeToElement(parameters) }, payload,
+                        _session.Revision ?? ProtocolRevision.Latest);
+                    _taskStore.SetResult(taskId, payload);
+                }
+                catch (JsonException ex) { _taskStore.SetError(taskId, JsonRpcError.InternalError(ex.Message)); }
             }
             catch (Exception ex)
             {
-                _taskStore.SetFailed(taskId, ex.Message);
+                _taskStore.SetError(taskId, ex is ArgumentException or JsonException or McpCapabilityNotAvailableException
+                    ? JsonRpcError.InvalidParams(ex.Message) : JsonRpcError.InternalError(ex.Message));
             }
         });
     }
@@ -878,7 +895,7 @@ public sealed class McpClient : IAsyncDisposable
     private JsonRpcResponse HandleClientTaskGet(JsonRpcRequest request)
     {
         var taskId = request.GetParams<TaskIdParams>()!.TaskId;
-        var task = _taskStore.Get(taskId, null);
+        var task = _taskStore.Get(taskId, _taskOwnerKey);
         return task is null
             ? JsonRpcResponse.Failure(request.Id, JsonRpcError.InvalidParams($"Unknown task: '{taskId}'"))
             : JsonRpcResponse.Success(request.Id, ToWire(task));
@@ -887,7 +904,7 @@ public sealed class McpClient : IAsyncDisposable
     private JsonRpcResponse HandleClientTaskCancel(JsonRpcRequest request)
     {
         var taskId = request.GetParams<TaskIdParams>()!.TaskId;
-        var task = _taskStore.Cancel(taskId, null);
+        var task = _taskStore.Cancel(taskId, _taskOwnerKey);
         if (task is not null) _background.Cancel(taskId);
         return task is null
             ? JsonRpcResponse.Failure(request.Id, JsonRpcError.InvalidParams($"Unknown task: '{taskId}'"))
@@ -902,6 +919,7 @@ public sealed class McpClient : IAsyncDisposable
         var inbound = Interlocked.Exchange(ref _inbound, new InboundRequestRegistry());
         var background = Interlocked.Exchange(ref _background, new InboundRequestRegistry());
         _session.RefreshInitialization(result);
+        _taskOwnerKey = _options.TaskOwnerKey ?? Guid.NewGuid().ToString("N");
         lock (_retiredHandlers)
         {
             _retiredHandlers.Add(inbound.StopAsync());
