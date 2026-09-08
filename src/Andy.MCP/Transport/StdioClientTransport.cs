@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Runtime.InteropServices;
 using System.Runtime.CompilerServices;
 using System.Text;
 using System.Threading.Channels;
@@ -232,6 +233,16 @@ public sealed class StdioClientTransport : IClientTransport
         });
     }
 
+    [DllImport("libc", EntryPoint = "kill", SetLastError = true)]
+    private static extern int NativeKill(int pid, int signal);
+
+    private static async Task<bool> WaitForExitAsync(Process process, TimeSpan timeout)
+    {
+        using var deadline = new CancellationTokenSource(timeout);
+        try { await process.WaitForExitAsync(deadline.Token); return true; }
+        catch (OperationCanceledException) { return process.HasExited; }
+    }
+
     public async ValueTask DisposeAsync()
     {
         if (_disposed) return;
@@ -246,15 +257,19 @@ public sealed class StdioClientTransport : IClientTransport
                 // Step 1: Close stdin to signal EOF
                 try { _process.StandardInput.Close(); } catch { }
 
-                // Step 2: Wait for graceful exit
-                var exited = _process.WaitForExit((int)_options.ShutdownTimeout.TotalMilliseconds);
-
+                var exited = await WaitForExitAsync(_process, _options.ShutdownTimeout);
+                if (!exited && !OperatingSystem.IsWindows())
+                {
+                    _logger.LogDebug("Sending SIGTERM to process {Pid}", _process.Id);
+                    // SIGTERM gives the child a chance to release resources; Kill sends SIGKILL.
+                    NativeKill(_process.Id, 15);
+                    exited = await WaitForExitAsync(_process, _options.KillGraceTimeout);
+                }
                 if (!exited)
                 {
-                    // Step 3: SIGTERM (Unix) or Kill (Windows)
-                    _logger.LogWarning("Process did not exit within timeout, sending kill signal");
-                    try { _process.Kill(entireProcessTree: true); } catch { }
-                    _process.WaitForExit((int)_options.KillGraceTimeout.TotalMilliseconds);
+                    _logger.LogWarning("Process did not exit gracefully; terminating its process tree");
+                    try { _process.Kill(entireProcessTree: true); } catch (InvalidOperationException) { }
+                    await WaitForExitAsync(_process, _options.KillGraceTimeout);
                 }
             }
             catch (Exception ex)

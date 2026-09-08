@@ -43,6 +43,11 @@ public sealed record StreamableHttpServerOptions
     /// with 503 to bound memory use.
     /// </summary>
     public int MaxSessions { get; init; } = 10_000;
+    /// <summary>Close an idle GET stream after this duration so clients can poll/resume.</summary>
+    public TimeSpan SsePollTimeout { get; init; } = TimeSpan.FromSeconds(30);
+    /// <summary>Reconnection delay sent in the SSE priming event.</summary>
+    public int SseRetryMilliseconds { get; init; } = 1000;
+    public int MaxConcurrentStreamsPerSession { get; init; } = 16;
 }
 
 /// <summary>
@@ -71,7 +76,8 @@ public sealed class StreamableHttpHandler : IDisposable
         _sessionHandler = sessionHandler;
         _options = options ?? new StreamableHttpServerOptions();
         _logger = logger ?? Microsoft.Extensions.Logging.Abstractions.NullLogger<StreamableHttpHandler>.Instance;
-        if (_options.SessionTimeout <= TimeSpan.Zero || _options.MaxSessions <= 0 || _options.MaxRequestBodyBytes <= 0)
+        if (_options.SessionTimeout <= TimeSpan.Zero || _options.MaxSessions <= 0 || _options.MaxRequestBodyBytes <= 0 ||
+            _options.SsePollTimeout <= TimeSpan.Zero || _options.SseRetryMilliseconds < 0 || _options.MaxConcurrentStreamsPerSession <= 0)
             throw new ArgumentOutOfRangeException(nameof(options));
         _options.Authorization?.Validate();
         var interval = TimeSpan.FromMilliseconds(Math.Clamp(_options.SessionTimeout.TotalMilliseconds, 100, 60_000));
@@ -195,6 +201,7 @@ public sealed class StreamableHttpHandler : IDisposable
                 sessionId = GenerateSessionId();
                 session = new StreamableHttpSession(sessionId, GetUserKey(context));
                 session.LastActivity = _options.TimeProvider.GetUtcNow();
+                session.MaxConcurrentStreams = _options.MaxConcurrentStreamsPerSession;
                 _sessions[sessionId] = session;
             }
 
@@ -285,40 +292,46 @@ public sealed class StreamableHttpHandler : IDisposable
         if (session is null)
             return; // status already set (400/404/403)
 
+        var lastEventIds = context.Request.Headers["Last-Event-ID"];
+        if (lastEventIds.Count > 1) { context.Response.StatusCode = 400; return; }
+        var lastEventId = lastEventIds.FirstOrDefault();
+        var resume = !string.IsNullOrEmpty(lastEventId);
+        string streamId;
+        long resumeAfterSeq;
+        if (resume)
+        {
+            if (!StreamableHttpSession.TryParseEventId(lastEventId, out streamId, out resumeAfterSeq))
+            { context.Response.StatusCode = 400; return; }
+        }
+        else { streamId = StreamableHttpSession.NewStreamId(); resumeAfterSeq = 0; }
+        if (!session.TryOpenServerStream(streamId, resumeAfterSeq, resume, out var close, out var status))
+        { context.Response.StatusCode = status; return; }
+
+        using var poll = new CancellationTokenSource(_options.SsePollTimeout, _options.TimeProvider);
+        using var linked = CancellationTokenSource.CreateLinkedTokenSource(context.RequestAborted, poll.Token, close!.Token);
+        var ct = linked.Token;
         context.Response.ContentType = "text/event-stream";
         context.Response.Headers.CacheControl = "no-cache";
         context.Response.Headers.Connection = "keep-alive";
-
         var writer = new SseWriter(context.Response.Body);
-        var ct = context.RequestAborted;
-
-        // Resume the same stream from Last-Event-ID, or allocate a fresh stream id.
-        var lastEventId = context.Request.Headers["Last-Event-ID"].FirstOrDefault();
-        string streamId;
-        long resumeAfterSeq;
-        if (StreamableHttpSession.TryParseEventId(lastEventId, out var resumeStream, out var resumeSeq))
-        {
-            streamId = resumeStream;
-            resumeAfterSeq = resumeSeq;
-        }
-        else
-        {
-            streamId = StreamableHttpSession.NewStreamId();
-            resumeAfterSeq = 0;
-        }
-
         try
         {
-            await foreach (var (seq, message) in session.ReadServerEventsAsync(streamId, resumeAfterSeq, ct))
+            // Establish a resumable stream identity even before the first application message.
+            await writer.WriteEventAsync(new SseEvent
             {
+                Data = "",
+                Id = StreamableHttpSession.FormatEventId(streamId, resumeAfterSeq),
+                Retry = _options.SseRetryMilliseconds
+            }, ct);
+            await foreach (var (seq, message) in session.ReadServerEventsCoreAsync(streamId, resumeAfterSeq, ct))
                 await writer.WriteEventAsync(new SseEvent
                 {
                     Data = McpJsonDefaults.Serialize(message),
                     Id = StreamableHttpSession.FormatEventId(streamId, seq)
                 }, ct);
-            }
         }
         catch (OperationCanceledException) { }
+        finally { session.ReleaseServerStream(streamId, close!); }
     }
 
     private void HandleDelete(HttpContext context)
@@ -360,6 +373,7 @@ public sealed class StreamableHttpHandler : IDisposable
         }
 
         session.LastActivity = _options.TimeProvider.GetUtcNow();
+        session.MaxConcurrentStreams = _options.MaxConcurrentStreamsPerSession;
         return session;
     }
 
@@ -472,6 +486,10 @@ public sealed class StreamableHttpSession : IServerTransport
     private readonly object _sseSync = new();
     private readonly LinkedList<SseEntry> _replay = new();
     private long _seq;
+    private readonly Dictionary<string, CancellationTokenSource> _activeStreams = new(StringComparer.Ordinal);
+    private readonly HashSet<string> _knownStreams = new(StringComparer.Ordinal);
+    internal int MaxConcurrentStreams { get; set; } = 16;
+    internal int ActiveStreamCount { get { lock (_sseSync) return _activeStreams.Count; } }
     private const int MaxReplayEvents = 256;
     private TaskCompletionSource _sseSignal = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
@@ -598,18 +616,64 @@ public sealed class StreamableHttpSession : IServerTransport
         var dot = eventId.LastIndexOf('.');
         if (dot <= 0)
             return false;
-        if (!long.TryParse(eventId[(dot + 1)..], out seq))
+        if (!long.TryParse(eventId[(dot + 1)..], out seq) || seq < 0)
             return false;
         streamId = eventId[..dot];
         return true;
     }
 
     /// <summary>
-    /// Enumerate server events for one SSE stream. First replays events this stream previously
-    /// delivered after <paramref name="resumeAfterSeq"/> (Last-Event-ID resumption), then claims and
-    /// delivers unclaimed events — so each event reaches exactly one concurrent stream.
+    /// Reserve one stream identity and enforce session stream limits.
     /// </summary>
+    internal bool TryOpenServerStream(string id, long after, bool resume,
+        out CancellationTokenSource? close, out int status)
+    {
+        close = null; status = 200;
+        lock (_sseSync)
+        {
+            if (after < 0 || after > _seq || (resume && !_knownStreams.Contains(id))) { status = 400; return false; }
+            if (_activeStreams.ContainsKey(id)) { status = 409; return false; }
+            if (_activeStreams.Count >= MaxConcurrentStreams) { status = 429; return false; }
+            if (_knownStreams.Count >= Math.Max(MaxReplayEvents, MaxConcurrentStreams) && !_knownStreams.Contains(id))
+            {
+                var oldest = _knownStreams.FirstOrDefault(s => !_activeStreams.ContainsKey(s));
+                if (oldest is not null) _knownStreams.Remove(oldest);
+            }
+            _knownStreams.Add(id);
+            close = new CancellationTokenSource(); _activeStreams.Add(id, close); return true;
+        }
+    }
+
+    internal void ReleaseServerStream(string id, CancellationTokenSource close)
+    {
+        lock (_sseSync)
+            if (_activeStreams.TryGetValue(id, out var current) && ReferenceEquals(current, close)) _activeStreams.Remove(id);
+        close.Dispose();
+    }
+
+    /// <summary>Close active GET streams; clients resume using their own last event IDs.</summary>
+    public void CloseServerStreams()
+    {
+        CancellationTokenSource[] streams;
+        lock (_sseSync) streams = _activeStreams.Values.ToArray();
+        foreach (var stream in streams)
+            try { stream.Cancel(); } catch (ObjectDisposedException) { }
+    }
+
     public async IAsyncEnumerable<(long Seq, JsonRpcMessage Message)> ReadServerEventsAsync(
+        string streamId, long resumeAfterSeq, [EnumeratorCancellation] CancellationToken ct = default)
+    {
+        if (!TryOpenServerStream(streamId, resumeAfterSeq, resumeAfterSeq > 0, out var close, out var status))
+            throw new InvalidOperationException($"SSE stream is unavailable ({status}).");
+        using var linked = CancellationTokenSource.CreateLinkedTokenSource(ct, close!.Token);
+        try
+        {
+            await foreach (var item in ReadServerEventsCoreAsync(streamId, resumeAfterSeq, linked.Token)) yield return item;
+        }
+        finally { ReleaseServerStream(streamId, close); }
+    }
+
+    internal async IAsyncEnumerable<(long Seq, JsonRpcMessage Message)> ReadServerEventsCoreAsync(
         string streamId, long resumeAfterSeq, [EnumeratorCancellation] CancellationToken ct = default)
     {
         // Phase 1: resume this stream's own previously-delivered events.
@@ -648,9 +712,8 @@ public sealed class StreamableHttpSession : IServerTransport
             if (!_connected)
                 yield break;
 
-            var completed = await Task.WhenAny(signal, Task.Delay(Timeout.Infinite, ct)).ConfigureAwait(false);
-            if (completed != signal)
-                yield break; // cancelled
+            try { await signal.WaitAsync(ct).ConfigureAwait(false); }
+            catch (OperationCanceledException) { yield break; }
         }
     }
 

@@ -20,6 +20,9 @@ P3 = experimental features, ecosystem integrations, and long-term full-complianc
 - [ ] #41 Complete revision-aware wire models
 - [x] #43 Cancellation, progress and timeout cleanup
 - [ ] #44 Transport compliance and process shutdown
+  - [x] Stdio EOF/SIGTERM/kill escalation and bounded GET SSE polling
+  - [x] POST SSE cursor isolation, resumption and terminal-response completion
+  - [ ] Finish HTTP session recovery, bounds and revision-specific transport claims
 - [ ] #47 Full JSON Schema validation and registration surface
   - [x] Complete 2020-12 runtime/meta-schema validation with network fetches disabled
   - [ ] Complete registration metadata fields
@@ -47,3 +50,6 @@ HTTP bidirectional traffic, overlapping-ID cancellation and repeated concurrent 
 2026-09-08: OAuth acceptance audit verifies actual path-aware RFC 8414 and both OIDC fallback
 flows, challenge refresh/rotation, CIMD/DCR, PKCE callbacks and concurrent scope upgrades.
 
+
+2026-09-08: verified graceful stdio escalation, server-directed GET SSE closure and polling,
+stream identity/capacity enforcement, retry hints and independent POST SSE resumption.
