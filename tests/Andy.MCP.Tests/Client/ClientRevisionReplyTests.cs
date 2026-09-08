@@ -9,7 +9,7 @@ public class ClientRevisionReplyTests
     [Theory]
     [InlineData("2024-11-05", JsonValueKind.Object)]
     [InlineData("2025-06-18", JsonValueKind.Object)]
-    [InlineData("2025-11-25", JsonValueKind.Array)]
+    [InlineData("2025-11-25", JsonValueKind.Object)]
     public async Task SamplingReply_UsesNegotiatedRevision(string version, JsonValueKind expected)
     {
         using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(10));

@@ -20,6 +20,10 @@ jobs:
       with:
         dotnet-version: 10.0.x
 
+    - uses: actions/setup-python@v5
+      with:
+        python-version: "3.x"
+
     - name: Restore dependencies
       run: dotnet restore --locked-mode
 
@@ -28,6 +32,11 @@ jobs:
 
     - name: Test
       run: dotnet test --configuration Release --no-build --verbosity normal --filter "Category!=Interop" --collect:"XPlat Code Coverage" --results-directory ./TestResults
+
+    - name: Enforce critical coverage
+      run: |
+        python scripts/check-coverage.py --self-test
+        python scripts/check-coverage.py "TestResults/**/coverage.cobertura.xml"
 
     - name: Run documented example
       run: dotnet run --project examples/Andy.MCP.Examples --configuration Release --no-build -- inprocess
@@ -38,11 +47,10 @@ jobs:
       with:
         name: coverage-${{ matrix.os }}
         path: ./TestResults/**/coverage.cobertura.xml
-        if-no-files-found: warn
+        if-no-files-found: error
 
   interop:
-    # Cross-implementation conformance: drive the Andy.MCP client against the official
-    # reference server (@modelcontextprotocol/server-everything) over stdio.
+    # Independent official-SDK client and server: stdio, HTTP JSON/SSE and nested sampling.
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v4
@@ -55,10 +63,10 @@ jobs:
     - name: Setup Node
       uses: actions/setup-node@v4
       with:
-        node-version: '20'
+        node-version: '24'
 
-    - name: Pre-fetch reference MCP server
-      run: timeout 120 npx -y @modelcontextprotocol/server-everything stdio </dev/null || true
+    - name: Install pinned reference SDK
+      run: npm ci --ignore-scripts --no-fund --prefix tests/interop
 
     - name: Build
       run: dotnet build --configuration Release -p:RestoreLockedMode=true

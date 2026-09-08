@@ -1,0 +1,1463 @@
+[
+  {
+    "revision": "2024-11-05",
+    "source": "https://raw.githubusercontent.com/modelcontextprotocol/modelcontextprotocol/aa8ce049f089f92618340190d4ece141f663310d/docs/specification/2024-11-05/basic/lifecycle.mdx",
+    "sourceSha256": "805b733d16d0c55ee4844ae67f1ee2d528ed32c13bd96ca21f70b06ff8903417",
+    "blockIndex": 0,
+    "method": "initialize",
+    "message": {
+      "jsonrpc": "2.0",
+      "id": 1,
+      "method": "initialize",
+      "params": {
+        "protocolVersion": "2024-11-05",
+        "capabilities": {
+          "roots": {
+            "listChanged": true
+          },
+          "sampling": {}
+        },
+        "clientInfo": {
+          "name": "ExampleClient",
+          "version": "1.0.0"
+        }
+      }
+    }
+  },
+  {
+    "revision": "2024-11-05",
+    "source": "https://raw.githubusercontent.com/modelcontextprotocol/modelcontextprotocol/aa8ce049f089f92618340190d4ece141f663310d/docs/specification/2024-11-05/basic/lifecycle.mdx",
+    "sourceSha256": "805b733d16d0c55ee4844ae67f1ee2d528ed32c13bd96ca21f70b06ff8903417",
+    "blockIndex": 1,
+    "method": "initialize",
+    "message": {
+      "jsonrpc": "2.0",
+      "id": 1,
+      "result": {
+        "protocolVersion": "2024-11-05",
+        "capabilities": {
+          "logging": {},
+          "prompts": {
+            "listChanged": true
+          },
+          "resources": {
+            "subscribe": true,
+            "listChanged": true
+          },
+          "tools": {
+            "listChanged": true
+          }
+        },
+        "serverInfo": {
+          "name": "ExampleServer",
+          "version": "1.0.0"
+        }
+      }
+    }
+  },
+  {
+    "revision": "2024-11-05",
+    "source": "https://raw.githubusercontent.com/modelcontextprotocol/modelcontextprotocol/aa8ce049f089f92618340190d4ece141f663310d/docs/specification/2024-11-05/basic/lifecycle.mdx",
+    "sourceSha256": "805b733d16d0c55ee4844ae67f1ee2d528ed32c13bd96ca21f70b06ff8903417",
+    "blockIndex": 2,
+    "method": "notifications/initialized",
+    "message": {
+      "jsonrpc": "2.0",
+      "method": "notifications/initialized"
+    }
+  },
+  {
+    "revision": "2024-11-05",
+    "source": "https://raw.githubusercontent.com/modelcontextprotocol/modelcontextprotocol/aa8ce049f089f92618340190d4ece141f663310d/docs/specification/2024-11-05/basic/lifecycle.mdx",
+    "sourceSha256": "805b733d16d0c55ee4844ae67f1ee2d528ed32c13bd96ca21f70b06ff8903417",
+    "blockIndex": 3,
+    "method": "initialize",
+    "message": {
+      "jsonrpc": "2.0",
+      "id": 1,
+      "error": {
+        "code": -32602,
+        "message": "Unsupported protocol version",
+        "data": {
+          "supported": [
+            "2024-11-05"
+          ],
+          "requested": "1.0.0"
+        }
+      }
+    }
+  },
+  {
+    "revision": "2024-11-05",
+    "source": "https://raw.githubusercontent.com/modelcontextprotocol/modelcontextprotocol/aa8ce049f089f92618340190d4ece141f663310d/docs/specification/2024-11-05/server/tools.mdx",
+    "sourceSha256": "ced54a034b93ce997e9a606e65317348ac26a16adab2a6b3a770ababcad721a6",
+    "blockIndex": 1,
+    "method": "tools/list",
+    "message": {
+      "jsonrpc": "2.0",
+      "id": 1,
+      "method": "tools/list",
+      "params": {
+        "cursor": "optional-cursor-value"
+      }
+    }
+  },
+  {
+    "revision": "2024-11-05",
+    "source": "https://raw.githubusercontent.com/modelcontextprotocol/modelcontextprotocol/aa8ce049f089f92618340190d4ece141f663310d/docs/specification/2024-11-05/server/tools.mdx",
+    "sourceSha256": "ced54a034b93ce997e9a606e65317348ac26a16adab2a6b3a770ababcad721a6",
+    "blockIndex": 2,
+    "method": "tools/list",
+    "message": {
+      "jsonrpc": "2.0",
+      "id": 1,
+      "result": {
+        "tools": [
+          {
+            "name": "get_weather",
+            "description": "Get current weather information for a location",
+            "inputSchema": {
+              "type": "object",
+              "properties": {
+                "location": {
+                  "type": "string",
+                  "description": "City name or zip code"
+                }
+              },
+              "required": [
+                "location"
+              ]
+            }
+          }
+        ],
+        "nextCursor": "next-page-cursor"
+      }
+    }
+  },
+  {
+    "revision": "2024-11-05",
+    "source": "https://raw.githubusercontent.com/modelcontextprotocol/modelcontextprotocol/aa8ce049f089f92618340190d4ece141f663310d/docs/specification/2024-11-05/server/tools.mdx",
+    "sourceSha256": "ced54a034b93ce997e9a606e65317348ac26a16adab2a6b3a770ababcad721a6",
+    "blockIndex": 3,
+    "method": "tools/call",
+    "message": {
+      "jsonrpc": "2.0",
+      "id": 2,
+      "method": "tools/call",
+      "params": {
+        "name": "get_weather",
+        "arguments": {
+          "location": "New York"
+        }
+      }
+    }
+  },
+  {
+    "revision": "2024-11-05",
+    "source": "https://raw.githubusercontent.com/modelcontextprotocol/modelcontextprotocol/aa8ce049f089f92618340190d4ece141f663310d/docs/specification/2024-11-05/server/tools.mdx",
+    "sourceSha256": "ced54a034b93ce997e9a606e65317348ac26a16adab2a6b3a770ababcad721a6",
+    "blockIndex": 4,
+    "method": "tools/call",
+    "message": {
+      "jsonrpc": "2.0",
+      "id": 2,
+      "result": {
+        "content": [
+          {
+            "type": "text",
+            "text": "Current weather in New York:\nTemperature: 72\u00b0F\nConditions: Partly cloudy"
+          }
+        ],
+        "isError": false
+      }
+    }
+  },
+  {
+    "revision": "2024-11-05",
+    "source": "https://raw.githubusercontent.com/modelcontextprotocol/modelcontextprotocol/aa8ce049f089f92618340190d4ece141f663310d/docs/specification/2024-11-05/server/tools.mdx",
+    "sourceSha256": "ced54a034b93ce997e9a606e65317348ac26a16adab2a6b3a770ababcad721a6",
+    "blockIndex": 5,
+    "method": "notifications/tools/list_changed",
+    "message": {
+      "jsonrpc": "2.0",
+      "method": "notifications/tools/list_changed"
+    }
+  },
+  {
+    "revision": "2024-11-05",
+    "source": "https://raw.githubusercontent.com/modelcontextprotocol/modelcontextprotocol/aa8ce049f089f92618340190d4ece141f663310d/docs/specification/2024-11-05/server/resources.mdx",
+    "sourceSha256": "1af9a55a7a99f68ca7b770aaeaaa6af95b000b8acfe27e74003e242d5122d63e",
+    "blockIndex": 4,
+    "method": "resources/list",
+    "message": {
+      "jsonrpc": "2.0",
+      "id": 1,
+      "method": "resources/list",
+      "params": {
+        "cursor": "optional-cursor-value"
+      }
+    }
+  },
+  {
+    "revision": "2024-11-05",
+    "source": "https://raw.githubusercontent.com/modelcontextprotocol/modelcontextprotocol/aa8ce049f089f92618340190d4ece141f663310d/docs/specification/2024-11-05/server/resources.mdx",
+    "sourceSha256": "1af9a55a7a99f68ca7b770aaeaaa6af95b000b8acfe27e74003e242d5122d63e",
+    "blockIndex": 5,
+    "method": "resources/list",
+    "message": {
+      "jsonrpc": "2.0",
+      "id": 1,
+      "result": {
+        "resources": [
+          {
+            "uri": "file:///project/src/main.rs",
+            "name": "main.rs",
+            "description": "Primary application entry point",
+            "mimeType": "text/x-rust"
+          }
+        ],
+        "nextCursor": "next-page-cursor"
+      }
+    }
+  },
+  {
+    "revision": "2024-11-05",
+    "source": "https://raw.githubusercontent.com/modelcontextprotocol/modelcontextprotocol/aa8ce049f089f92618340190d4ece141f663310d/docs/specification/2024-11-05/server/resources.mdx",
+    "sourceSha256": "1af9a55a7a99f68ca7b770aaeaaa6af95b000b8acfe27e74003e242d5122d63e",
+    "blockIndex": 6,
+    "method": "resources/read",
+    "message": {
+      "jsonrpc": "2.0",
+      "id": 2,
+      "method": "resources/read",
+      "params": {
+        "uri": "file:///project/src/main.rs"
+      }
+    }
+  },
+  {
+    "revision": "2024-11-05",
+    "source": "https://raw.githubusercontent.com/modelcontextprotocol/modelcontextprotocol/aa8ce049f089f92618340190d4ece141f663310d/docs/specification/2024-11-05/server/resources.mdx",
+    "sourceSha256": "1af9a55a7a99f68ca7b770aaeaaa6af95b000b8acfe27e74003e242d5122d63e",
+    "blockIndex": 7,
+    "method": "resources/read",
+    "message": {
+      "jsonrpc": "2.0",
+      "id": 2,
+      "result": {
+        "contents": [
+          {
+            "uri": "file:///project/src/main.rs",
+            "mimeType": "text/x-rust",
+            "text": "fn main() {\n    println!(\"Hello world!\");\n}"
+          }
+        ]
+      }
+    }
+  },
+  {
+    "revision": "2024-11-05",
+    "source": "https://raw.githubusercontent.com/modelcontextprotocol/modelcontextprotocol/aa8ce049f089f92618340190d4ece141f663310d/docs/specification/2024-11-05/server/resources.mdx",
+    "sourceSha256": "1af9a55a7a99f68ca7b770aaeaaa6af95b000b8acfe27e74003e242d5122d63e",
+    "blockIndex": 8,
+    "method": "resources/templates/list",
+    "message": {
+      "jsonrpc": "2.0",
+      "id": 3,
+      "method": "resources/templates/list",
+      "params": {
+        "cursor": "optional-cursor-value"
+      }
+    }
+  },
+  {
+    "revision": "2024-11-05",
+    "source": "https://raw.githubusercontent.com/modelcontextprotocol/modelcontextprotocol/aa8ce049f089f92618340190d4ece141f663310d/docs/specification/2024-11-05/server/resources.mdx",
+    "sourceSha256": "1af9a55a7a99f68ca7b770aaeaaa6af95b000b8acfe27e74003e242d5122d63e",
+    "blockIndex": 9,
+    "method": "resources/templates/list",
+    "message": {
+      "jsonrpc": "2.0",
+      "id": 3,
+      "result": {
+        "resourceTemplates": [
+          {
+            "uriTemplate": "file:///{path}",
+            "name": "Project Files",
+            "description": "Access files in the project directory",
+            "mimeType": "application/octet-stream"
+          }
+        ],
+        "nextCursor": "next-page-cursor"
+      }
+    }
+  },
+  {
+    "revision": "2024-11-05",
+    "source": "https://raw.githubusercontent.com/modelcontextprotocol/modelcontextprotocol/aa8ce049f089f92618340190d4ece141f663310d/docs/specification/2024-11-05/server/resources.mdx",
+    "sourceSha256": "1af9a55a7a99f68ca7b770aaeaaa6af95b000b8acfe27e74003e242d5122d63e",
+    "blockIndex": 10,
+    "method": "notifications/resources/list_changed",
+    "message": {
+      "jsonrpc": "2.0",
+      "method": "notifications/resources/list_changed"
+    }
+  },
+  {
+    "revision": "2024-11-05",
+    "source": "https://raw.githubusercontent.com/modelcontextprotocol/modelcontextprotocol/aa8ce049f089f92618340190d4ece141f663310d/docs/specification/2024-11-05/server/resources.mdx",
+    "sourceSha256": "1af9a55a7a99f68ca7b770aaeaaa6af95b000b8acfe27e74003e242d5122d63e",
+    "blockIndex": 11,
+    "method": "resources/subscribe",
+    "message": {
+      "jsonrpc": "2.0",
+      "id": 4,
+      "method": "resources/subscribe",
+      "params": {
+        "uri": "file:///project/src/main.rs"
+      }
+    }
+  },
+  {
+    "revision": "2024-11-05",
+    "source": "https://raw.githubusercontent.com/modelcontextprotocol/modelcontextprotocol/aa8ce049f089f92618340190d4ece141f663310d/docs/specification/2024-11-05/server/resources.mdx",
+    "sourceSha256": "1af9a55a7a99f68ca7b770aaeaaa6af95b000b8acfe27e74003e242d5122d63e",
+    "blockIndex": 12,
+    "method": "notifications/resources/updated",
+    "message": {
+      "jsonrpc": "2.0",
+      "method": "notifications/resources/updated",
+      "params": {
+        "uri": "file:///project/src/main.rs"
+      }
+    }
+  },
+  {
+    "revision": "2024-11-05",
+    "source": "https://raw.githubusercontent.com/modelcontextprotocol/modelcontextprotocol/aa8ce049f089f92618340190d4ece141f663310d/docs/specification/2024-11-05/client/sampling.mdx",
+    "sourceSha256": "b5adb6d91769d726e8a6a987597ebf29b00148f40c3f76bf8645df848b5e4c7f",
+    "blockIndex": 1,
+    "method": "sampling/createMessage",
+    "message": {
+      "jsonrpc": "2.0",
+      "id": 1,
+      "method": "sampling/createMessage",
+      "params": {
+        "messages": [
+          {
+            "role": "user",
+            "content": {
+              "type": "text",
+              "text": "What is the capital of France?"
+            }
+          }
+        ],
+        "modelPreferences": {
+          "hints": [
+            {
+              "name": "claude-3-sonnet"
+            }
+          ],
+          "intelligencePriority": 0.8,
+          "speedPriority": 0.5
+        },
+        "systemPrompt": "You are a helpful assistant.",
+        "maxTokens": 100
+      }
+    }
+  },
+  {
+    "revision": "2024-11-05",
+    "source": "https://raw.githubusercontent.com/modelcontextprotocol/modelcontextprotocol/aa8ce049f089f92618340190d4ece141f663310d/docs/specification/2024-11-05/client/sampling.mdx",
+    "sourceSha256": "b5adb6d91769d726e8a6a987597ebf29b00148f40c3f76bf8645df848b5e4c7f",
+    "blockIndex": 2,
+    "method": "sampling/createMessage",
+    "message": {
+      "jsonrpc": "2.0",
+      "id": 1,
+      "result": {
+        "role": "assistant",
+        "content": {
+          "type": "text",
+          "text": "The capital of France is Paris."
+        },
+        "model": "claude-3-sonnet-20240307",
+        "stopReason": "endTurn"
+      }
+    }
+  },
+  {
+    "revision": "2024-11-05",
+    "source": "https://raw.githubusercontent.com/modelcontextprotocol/modelcontextprotocol/aa8ce049f089f92618340190d4ece141f663310d/docs/specification/2024-11-05/client/sampling.mdx",
+    "sourceSha256": "b5adb6d91769d726e8a6a987597ebf29b00148f40c3f76bf8645df848b5e4c7f",
+    "blockIndex": 6,
+    "method": "sampling/createMessage",
+    "message": {
+      "jsonrpc": "2.0",
+      "id": 1,
+      "error": {
+        "code": -1,
+        "message": "User rejected sampling request"
+      }
+    }
+  },
+  {
+    "revision": "2025-06-18",
+    "source": "https://raw.githubusercontent.com/modelcontextprotocol/modelcontextprotocol/aa8ce049f089f92618340190d4ece141f663310d/docs/specification/2025-06-18/basic/lifecycle.mdx",
+    "sourceSha256": "9800e66e16cb0b71c339f6007fd14f6d17cc48741d4a8d381cc38f916bb6d05e",
+    "blockIndex": 0,
+    "method": "initialize",
+    "message": {
+      "jsonrpc": "2.0",
+      "id": 1,
+      "method": "initialize",
+      "params": {
+        "protocolVersion": "2025-06-18",
+        "capabilities": {
+          "roots": {
+            "listChanged": true
+          },
+          "sampling": {},
+          "elicitation": {}
+        },
+        "clientInfo": {
+          "name": "ExampleClient",
+          "title": "Example Client Display Name",
+          "version": "1.0.0"
+        }
+      }
+    }
+  },
+  {
+    "revision": "2025-06-18",
+    "source": "https://raw.githubusercontent.com/modelcontextprotocol/modelcontextprotocol/aa8ce049f089f92618340190d4ece141f663310d/docs/specification/2025-06-18/basic/lifecycle.mdx",
+    "sourceSha256": "9800e66e16cb0b71c339f6007fd14f6d17cc48741d4a8d381cc38f916bb6d05e",
+    "blockIndex": 1,
+    "method": "initialize",
+    "message": {
+      "jsonrpc": "2.0",
+      "id": 1,
+      "result": {
+        "protocolVersion": "2025-06-18",
+        "capabilities": {
+          "logging": {},
+          "prompts": {
+            "listChanged": true
+          },
+          "resources": {
+            "subscribe": true,
+            "listChanged": true
+          },
+          "tools": {
+            "listChanged": true
+          }
+        },
+        "serverInfo": {
+          "name": "ExampleServer",
+          "title": "Example Server Display Name",
+          "version": "1.0.0"
+        },
+        "instructions": "Optional instructions for the client"
+      }
+    }
+  },
+  {
+    "revision": "2025-06-18",
+    "source": "https://raw.githubusercontent.com/modelcontextprotocol/modelcontextprotocol/aa8ce049f089f92618340190d4ece141f663310d/docs/specification/2025-06-18/basic/lifecycle.mdx",
+    "sourceSha256": "9800e66e16cb0b71c339f6007fd14f6d17cc48741d4a8d381cc38f916bb6d05e",
+    "blockIndex": 2,
+    "method": "notifications/initialized",
+    "message": {
+      "jsonrpc": "2.0",
+      "method": "notifications/initialized"
+    }
+  },
+  {
+    "revision": "2025-06-18",
+    "source": "https://raw.githubusercontent.com/modelcontextprotocol/modelcontextprotocol/aa8ce049f089f92618340190d4ece141f663310d/docs/specification/2025-06-18/basic/lifecycle.mdx",
+    "sourceSha256": "9800e66e16cb0b71c339f6007fd14f6d17cc48741d4a8d381cc38f916bb6d05e",
+    "blockIndex": 3,
+    "method": "initialize",
+    "message": {
+      "jsonrpc": "2.0",
+      "id": 1,
+      "error": {
+        "code": -32602,
+        "message": "Unsupported protocol version",
+        "data": {
+          "supported": [
+            "2024-11-05"
+          ],
+          "requested": "1.0.0"
+        }
+      }
+    }
+  },
+  {
+    "revision": "2025-06-18",
+    "source": "https://raw.githubusercontent.com/modelcontextprotocol/modelcontextprotocol/aa8ce049f089f92618340190d4ece141f663310d/docs/specification/2025-06-18/server/tools.mdx",
+    "sourceSha256": "6c99216b75dfe0684199508a49f363bcdab9b2a3147eab66baa78561b2bd21b5",
+    "blockIndex": 1,
+    "method": "tools/list",
+    "message": {
+      "jsonrpc": "2.0",
+      "id": 1,
+      "method": "tools/list",
+      "params": {
+        "cursor": "optional-cursor-value"
+      }
+    }
+  },
+  {
+    "revision": "2025-06-18",
+    "source": "https://raw.githubusercontent.com/modelcontextprotocol/modelcontextprotocol/aa8ce049f089f92618340190d4ece141f663310d/docs/specification/2025-06-18/server/tools.mdx",
+    "sourceSha256": "6c99216b75dfe0684199508a49f363bcdab9b2a3147eab66baa78561b2bd21b5",
+    "blockIndex": 2,
+    "method": "tools/list",
+    "message": {
+      "jsonrpc": "2.0",
+      "id": 1,
+      "result": {
+        "tools": [
+          {
+            "name": "get_weather",
+            "title": "Weather Information Provider",
+            "description": "Get current weather information for a location",
+            "inputSchema": {
+              "type": "object",
+              "properties": {
+                "location": {
+                  "type": "string",
+                  "description": "City name or zip code"
+                }
+              },
+              "required": [
+                "location"
+              ]
+            }
+          }
+        ],
+        "nextCursor": "next-page-cursor"
+      }
+    }
+  },
+  {
+    "revision": "2025-06-18",
+    "source": "https://raw.githubusercontent.com/modelcontextprotocol/modelcontextprotocol/aa8ce049f089f92618340190d4ece141f663310d/docs/specification/2025-06-18/server/tools.mdx",
+    "sourceSha256": "6c99216b75dfe0684199508a49f363bcdab9b2a3147eab66baa78561b2bd21b5",
+    "blockIndex": 3,
+    "method": "tools/call",
+    "message": {
+      "jsonrpc": "2.0",
+      "id": 2,
+      "method": "tools/call",
+      "params": {
+        "name": "get_weather",
+        "arguments": {
+          "location": "New York"
+        }
+      }
+    }
+  },
+  {
+    "revision": "2025-06-18",
+    "source": "https://raw.githubusercontent.com/modelcontextprotocol/modelcontextprotocol/aa8ce049f089f92618340190d4ece141f663310d/docs/specification/2025-06-18/server/tools.mdx",
+    "sourceSha256": "6c99216b75dfe0684199508a49f363bcdab9b2a3147eab66baa78561b2bd21b5",
+    "blockIndex": 4,
+    "method": "tools/call",
+    "message": {
+      "jsonrpc": "2.0",
+      "id": 2,
+      "result": {
+        "content": [
+          {
+            "type": "text",
+            "text": "Current weather in New York:\nTemperature: 72\u00b0F\nConditions: Partly cloudy"
+          }
+        ],
+        "isError": false
+      }
+    }
+  },
+  {
+    "revision": "2025-06-18",
+    "source": "https://raw.githubusercontent.com/modelcontextprotocol/modelcontextprotocol/aa8ce049f089f92618340190d4ece141f663310d/docs/specification/2025-06-18/server/tools.mdx",
+    "sourceSha256": "6c99216b75dfe0684199508a49f363bcdab9b2a3147eab66baa78561b2bd21b5",
+    "blockIndex": 5,
+    "method": "notifications/tools/list_changed",
+    "message": {
+      "jsonrpc": "2.0",
+      "method": "notifications/tools/list_changed"
+    }
+  },
+  {
+    "revision": "2025-06-18",
+    "source": "https://raw.githubusercontent.com/modelcontextprotocol/modelcontextprotocol/aa8ce049f089f92618340190d4ece141f663310d/docs/specification/2025-06-18/server/resources.mdx",
+    "sourceSha256": "2e5b6dafc9f7a40196064e7ce3d1615c5820f78e663d0d064f1a1a3cfdcf935e",
+    "blockIndex": 4,
+    "method": "resources/list",
+    "message": {
+      "jsonrpc": "2.0",
+      "id": 1,
+      "method": "resources/list",
+      "params": {
+        "cursor": "optional-cursor-value"
+      }
+    }
+  },
+  {
+    "revision": "2025-06-18",
+    "source": "https://raw.githubusercontent.com/modelcontextprotocol/modelcontextprotocol/aa8ce049f089f92618340190d4ece141f663310d/docs/specification/2025-06-18/server/resources.mdx",
+    "sourceSha256": "2e5b6dafc9f7a40196064e7ce3d1615c5820f78e663d0d064f1a1a3cfdcf935e",
+    "blockIndex": 5,
+    "method": "resources/list",
+    "message": {
+      "jsonrpc": "2.0",
+      "id": 1,
+      "result": {
+        "resources": [
+          {
+            "uri": "file:///project/src/main.rs",
+            "name": "main.rs",
+            "title": "Rust Software Application Main File",
+            "description": "Primary application entry point",
+            "mimeType": "text/x-rust"
+          }
+        ],
+        "nextCursor": "next-page-cursor"
+      }
+    }
+  },
+  {
+    "revision": "2025-06-18",
+    "source": "https://raw.githubusercontent.com/modelcontextprotocol/modelcontextprotocol/aa8ce049f089f92618340190d4ece141f663310d/docs/specification/2025-06-18/server/resources.mdx",
+    "sourceSha256": "2e5b6dafc9f7a40196064e7ce3d1615c5820f78e663d0d064f1a1a3cfdcf935e",
+    "blockIndex": 6,
+    "method": "resources/read",
+    "message": {
+      "jsonrpc": "2.0",
+      "id": 2,
+      "method": "resources/read",
+      "params": {
+        "uri": "file:///project/src/main.rs"
+      }
+    }
+  },
+  {
+    "revision": "2025-06-18",
+    "source": "https://raw.githubusercontent.com/modelcontextprotocol/modelcontextprotocol/aa8ce049f089f92618340190d4ece141f663310d/docs/specification/2025-06-18/server/resources.mdx",
+    "sourceSha256": "2e5b6dafc9f7a40196064e7ce3d1615c5820f78e663d0d064f1a1a3cfdcf935e",
+    "blockIndex": 7,
+    "method": "resources/read",
+    "message": {
+      "jsonrpc": "2.0",
+      "id": 2,
+      "result": {
+        "contents": [
+          {
+            "uri": "file:///project/src/main.rs",
+            "mimeType": "text/x-rust",
+            "text": "fn main() {\n    println!(\"Hello world!\");\n}"
+          }
+        ]
+      }
+    }
+  },
+  {
+    "revision": "2025-06-18",
+    "source": "https://raw.githubusercontent.com/modelcontextprotocol/modelcontextprotocol/aa8ce049f089f92618340190d4ece141f663310d/docs/specification/2025-06-18/server/resources.mdx",
+    "sourceSha256": "2e5b6dafc9f7a40196064e7ce3d1615c5820f78e663d0d064f1a1a3cfdcf935e",
+    "blockIndex": 8,
+    "method": "resources/templates/list",
+    "message": {
+      "jsonrpc": "2.0",
+      "id": 3,
+      "method": "resources/templates/list",
+      "params": {
+        "cursor": "optional-cursor-value"
+      }
+    }
+  },
+  {
+    "revision": "2025-06-18",
+    "source": "https://raw.githubusercontent.com/modelcontextprotocol/modelcontextprotocol/aa8ce049f089f92618340190d4ece141f663310d/docs/specification/2025-06-18/server/resources.mdx",
+    "sourceSha256": "2e5b6dafc9f7a40196064e7ce3d1615c5820f78e663d0d064f1a1a3cfdcf935e",
+    "blockIndex": 9,
+    "method": "resources/templates/list",
+    "message": {
+      "jsonrpc": "2.0",
+      "id": 3,
+      "result": {
+        "resourceTemplates": [
+          {
+            "uriTemplate": "file:///{path}",
+            "name": "Project Files",
+            "title": "\ud83d\udcc1 Project Files",
+            "description": "Access files in the project directory",
+            "mimeType": "application/octet-stream"
+          }
+        ],
+        "nextCursor": "next-page-cursor"
+      }
+    }
+  },
+  {
+    "revision": "2025-06-18",
+    "source": "https://raw.githubusercontent.com/modelcontextprotocol/modelcontextprotocol/aa8ce049f089f92618340190d4ece141f663310d/docs/specification/2025-06-18/server/resources.mdx",
+    "sourceSha256": "2e5b6dafc9f7a40196064e7ce3d1615c5820f78e663d0d064f1a1a3cfdcf935e",
+    "blockIndex": 10,
+    "method": "notifications/resources/list_changed",
+    "message": {
+      "jsonrpc": "2.0",
+      "method": "notifications/resources/list_changed"
+    }
+  },
+  {
+    "revision": "2025-06-18",
+    "source": "https://raw.githubusercontent.com/modelcontextprotocol/modelcontextprotocol/aa8ce049f089f92618340190d4ece141f663310d/docs/specification/2025-06-18/server/resources.mdx",
+    "sourceSha256": "2e5b6dafc9f7a40196064e7ce3d1615c5820f78e663d0d064f1a1a3cfdcf935e",
+    "blockIndex": 11,
+    "method": "resources/subscribe",
+    "message": {
+      "jsonrpc": "2.0",
+      "id": 4,
+      "method": "resources/subscribe",
+      "params": {
+        "uri": "file:///project/src/main.rs"
+      }
+    }
+  },
+  {
+    "revision": "2025-06-18",
+    "source": "https://raw.githubusercontent.com/modelcontextprotocol/modelcontextprotocol/aa8ce049f089f92618340190d4ece141f663310d/docs/specification/2025-06-18/server/resources.mdx",
+    "sourceSha256": "2e5b6dafc9f7a40196064e7ce3d1615c5820f78e663d0d064f1a1a3cfdcf935e",
+    "blockIndex": 12,
+    "method": "notifications/resources/updated",
+    "message": {
+      "jsonrpc": "2.0",
+      "method": "notifications/resources/updated",
+      "params": {
+        "uri": "file:///project/src/main.rs"
+      }
+    }
+  },
+  {
+    "revision": "2025-06-18",
+    "source": "https://raw.githubusercontent.com/modelcontextprotocol/modelcontextprotocol/aa8ce049f089f92618340190d4ece141f663310d/docs/specification/2025-06-18/client/sampling.mdx",
+    "sourceSha256": "dc2b3f1fc4c19bf25d2f08e16f422f7b88a8c28fd4344466152210bc84117799",
+    "blockIndex": 1,
+    "method": "sampling/createMessage",
+    "message": {
+      "jsonrpc": "2.0",
+      "id": 1,
+      "method": "sampling/createMessage",
+      "params": {
+        "messages": [
+          {
+            "role": "user",
+            "content": {
+              "type": "text",
+              "text": "What is the capital of France?"
+            }
+          }
+        ],
+        "modelPreferences": {
+          "hints": [
+            {
+              "name": "claude-3-sonnet"
+            }
+          ],
+          "intelligencePriority": 0.8,
+          "speedPriority": 0.5
+        },
+        "systemPrompt": "You are a helpful assistant.",
+        "maxTokens": 100
+      }
+    }
+  },
+  {
+    "revision": "2025-06-18",
+    "source": "https://raw.githubusercontent.com/modelcontextprotocol/modelcontextprotocol/aa8ce049f089f92618340190d4ece141f663310d/docs/specification/2025-06-18/client/sampling.mdx",
+    "sourceSha256": "dc2b3f1fc4c19bf25d2f08e16f422f7b88a8c28fd4344466152210bc84117799",
+    "blockIndex": 2,
+    "method": "sampling/createMessage",
+    "message": {
+      "jsonrpc": "2.0",
+      "id": 1,
+      "result": {
+        "role": "assistant",
+        "content": {
+          "type": "text",
+          "text": "The capital of France is Paris."
+        },
+        "model": "claude-3-sonnet-20240307",
+        "stopReason": "endTurn"
+      }
+    }
+  },
+  {
+    "revision": "2025-06-18",
+    "source": "https://raw.githubusercontent.com/modelcontextprotocol/modelcontextprotocol/aa8ce049f089f92618340190d4ece141f663310d/docs/specification/2025-06-18/client/sampling.mdx",
+    "sourceSha256": "dc2b3f1fc4c19bf25d2f08e16f422f7b88a8c28fd4344466152210bc84117799",
+    "blockIndex": 7,
+    "method": "sampling/createMessage",
+    "message": {
+      "jsonrpc": "2.0",
+      "id": 1,
+      "error": {
+        "code": -1,
+        "message": "User rejected sampling request"
+      }
+    }
+  },
+  {
+    "revision": "2025-11-25",
+    "source": "https://raw.githubusercontent.com/modelcontextprotocol/modelcontextprotocol/aa8ce049f089f92618340190d4ece141f663310d/docs/specification/2025-11-25/basic/lifecycle.mdx",
+    "sourceSha256": "45a6e8b7fb8c96e7b9ba1b0a3c727e8451c1e55bf56bb62f3ab63fddc365b919",
+    "blockIndex": 0,
+    "method": "initialize",
+    "message": {
+      "jsonrpc": "2.0",
+      "id": 1,
+      "method": "initialize",
+      "params": {
+        "protocolVersion": "2025-11-25",
+        "capabilities": {
+          "roots": {
+            "listChanged": true
+          },
+          "sampling": {},
+          "elicitation": {
+            "form": {},
+            "url": {}
+          },
+          "tasks": {
+            "requests": {
+              "elicitation": {
+                "create": {}
+              },
+              "sampling": {
+                "createMessage": {}
+              }
+            }
+          }
+        },
+        "clientInfo": {
+          "name": "ExampleClient",
+          "title": "Example Client Display Name",
+          "version": "1.0.0",
+          "description": "An example MCP client application",
+          "icons": [
+            {
+              "src": "https://example.com/icon.png",
+              "mimeType": "image/png",
+              "sizes": [
+                "48x48"
+              ]
+            }
+          ],
+          "websiteUrl": "https://example.com"
+        }
+      }
+    }
+  },
+  {
+    "revision": "2025-11-25",
+    "source": "https://raw.githubusercontent.com/modelcontextprotocol/modelcontextprotocol/aa8ce049f089f92618340190d4ece141f663310d/docs/specification/2025-11-25/basic/lifecycle.mdx",
+    "sourceSha256": "45a6e8b7fb8c96e7b9ba1b0a3c727e8451c1e55bf56bb62f3ab63fddc365b919",
+    "blockIndex": 1,
+    "method": "initialize",
+    "message": {
+      "jsonrpc": "2.0",
+      "id": 1,
+      "result": {
+        "protocolVersion": "2025-11-25",
+        "capabilities": {
+          "logging": {},
+          "prompts": {
+            "listChanged": true
+          },
+          "resources": {
+            "subscribe": true,
+            "listChanged": true
+          },
+          "tools": {
+            "listChanged": true
+          },
+          "tasks": {
+            "list": {},
+            "cancel": {},
+            "requests": {
+              "tools": {
+                "call": {}
+              }
+            }
+          }
+        },
+        "serverInfo": {
+          "name": "ExampleServer",
+          "title": "Example Server Display Name",
+          "version": "1.0.0",
+          "description": "An example MCP server providing tools and resources",
+          "icons": [
+            {
+              "src": "https://example.com/server-icon.svg",
+              "mimeType": "image/svg+xml",
+              "sizes": [
+                "any"
+              ]
+            }
+          ],
+          "websiteUrl": "https://example.com/server"
+        },
+        "instructions": "Optional instructions for the client"
+      }
+    }
+  },
+  {
+    "revision": "2025-11-25",
+    "source": "https://raw.githubusercontent.com/modelcontextprotocol/modelcontextprotocol/aa8ce049f089f92618340190d4ece141f663310d/docs/specification/2025-11-25/basic/lifecycle.mdx",
+    "sourceSha256": "45a6e8b7fb8c96e7b9ba1b0a3c727e8451c1e55bf56bb62f3ab63fddc365b919",
+    "blockIndex": 2,
+    "method": "notifications/initialized",
+    "message": {
+      "jsonrpc": "2.0",
+      "method": "notifications/initialized"
+    }
+  },
+  {
+    "revision": "2025-11-25",
+    "source": "https://raw.githubusercontent.com/modelcontextprotocol/modelcontextprotocol/aa8ce049f089f92618340190d4ece141f663310d/docs/specification/2025-11-25/basic/lifecycle.mdx",
+    "sourceSha256": "45a6e8b7fb8c96e7b9ba1b0a3c727e8451c1e55bf56bb62f3ab63fddc365b919",
+    "blockIndex": 3,
+    "method": "initialize",
+    "message": {
+      "jsonrpc": "2.0",
+      "id": 1,
+      "error": {
+        "code": -32602,
+        "message": "Unsupported protocol version",
+        "data": {
+          "supported": [
+            "2024-11-05"
+          ],
+          "requested": "1.0.0"
+        }
+      }
+    }
+  },
+  {
+    "revision": "2025-11-25",
+    "source": "https://raw.githubusercontent.com/modelcontextprotocol/modelcontextprotocol/aa8ce049f089f92618340190d4ece141f663310d/docs/specification/2025-11-25/server/tools.mdx",
+    "sourceSha256": "39e56ad4f3d1ff1cb28ee62283e02947cd97db8aa6190782d629f4562a0f354c",
+    "blockIndex": 1,
+    "method": "tools/list",
+    "message": {
+      "jsonrpc": "2.0",
+      "id": 1,
+      "method": "tools/list",
+      "params": {
+        "cursor": "optional-cursor-value"
+      }
+    }
+  },
+  {
+    "revision": "2025-11-25",
+    "source": "https://raw.githubusercontent.com/modelcontextprotocol/modelcontextprotocol/aa8ce049f089f92618340190d4ece141f663310d/docs/specification/2025-11-25/server/tools.mdx",
+    "sourceSha256": "39e56ad4f3d1ff1cb28ee62283e02947cd97db8aa6190782d629f4562a0f354c",
+    "blockIndex": 2,
+    "method": "tools/list",
+    "message": {
+      "jsonrpc": "2.0",
+      "id": 1,
+      "result": {
+        "tools": [
+          {
+            "name": "get_weather",
+            "title": "Weather Information Provider",
+            "description": "Get current weather information for a location",
+            "inputSchema": {
+              "type": "object",
+              "properties": {
+                "location": {
+                  "type": "string",
+                  "description": "City name or zip code"
+                }
+              },
+              "required": [
+                "location"
+              ]
+            },
+            "icons": [
+              {
+                "src": "https://example.com/weather-icon.png",
+                "mimeType": "image/png",
+                "sizes": [
+                  "48x48"
+                ]
+              }
+            ],
+            "execution": {
+              "taskSupport": "optional"
+            }
+          }
+        ],
+        "nextCursor": "next-page-cursor"
+      }
+    }
+  },
+  {
+    "revision": "2025-11-25",
+    "source": "https://raw.githubusercontent.com/modelcontextprotocol/modelcontextprotocol/aa8ce049f089f92618340190d4ece141f663310d/docs/specification/2025-11-25/server/tools.mdx",
+    "sourceSha256": "39e56ad4f3d1ff1cb28ee62283e02947cd97db8aa6190782d629f4562a0f354c",
+    "blockIndex": 3,
+    "method": "tools/call",
+    "message": {
+      "jsonrpc": "2.0",
+      "id": 2,
+      "method": "tools/call",
+      "params": {
+        "name": "get_weather",
+        "arguments": {
+          "location": "New York"
+        }
+      }
+    }
+  },
+  {
+    "revision": "2025-11-25",
+    "source": "https://raw.githubusercontent.com/modelcontextprotocol/modelcontextprotocol/aa8ce049f089f92618340190d4ece141f663310d/docs/specification/2025-11-25/server/tools.mdx",
+    "sourceSha256": "39e56ad4f3d1ff1cb28ee62283e02947cd97db8aa6190782d629f4562a0f354c",
+    "blockIndex": 4,
+    "method": "tools/call",
+    "message": {
+      "jsonrpc": "2.0",
+      "id": 2,
+      "result": {
+        "content": [
+          {
+            "type": "text",
+            "text": "Current weather in New York:\nTemperature: 72\u00b0F\nConditions: Partly cloudy"
+          }
+        ],
+        "isError": false
+      }
+    }
+  },
+  {
+    "revision": "2025-11-25",
+    "source": "https://raw.githubusercontent.com/modelcontextprotocol/modelcontextprotocol/aa8ce049f089f92618340190d4ece141f663310d/docs/specification/2025-11-25/server/tools.mdx",
+    "sourceSha256": "39e56ad4f3d1ff1cb28ee62283e02947cd97db8aa6190782d629f4562a0f354c",
+    "blockIndex": 5,
+    "method": "notifications/tools/list_changed",
+    "message": {
+      "jsonrpc": "2.0",
+      "method": "notifications/tools/list_changed"
+    }
+  },
+  {
+    "revision": "2025-11-25",
+    "source": "https://raw.githubusercontent.com/modelcontextprotocol/modelcontextprotocol/aa8ce049f089f92618340190d4ece141f663310d/docs/specification/2025-11-25/server/resources.mdx",
+    "sourceSha256": "9c1aa45ee31c1e0f097c5d1f6316e796f0ee2d393fbc960be400e0f77cf82843",
+    "blockIndex": 4,
+    "method": "resources/list",
+    "message": {
+      "jsonrpc": "2.0",
+      "id": 1,
+      "method": "resources/list",
+      "params": {
+        "cursor": "optional-cursor-value"
+      }
+    }
+  },
+  {
+    "revision": "2025-11-25",
+    "source": "https://raw.githubusercontent.com/modelcontextprotocol/modelcontextprotocol/aa8ce049f089f92618340190d4ece141f663310d/docs/specification/2025-11-25/server/resources.mdx",
+    "sourceSha256": "9c1aa45ee31c1e0f097c5d1f6316e796f0ee2d393fbc960be400e0f77cf82843",
+    "blockIndex": 5,
+    "method": "resources/list",
+    "message": {
+      "jsonrpc": "2.0",
+      "id": 1,
+      "result": {
+        "resources": [
+          {
+            "uri": "file:///project/src/main.rs",
+            "name": "main.rs",
+            "title": "Rust Software Application Main File",
+            "description": "Primary application entry point",
+            "mimeType": "text/x-rust",
+            "icons": [
+              {
+                "src": "https://example.com/rust-file-icon.png",
+                "mimeType": "image/png",
+                "sizes": [
+                  "48x48"
+                ]
+              }
+            ]
+          }
+        ],
+        "nextCursor": "next-page-cursor"
+      }
+    }
+  },
+  {
+    "revision": "2025-11-25",
+    "source": "https://raw.githubusercontent.com/modelcontextprotocol/modelcontextprotocol/aa8ce049f089f92618340190d4ece141f663310d/docs/specification/2025-11-25/server/resources.mdx",
+    "sourceSha256": "9c1aa45ee31c1e0f097c5d1f6316e796f0ee2d393fbc960be400e0f77cf82843",
+    "blockIndex": 6,
+    "method": "resources/read",
+    "message": {
+      "jsonrpc": "2.0",
+      "id": 2,
+      "method": "resources/read",
+      "params": {
+        "uri": "file:///project/src/main.rs"
+      }
+    }
+  },
+  {
+    "revision": "2025-11-25",
+    "source": "https://raw.githubusercontent.com/modelcontextprotocol/modelcontextprotocol/aa8ce049f089f92618340190d4ece141f663310d/docs/specification/2025-11-25/server/resources.mdx",
+    "sourceSha256": "9c1aa45ee31c1e0f097c5d1f6316e796f0ee2d393fbc960be400e0f77cf82843",
+    "blockIndex": 7,
+    "method": "resources/read",
+    "message": {
+      "jsonrpc": "2.0",
+      "id": 2,
+      "result": {
+        "contents": [
+          {
+            "uri": "file:///project/src/main.rs",
+            "mimeType": "text/x-rust",
+            "text": "fn main() {\n    println!(\"Hello world!\");\n}"
+          }
+        ]
+      }
+    }
+  },
+  {
+    "revision": "2025-11-25",
+    "source": "https://raw.githubusercontent.com/modelcontextprotocol/modelcontextprotocol/aa8ce049f089f92618340190d4ece141f663310d/docs/specification/2025-11-25/server/resources.mdx",
+    "sourceSha256": "9c1aa45ee31c1e0f097c5d1f6316e796f0ee2d393fbc960be400e0f77cf82843",
+    "blockIndex": 8,
+    "method": "resources/templates/list",
+    "message": {
+      "jsonrpc": "2.0",
+      "id": 3,
+      "method": "resources/templates/list"
+    }
+  },
+  {
+    "revision": "2025-11-25",
+    "source": "https://raw.githubusercontent.com/modelcontextprotocol/modelcontextprotocol/aa8ce049f089f92618340190d4ece141f663310d/docs/specification/2025-11-25/server/resources.mdx",
+    "sourceSha256": "9c1aa45ee31c1e0f097c5d1f6316e796f0ee2d393fbc960be400e0f77cf82843",
+    "blockIndex": 9,
+    "method": "resources/templates/list",
+    "message": {
+      "jsonrpc": "2.0",
+      "id": 3,
+      "result": {
+        "resourceTemplates": [
+          {
+            "uriTemplate": "file:///{path}",
+            "name": "Project Files",
+            "title": "\ud83d\udcc1 Project Files",
+            "description": "Access files in the project directory",
+            "mimeType": "application/octet-stream",
+            "icons": [
+              {
+                "src": "https://example.com/folder-icon.png",
+                "mimeType": "image/png",
+                "sizes": [
+                  "48x48"
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    }
+  },
+  {
+    "revision": "2025-11-25",
+    "source": "https://raw.githubusercontent.com/modelcontextprotocol/modelcontextprotocol/aa8ce049f089f92618340190d4ece141f663310d/docs/specification/2025-11-25/server/resources.mdx",
+    "sourceSha256": "9c1aa45ee31c1e0f097c5d1f6316e796f0ee2d393fbc960be400e0f77cf82843",
+    "blockIndex": 10,
+    "method": "notifications/resources/list_changed",
+    "message": {
+      "jsonrpc": "2.0",
+      "method": "notifications/resources/list_changed"
+    }
+  },
+  {
+    "revision": "2025-11-25",
+    "source": "https://raw.githubusercontent.com/modelcontextprotocol/modelcontextprotocol/aa8ce049f089f92618340190d4ece141f663310d/docs/specification/2025-11-25/server/resources.mdx",
+    "sourceSha256": "9c1aa45ee31c1e0f097c5d1f6316e796f0ee2d393fbc960be400e0f77cf82843",
+    "blockIndex": 11,
+    "method": "resources/subscribe",
+    "message": {
+      "jsonrpc": "2.0",
+      "id": 4,
+      "method": "resources/subscribe",
+      "params": {
+        "uri": "file:///project/src/main.rs"
+      }
+    }
+  },
+  {
+    "revision": "2025-11-25",
+    "source": "https://raw.githubusercontent.com/modelcontextprotocol/modelcontextprotocol/aa8ce049f089f92618340190d4ece141f663310d/docs/specification/2025-11-25/server/resources.mdx",
+    "sourceSha256": "9c1aa45ee31c1e0f097c5d1f6316e796f0ee2d393fbc960be400e0f77cf82843",
+    "blockIndex": 12,
+    "method": "notifications/resources/updated",
+    "message": {
+      "jsonrpc": "2.0",
+      "method": "notifications/resources/updated",
+      "params": {
+        "uri": "file:///project/src/main.rs"
+      }
+    }
+  },
+  {
+    "revision": "2025-11-25",
+    "source": "https://raw.githubusercontent.com/modelcontextprotocol/modelcontextprotocol/aa8ce049f089f92618340190d4ece141f663310d/docs/specification/2025-11-25/client/sampling.mdx",
+    "sourceSha256": "4983c3deda69d135e7e756f9e51d62fb1174b0ad6176eed5a40d0f12bfaf0d15",
+    "blockIndex": 3,
+    "method": "sampling/createMessage",
+    "message": {
+      "jsonrpc": "2.0",
+      "id": 1,
+      "method": "sampling/createMessage",
+      "params": {
+        "messages": [
+          {
+            "role": "user",
+            "content": {
+              "type": "text",
+              "text": "What is the capital of France?"
+            }
+          }
+        ],
+        "modelPreferences": {
+          "hints": [
+            {
+              "name": "claude-3-sonnet"
+            }
+          ],
+          "intelligencePriority": 0.8,
+          "speedPriority": 0.5
+        },
+        "systemPrompt": "You are a helpful assistant.",
+        "maxTokens": 100
+      }
+    }
+  },
+  {
+    "revision": "2025-11-25",
+    "source": "https://raw.githubusercontent.com/modelcontextprotocol/modelcontextprotocol/aa8ce049f089f92618340190d4ece141f663310d/docs/specification/2025-11-25/client/sampling.mdx",
+    "sourceSha256": "4983c3deda69d135e7e756f9e51d62fb1174b0ad6176eed5a40d0f12bfaf0d15",
+    "blockIndex": 4,
+    "method": "sampling/createMessage",
+    "message": {
+      "jsonrpc": "2.0",
+      "id": 1,
+      "result": {
+        "role": "assistant",
+        "content": {
+          "type": "text",
+          "text": "The capital of France is Paris."
+        },
+        "model": "claude-3-sonnet-20240307",
+        "stopReason": "endTurn"
+      }
+    }
+  },
+  {
+    "revision": "2025-11-25",
+    "source": "https://raw.githubusercontent.com/modelcontextprotocol/modelcontextprotocol/aa8ce049f089f92618340190d4ece141f663310d/docs/specification/2025-11-25/client/sampling.mdx",
+    "sourceSha256": "4983c3deda69d135e7e756f9e51d62fb1174b0ad6176eed5a40d0f12bfaf0d15",
+    "blockIndex": 5,
+    "method": "sampling/createMessage",
+    "message": {
+      "jsonrpc": "2.0",
+      "id": 1,
+      "method": "sampling/createMessage",
+      "params": {
+        "messages": [
+          {
+            "role": "user",
+            "content": {
+              "type": "text",
+              "text": "What's the weather like in Paris and London?"
+            }
+          }
+        ],
+        "tools": [
+          {
+            "name": "get_weather",
+            "description": "Get current weather for a city",
+            "inputSchema": {
+              "type": "object",
+              "properties": {
+                "city": {
+                  "type": "string",
+                  "description": "City name"
+                }
+              },
+              "required": [
+                "city"
+              ]
+            }
+          }
+        ],
+        "toolChoice": {
+          "mode": "auto"
+        },
+        "maxTokens": 1000
+      }
+    }
+  },
+  {
+    "revision": "2025-11-25",
+    "source": "https://raw.githubusercontent.com/modelcontextprotocol/modelcontextprotocol/aa8ce049f089f92618340190d4ece141f663310d/docs/specification/2025-11-25/client/sampling.mdx",
+    "sourceSha256": "4983c3deda69d135e7e756f9e51d62fb1174b0ad6176eed5a40d0f12bfaf0d15",
+    "blockIndex": 6,
+    "method": "sampling/createMessage",
+    "message": {
+      "jsonrpc": "2.0",
+      "id": 1,
+      "result": {
+        "role": "assistant",
+        "content": [
+          {
+            "type": "tool_use",
+            "id": "call_abc123",
+            "name": "get_weather",
+            "input": {
+              "city": "Paris"
+            }
+          },
+          {
+            "type": "tool_use",
+            "id": "call_def456",
+            "name": "get_weather",
+            "input": {
+              "city": "London"
+            }
+          }
+        ],
+        "model": "claude-3-sonnet-20240307",
+        "stopReason": "toolUse"
+      }
+    }
+  },
+  {
+    "revision": "2025-11-25",
+    "source": "https://raw.githubusercontent.com/modelcontextprotocol/modelcontextprotocol/aa8ce049f089f92618340190d4ece141f663310d/docs/specification/2025-11-25/client/sampling.mdx",
+    "sourceSha256": "4983c3deda69d135e7e756f9e51d62fb1174b0ad6176eed5a40d0f12bfaf0d15",
+    "blockIndex": 7,
+    "method": "sampling/createMessage",
+    "message": {
+      "jsonrpc": "2.0",
+      "id": 2,
+      "method": "sampling/createMessage",
+      "params": {
+        "messages": [
+          {
+            "role": "user",
+            "content": {
+              "type": "text",
+              "text": "What's the weather like in Paris and London?"
+            }
+          },
+          {
+            "role": "assistant",
+            "content": [
+              {
+                "type": "tool_use",
+                "id": "call_abc123",
+                "name": "get_weather",
+                "input": {
+                  "city": "Paris"
+                }
+              },
+              {
+                "type": "tool_use",
+                "id": "call_def456",
+                "name": "get_weather",
+                "input": {
+                  "city": "London"
+                }
+              }
+            ]
+          },
+          {
+            "role": "user",
+            "content": [
+              {
+                "type": "tool_result",
+                "toolUseId": "call_abc123",
+                "content": [
+                  {
+                    "type": "text",
+                    "text": "Weather in Paris: 18\u00b0C, partly cloudy"
+                  }
+                ]
+              },
+              {
+                "type": "tool_result",
+                "toolUseId": "call_def456",
+                "content": [
+                  {
+                    "type": "text",
+                    "text": "Weather in London: 15\u00b0C, rainy"
+                  }
+                ]
+              }
+            ]
+          }
+        ],
+        "tools": [
+          {
+            "name": "get_weather",
+            "description": "Get current weather for a city",
+            "inputSchema": {
+              "type": "object",
+              "properties": {
+                "city": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "city"
+              ]
+            }
+          }
+        ],
+        "maxTokens": 1000
+      }
+    }
+  },
+  {
+    "revision": "2025-11-25",
+    "source": "https://raw.githubusercontent.com/modelcontextprotocol/modelcontextprotocol/aa8ce049f089f92618340190d4ece141f663310d/docs/specification/2025-11-25/client/sampling.mdx",
+    "sourceSha256": "4983c3deda69d135e7e756f9e51d62fb1174b0ad6176eed5a40d0f12bfaf0d15",
+    "blockIndex": 8,
+    "method": "sampling/createMessage",
+    "message": {
+      "jsonrpc": "2.0",
+      "id": 2,
+      "result": {
+        "role": "assistant",
+        "content": {
+          "type": "text",
+          "text": "Based on the current weather data:\n\n- **Paris**: 18\u00b0C and partly cloudy - quite pleasant!\n- **London**: 15\u00b0C and rainy - you'll want an umbrella.\n\nParis has slightly warmer and drier conditions today."
+        },
+        "model": "claude-3-sonnet-20240307",
+        "stopReason": "endTurn"
+      }
+    }
+  }
+]

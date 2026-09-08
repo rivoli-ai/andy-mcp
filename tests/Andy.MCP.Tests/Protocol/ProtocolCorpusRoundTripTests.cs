@@ -101,8 +101,8 @@ public class ProtocolCorpusRoundTripTests
         """;
 
         var el = RoundTrip<CreateMessageRequest>(json);
-        // Scalar content normalizes to a one-element array on the wire.
-        Assert.Equal(JsonValueKind.Array, el.GetProperty("messages")[0].GetProperty("content").ValueKind);
+        // Singleton sampling content remains scalar for reference SDK compatibility.
+        Assert.Equal(JsonValueKind.Object, el.GetProperty("messages")[0].GetProperty("content").ValueKind);
         Assert.Equal("auto", el.GetProperty("toolChoice").GetProperty("mode").GetString());
         Assert.Equal("calc", el.GetProperty("tools")[0].GetProperty("name").GetString());
         Assert.Equal("s1", el.GetProperty("_meta").GetProperty("vendor/session").GetString());

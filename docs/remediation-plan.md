@@ -37,11 +37,11 @@ P3 = experimental features, ecosystem integrations, and long-term full-complianc
   - [x] Check sampling/elicitation sub-capabilities and expose roots/URL completion notifications
   - [x] Complete safe extension APIs, per-call controls and explicit pagination
   - [x] Complete remaining protocol shape validation with #41
-- [ ] #50 Conformance gates and coverage
+- [x] #50 Conformance gates and coverage
 - [ ] #51 Evidence-backed documentation
 - [x] #71 URI-template resolution
 - [x] #73 SSE stream closure and polling
-- [ ] #74 Official-schema corpus and independent client/server interop
+- [x] #74 Official-schema corpus and independent client/server interop
 - [x] #75 Attribute schema generation (PR96; merged-state 769 tests passed)
 
 ## P3
@@ -108,3 +108,8 @@ round trips. Runtime official-schema checks protect standard requests, results a
 in both directions. Invalid parameters never reach handlers; invalid handler results become RPC
 errors. Metadata order and optional tool-choice defaults are corrected; 2024 completion APIs
 no longer require a capability flag absent from that revision.
+
+2026-09-08: added66 official examples from immutable upstream sources, mandatory pinned SDK
+client/server interoperability over stdio and HTTP JSON/SSE, and per-surface line/branch
+coverage gates. Independent tests verify nested sampling and prompted scalar singleton output
+for reference-SDK compatibility. The CI gate rejects missing prerequisites and reports.
