@@ -368,6 +368,7 @@ public sealed class McpServer : IAsyncDisposable
     {
         if (!_inflight.Run(request.Id, loopCt, async ct =>
         {
+            using var scope = (_transport as IRequestContextTransport)?.EnterRequestScope(request.Id);
             try
             {
                 var response = await HandleRequestAsync(request, ct);
@@ -380,6 +381,7 @@ public sealed class McpServer : IAsyncDisposable
 
     private async Task HandleAndSendAsync(JsonRpcRequest request, CancellationToken ct)
     {
+        using var scope = (_transport as IRequestContextTransport)?.EnterRequestScope(request.Id);
         var response = await HandleRequestAsync(request, ct);
         await SendMessageAsync(response, ct);
     }
