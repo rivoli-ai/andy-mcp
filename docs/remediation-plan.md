@@ -47,6 +47,10 @@ P3 = experimental features, ecosystem integrations, and long-term full-complianc
 ## P3
 #19, #20, #21, #30: optional ecosystem integration.
 #49, #72: experimental task lifecycle.
+
+- [x] Enforce terminal-state immutability, exact TTL expiry and detached failed-tool payload retention.
+- [ ] Complete blocking outcome retrieval, cancellation propagation and related-task input routing.
+- [ ] Verify task capability negotiation and durable ownership in both directions.
 #39, #68: full-compliance epics; remain open until all children and final gates pass.
 
 ## Completion record
@@ -119,3 +123,9 @@ claims/type counts with revision-specific evidence, corrected fail-closed securi
 documented migration/host responsibilities and experimental limits, and compiled/executed
 the OAuth discovery/DCR example in .NET tests. Phase7/8 full-compliance epics remain open
 with P3 tasks and ecosystem work; this completes stable remediation, not every epic child.
+
+2026-09-08: task-store transitions now reject terminal writes and repeated cancellation.
+TTL boundaries apply to reads and writes, UTC timestamps normalize offset clocks, and
+failed tool payloads retain their metadata independently of caller-owned JSON documents.
+Transition-matrix and concurrent cancellation/completion tests cover these invariants;
+#49/#72 remain open for end-to-end lifecycle work.

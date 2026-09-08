@@ -20,10 +20,10 @@ public interface ITaskStore
     /// <summary>List the non-expired tasks owned by <paramref name="ownerKey"/>.</summary>
     IReadOnlyList<McpTask> List(string? ownerKey);
 
-    /// <summary>Cancel an owned task, returning its updated state, or null if not found/authorized.</summary>
+    /// <summary>Cancel an owned task, returning its updated state, or null if missing, unauthorized, expired, or already terminal.</summary>
     McpTask? Cancel(string taskId, string? ownerKey);
 
-    /// <summary>Store the result payload for a task and mark it completed (server-internal).</summary>
+    /// <summary>Atomically retain an object result and finish a nonterminal task; tool results with isError=true mark it failed.</summary>
     bool SetResult(string taskId, JsonElement result);
 
     /// <summary>Mark a task failed with an optional message (server-internal).</summary>
@@ -32,7 +32,7 @@ public interface ITaskStore
     /// <summary>Update a task's status (server-internal).</summary>
     bool UpdateStatus(string taskId, McpTaskStatus status, string? statusMessage = null);
 
-    /// <summary>Retrieve a completed task's result payload for an owned task.</summary>
+    /// <summary>Retrieve a retained result payload for an owned task, including failed tool results.</summary>
     JsonElement? GetResult(string taskId, string? ownerKey);
 }
 
@@ -60,6 +60,7 @@ public sealed class InMemoryTaskStore : ITaskStore
 
     public McpTask Create(TaskMetadata? metadata, string? ownerKey)
     {
+        if (metadata?.Ttl is < 0) throw new ArgumentOutOfRangeException(nameof(metadata), "Task TTL must be nonnegative.");
         var now = _clock();
         var timestamp = Iso(now);
         var task = new McpTask
@@ -105,9 +106,9 @@ public sealed class InMemoryTaskStore : ITaskStore
             if (!TryGetAuthorized(taskId, ownerKey, out var entry))
                 return null;
 
-            // Terminal tasks are not re-cancelled.
+            // Cancellation of any terminal state is invalid, including repeated cancellation.
             if (entry.Task.Status is McpTaskStatus.Completed or McpTaskStatus.Failed or McpTaskStatus.Cancelled)
-                return entry.Task;
+                return null;
 
             entry.Task = Touch(entry.Task) with { Status = McpTaskStatus.Cancelled };
             return entry.Task;
@@ -118,10 +119,13 @@ public sealed class InMemoryTaskStore : ITaskStore
     {
         lock (_sync)
         {
-            if (!_tasks.TryGetValue(taskId, out var entry))
+            PurgeExpired();
+            if (!_tasks.TryGetValue(taskId, out var entry) || IsTerminal(entry.Task.Status))
                 return false;
-            entry.Result = result;
-            entry.Task = Touch(entry.Task) with { Status = McpTaskStatus.Completed };
+            if (result.ValueKind != JsonValueKind.Object) throw new ArgumentException("Task results must be JSON objects.", nameof(result));
+            entry.Result = result.Clone();
+            var failed = result.TryGetProperty("isError", out var isError) && isError.ValueKind == JsonValueKind.True;
+            entry.Task = Touch(entry.Task) with { Status = failed ? McpTaskStatus.Failed : McpTaskStatus.Completed };
             return true;
         }
     }
@@ -133,7 +137,9 @@ public sealed class InMemoryTaskStore : ITaskStore
     {
         lock (_sync)
         {
-            if (!_tasks.TryGetValue(taskId, out var entry))
+            PurgeExpired();
+            if (!Enum.IsDefined(status)) throw new ArgumentOutOfRangeException(nameof(status));
+            if (!_tasks.TryGetValue(taskId, out var entry) || IsTerminal(entry.Task.Status))
                 return false;
             entry.Task = Touch(entry.Task) with { Status = status, StatusMessage = statusMessage ?? entry.Task.StatusMessage };
             return true;
@@ -169,16 +175,18 @@ public sealed class InMemoryTaskStore : ITaskStore
     {
         var now = _clock();
         var expired = _tasks
-            .Where(kvp => kvp.Value.Task.Ttl is { } ttl && now - kvp.Value.CreatedAt > TimeSpan.FromMilliseconds(ttl))
+            .Where(kvp => kvp.Value.Task.Ttl is { } ttl && (now - kvp.Value.CreatedAt).TotalMilliseconds >= ttl)
             .Select(kvp => kvp.Key)
             .ToList();
         foreach (var key in expired)
             _tasks.Remove(key);
     }
 
+    private static bool IsTerminal(McpTaskStatus status) => status is McpTaskStatus.Completed or McpTaskStatus.Failed or McpTaskStatus.Cancelled;
+
     private McpTask Touch(McpTask task) => task with { LastUpdatedAt = Iso(_clock()) };
 
-    private static string Iso(DateTimeOffset time) => time.ToString("yyyy-MM-ddTHH:mm:ss.fffZ");
+    private static string Iso(DateTimeOffset time) => time.UtcDateTime.ToString("yyyy-MM-ddTHH:mm:ss.fffZ", System.Globalization.CultureInfo.InvariantCulture);
 
     private static string GenerateTaskId()
     {
