@@ -22,7 +22,7 @@ P3 = experimental features, ecosystem integrations, and long-term full-complianc
   - [ ] Complete remaining typed parameter/union and high-level sub-capability checks
 - [x] #43 Cancellation, progress and timeout cleanup
 
-- [ ] #44 Transport compliance and process shutdown
+- [x] #44 Transport compliance and process shutdown
   - [x] Stdio EOF/SIGTERM/kill escalation and bounded GET SSE polling
   - [x] POST SSE cursor isolation, resumption and terminal-response completion
   - [x] Bound HTTP queues/replay and state the three supported HTTP revisions
@@ -89,3 +89,7 @@ expired in-progress POST SSE result reports unknown outcome without repeating th
 2026-09-08: optional server POST SSE routes nested sampling and notifications to their originating
 stream, resumes across polling without reposting tools, and reserves space for terminal responses.
 Abandoned handlers release their POST state; global GET streams cannot claim POST-owned events.
+
+2026-09-08: final transport audit exercises every supported HTTP revision against a real server
+in JSON and POST SSE modes. Stdio uses explicit UTF-8 and LF framing in both directions, with
+literal Unicode, escaped-newline and invalid-byte tests. HTTP legacy fallback is explicitly unsupported.

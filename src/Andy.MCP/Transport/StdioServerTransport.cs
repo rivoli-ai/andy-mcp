@@ -27,6 +27,7 @@ public sealed class StdioServerTransport : IServerTransport
     private CancellationTokenSource? _cts;
     private volatile bool _connected;
     private volatile bool _disposed;
+    private readonly bool _ownsTextWrappers;
 
     public bool IsConnected => _connected;
     public event EventHandler<TransportDisconnectedEventArgs>? Disconnected;
@@ -35,7 +36,9 @@ public sealed class StdioServerTransport : IServerTransport
     /// Create a stdio server transport using the real Console stdin/stdout.
     /// </summary>
     public StdioServerTransport(ILogger? logger = null)
-        : this(Console.In, Console.Out, logger) { }
+        : this(StdioFraming.CreateReader(Console.OpenStandardInput()),
+            StdioFraming.CreateWriter(Console.OpenStandardOutput()), logger)
+    { _ownsTextWrappers = true; }
 
     /// <summary>
     /// Create a stdio server transport with custom input/output streams (useful for testing).
@@ -141,8 +144,7 @@ public sealed class StdioServerTransport : IServerTransport
             {
                 // Terminate with LF explicitly: WriteLineAsync would emit the platform newline
                 // (CRLF on Windows), but stdio JSON-RPC framing requires "\n".
-                await _output.WriteAsync((json + '\n').AsMemory(), ct);
-                await _output.FlushAsync(ct);
+                await StdioFraming.WriteAsync(_output, json, ct);
             }
         }
         catch (OperationCanceledException) { }
@@ -165,5 +167,6 @@ public sealed class StdioServerTransport : IServerTransport
         try { if (_writeLoop is not null) await _writeLoop.ConfigureAwait(false); } catch { }
 
         _cts?.Dispose();
+        if (_ownsTextWrappers) { _input.Dispose(); _output.Dispose(); }
     }
 }
