@@ -21,7 +21,7 @@ jobs:
         dotnet-version: 10.0.x
 
     - name: Restore dependencies
-      run: dotnet restore
+      run: dotnet restore --locked-mode
 
     - name: Build
       run: dotnet build --configuration Release --no-restore
@@ -61,7 +61,7 @@ jobs:
       run: timeout 120 npx -y @modelcontextprotocol/server-everything stdio </dev/null || true
 
     - name: Build
-      run: dotnet build --configuration Release
+      run: dotnet build --configuration Release -p:RestoreLockedMode=true
 
     - name: Interop tests
       run: dotnet test --configuration Release --no-build --framework net10.0 --filter "Category=Interop"
@@ -77,7 +77,7 @@ jobs:
         dotnet-version: 10.0.x
 
     - name: Restore dependencies
-      run: dotnet restore
+      run: dotnet restore --locked-mode
 
     - name: Fail on vulnerable dependencies
       shell: bash

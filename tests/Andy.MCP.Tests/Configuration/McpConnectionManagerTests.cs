@@ -88,25 +88,25 @@ public class McpConnectionManagerTests
     }
 
     [Fact]
-    public void CreateTransport_UnknownType_Throws()
+    public async Task CreateTransport_UnknownType_Throws()
     {
         var options = new McpClientOptions();
         options.Servers.Add(new McpServerConfig { Name = "bad", Transport = "websocket" });
 
-        var manager = new McpConnectionManager(options);
+        await using var manager = new McpConnectionManager(options);
 
-        // ConnectAll will try to create the transport and fail
-        Assert.ThrowsAsync<InvalidOperationException>(() => manager.ConnectAllAsync());
+        // AddServer propagates invalid configuration; ConnectAll logs and continues.
+        await Assert.ThrowsAsync<InvalidOperationException>(() => manager.AddServerAsync(options.Servers[0]));
     }
 
     [Fact]
-    public void CreateTransport_StdioWithoutCommand_Throws()
+    public async Task CreateTransport_StdioWithoutCommand_Throws()
     {
         var options = new McpClientOptions();
         options.Servers.Add(new McpServerConfig { Name = "nocommand", Transport = "stdio" });
 
-        var manager = new McpConnectionManager(options);
+        await using var manager = new McpConnectionManager(options);
 
-        Assert.ThrowsAsync<InvalidOperationException>(() => manager.ConnectAllAsync());
+        await Assert.ThrowsAsync<InvalidOperationException>(() => manager.AddServerAsync(options.Servers[0]));
     }
 }
