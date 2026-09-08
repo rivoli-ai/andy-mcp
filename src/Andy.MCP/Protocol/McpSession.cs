@@ -131,7 +131,8 @@ public sealed class McpSession
         "resources" => ServerCapabilities?.Resources is not null,
         "prompts" => ServerCapabilities?.Prompts is not null,
         "logging" => ServerCapabilities?.Logging is not null,
-        "completions" => ServerCapabilities?.Completions is not null,
+        // The 2024 revision has completion requests but no capability flag.
+        "completions" => Revision == ProtocolRevision.V2024_11_05 || ServerCapabilities?.Completions is not null,
         _ => ServerCapabilities?.Experimental?.ContainsKey(name) == true
     };
 

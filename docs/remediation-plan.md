@@ -17,13 +17,13 @@ P3 = experimental features, ecosystem integrations, and long-term full-complianc
 
 
 ## P2
-- [ ] #41 Complete revision-aware wire models
+- [x] #41 Complete revision-aware wire models
   - [x] Preserve extension fields, add capability/tool execution metadata, and correct older sampling serialization
   - [x] Add remaining stable typed parameters, enum builders and legacy metadata/elicitation conversion
-  - [ ] Finish protocol shape validation and complete official-type coverage mapping
+  - [x] Finish protocol shape validation and complete official-type coverage mapping
 - [x] #43 Cancellation, progress and timeout cleanup
 
-- [ ] #44 Transport compliance and process shutdown (reopened for the #41 revision audit)
+- [x] #44 Transport compliance and process shutdown (revision audit verified on merged 4a21813)
   - [x] Stdio EOF/SIGTERM/kill escalation and bounded GET SSE polling
   - [x] POST SSE cursor isolation, resumption and terminal-response completion
   - [x] Bound HTTP queues/replay and state the two supported HTTP revisions
@@ -32,11 +32,11 @@ P3 = experimental features, ecosystem integrations, and long-term full-complianc
 - [x] #47 Full JSON Schema validation and registration surface
   - [x] Complete 2020-12 runtime/meta-schema validation with network fetches disabled
   - [x] Complete registration metadata fields
-- [ ] #48 Complete high-level client/server operations
+- [x] #48 Complete high-level client/server operations
   - [x] Freeze registration, enforce prompt arguments and list-change capabilities, and support multi-content static resources
   - [x] Check sampling/elicitation sub-capabilities and expose roots/URL completion notifications
   - [x] Complete safe extension APIs, per-call controls and explicit pagination
-  - [ ] Complete remaining protocol shape validation with #41
+  - [x] Complete remaining protocol shape validation with #41
 - [ ] #50 Conformance gates and coverage
 - [ ] #51 Evidence-backed documentation
 - [x] #71 URI-template resolution
@@ -102,3 +102,9 @@ literal Unicode, escaped-newline and invalid-byte tests. HTTP legacy fallback is
 2026-09-08: the full schema audit exposed mandatory batching in 2025-03-26. Since receiving
 batches is not implemented, remove that revision from client acceptance and server negotiation,
 retain its descriptor for schema conversion, and correct the transport matrix. Reverify #44 on merge.
+
+2026-09-08: all negotiated schema definitions map to public models and pass 1,002 schema-derived
+round trips. Runtime official-schema checks protect standard requests, results and notifications
+in both directions. Invalid parameters never reach handlers; invalid handler results become RPC
+errors. Metadata order and optional tool-choice defaults are corrected; 2024 completion APIs
+no longer require a capability flag absent from that revision.

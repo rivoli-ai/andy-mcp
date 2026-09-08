@@ -203,6 +203,8 @@ See the `docs/` directory:
 
 ## Project status
 
+**2026-09-08 schema audit:** 1,002 schema-derived fixtures cover every definition in the three negotiated revisions. Standard message shapes are checked at both high-level boundaries against frozen official schemas, with network resolution disabled.
+
 **2026-09-08 compatibility correction:** 2025-03-26 is excluded from negotiation because it requires receiving batches. Its schema descriptor remains available for conversion and audit. See the [transport matrix](docs/transports.md).
 
 **2026-09-08 parameter update:** typed resource, prompt, logging and subscription parameters preserve caller metadata. Older revisions retain base request/notification `_meta`; legacy elicitation preserves boolean defaults and adapts titled enums.

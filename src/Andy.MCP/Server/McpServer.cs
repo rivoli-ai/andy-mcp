@@ -389,6 +389,7 @@ public sealed class McpServer : IAsyncDisposable
     /// <summary>Serializes outbound writes so concurrent handlers never interleave on the transport.</summary>
     private async Task SendMessageAsync(JsonRpcMessage message, CancellationToken ct = default)
     {
+        if (message is JsonRpcNotification notification) ProtocolShapeValidation.Notification(notification, _session.Revision ?? ProtocolRevision.Latest);
         await _writeLock.WaitAsync(ct);
         try
         {
@@ -415,6 +416,7 @@ public sealed class McpServer : IAsyncDisposable
 
         try
         {
+            ProtocolShapeValidation.Request(request, _session.Revision ?? ProtocolRevision.Latest);
             // Lifecycle enforcement: initialize is valid only once, and no operation other than
             // ping is accepted until the client's notifications/initialized has been received.
             if (request.Method == McpMethods.Initialize)
@@ -457,6 +459,11 @@ public sealed class McpServer : IAsyncDisposable
                 _ => await HandleCustomRequestAsync(request, ct)
             };
 
+            if (!response.IsError)
+            {
+                try { ProtocolShapeValidation.Result(request, response.Result, _session.Revision ?? ProtocolRevision.Latest); }
+                catch (JsonException ex) { response = JsonRpcResponse.Failure(request.Id, JsonRpcError.InternalError(ex.Message)); }
+            }
             if (response.IsError)
                 McpDiagnostics.SetError(activity, errorCode: response.Error?.Code);
             else
@@ -510,6 +517,7 @@ public sealed class McpServer : IAsyncDisposable
         if (requestOptions?.Progress is not null)
             request = request with { Params = ExtensionMethods.WithProgress(request.Params, (RequestId)Guid.NewGuid().ToString("N")) };
         ExtensionMethods.ObjectParameters(request.Params);
+        ProtocolShapeValidation.Request(request, _session.Revision ?? ProtocolRevision.Latest);
         var pending = _tracker.Track(id, requestOptions?.Timeout ?? _options.RequestTimeout,
             requestOptions?.MaximumDuration ?? _options.MaximumRequestDuration, _options.TimeProvider);
         if (requestOptions?.Progress is { } progressObserver) pending.OnProgress(progressObserver);
@@ -532,6 +540,7 @@ public sealed class McpServer : IAsyncDisposable
             if (response.IsError)
                 throw new McpException(response.Error!.Code, response.Error.Message, response.Error.Data);
 
+            ProtocolShapeValidation.Result(request, response.Result, _session.Revision ?? ProtocolRevision.Latest);
             return response.Result is null
                 ? default!
                 : JsonSerializer.Deserialize<T>(response.Result.Value, McpJsonDefaults.Options)!;
@@ -1088,6 +1097,7 @@ public sealed class McpServer : IAsyncDisposable
 
     private void HandleNotification(JsonRpcNotification notification)
     {
+        ProtocolShapeValidation.Notification(notification, _session.Revision ?? ProtocolRevision.Latest);
         switch (notification.Method)
         {
             case McpMethods.NotificationsInitialized:

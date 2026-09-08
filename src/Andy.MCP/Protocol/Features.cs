@@ -96,7 +96,7 @@ public sealed record ToolAnnotations
 public sealed record ToolChoice
 {
     [JsonPropertyName("mode")]
-    public required string Mode { get; init; } // "auto", "required", "none"
+    public string Mode { get; init; } = "auto"; // "auto", "required", "none"
 
     public static ToolChoice Auto => new() { Mode = "auto" };
     public static ToolChoice Required => new() { Mode = "required" };

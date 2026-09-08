@@ -32,4 +32,8 @@
     <PackageReference Include="Microsoft.Extensions.Options" />
   </ItemGroup>
 
+  <ItemGroup>
+    <None Update="Protocol/Schemas/LICENSE" Pack="true" PackagePath="third-party/mcp-schema/LICENSE" />
+    <EmbeddedResource Include="Protocol/Schemas/schema-*.json" LogicalName="Andy.MCP.Schemas.%(Filename)%(Extension)" />
+  </ItemGroup>
 </Project>
