@@ -1,8 +1,8 @@
 # MCP compliance matrix — 2026-09-08
 
 Andy.MCP remains **alpha**. Stable means a reachable, tested library surface; it does not
-certify every application behavior or declare full MCP compliance. Experimental tasks and
-the full-compliance epics #39/#68 remain open. Application policy, model execution and user
+certify every application behavior or declare full MCP compliance. Task lifecycle implementation is verified, while
+the final full-compliance audits #39/#68 remain open. Application policy, model execution and user
 approval belong to the host.
 
 ## Negotiated revisions
@@ -31,7 +31,7 @@ under that revision; unknown vendor extension data is retained independently.
 | Sampling tools/toolChoice and context sub-capability | Absent | Absent | Available models and capability checks | [Peer contracts](../tests/Andy.MCP.Tests/Server/HighLevelContractTests.cs) |
 | Form elicitation | Absent | Available with legacy enums/defaults | Available including richer enums/defaults | [Typed/legacy parameters](../tests/Andy.MCP.Tests/Protocol/TypedParameterTests.cs) |
 | URL elicitation, icons and extended implementation metadata | Absent | Absent | Available | [Complete definition corpus](../tests/Andy.MCP.Tests/Conformance/CompleteProtocolSchemaTests.cs) |
-| Task augmentation | Absent | Absent | Experimental/partial | [Task tests](../tests/Andy.MCP.Tests/Server/TaskAugmentedToolTests.cs) |
+| Task augmentation | Absent | Absent | Implemented; protocol-experimental | [Task tests](../tests/Andy.MCP.Tests/Server/TaskAugmentedToolTests.cs) |
 
 ## Stable features and experimental boundaries
 
@@ -49,7 +49,7 @@ under that revision; unknown vendor extension data is retained independently.
 | Sampling scalar/array content, tool definitions and tool-choice wire models | Stable wire models; application owns model/tool execution loops | [SamplingContentTests](../tests/Andy.MCP.Tests/Protocol/SamplingContentTests.cs), [SamplingCapabilityTests](../tests/Andy.MCP.Tests/Protocol/SamplingCapabilityTests.cs) |
 | Typed elicitation schema builders, legacy enums/defaults and URL completion | Stable | [ElicitationSchemaTests](../tests/Andy.MCP.Tests/Protocol/ElicitationSchemaTests.cs), [TypedParameterTests](../tests/Andy.MCP.Tests/Protocol/TypedParameterTests.cs), [HighLevelContractTests](../tests/Andy.MCP.Tests/Server/HighLevelContractTests.cs) |
 | Metadata, unknown extensions, icons and implementation descriptors | Stable wire models | [CompleteProtocolSchemaTests](../tests/Andy.MCP.Tests/Conformance/CompleteProtocolSchemaTests.cs), [MetaRoundTripTests](../tests/Andy.MCP.Tests/Protocol/MetaRoundTripTests.cs) |
-| Experimental tasks | Partial/experimental: stores, augmentation, isolation, blocking retrieval, cancellation and related input flows exist; durable outcome and negotiation audits remain in #49 | [TaskStoreTests](../tests/Andy.MCP.Tests/Server/TaskStoreTests.cs), [TaskAugmentedToolTests](../tests/Andy.MCP.Tests/Server/TaskAugmentedToolTests.cs), [TaskOwnershipTests](../tests/Andy.MCP.Tests/Server/TaskOwnershipTests.cs) |
+| Experimental tasks | Implemented; experimental in the protocol. Both directions support negotiated augmentation, deferred outcomes, cancellation, input routing, pagination and injected stores | [Task guide](tasks.md), [negotiation](../tests/Andy.MCP.Tests/Server/TaskNegotiationTests.cs), [HTTP input](../tests/Andy.MCP.Tests/Server/TaskInputFlowTests.cs), [durable restart](../tests/Andy.MCP.Tests/Server/DurableTaskStoreTests.cs) |
 
 ## Transports
 

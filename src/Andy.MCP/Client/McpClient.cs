@@ -21,6 +21,8 @@ public sealed record McpClientOptions
     public TimeProvider TimeProvider { get; init; } = TimeProvider.System;
     /// <summary>Experimental task store. Defaults to an in-memory store.</summary>
     public ITaskStore? TaskStore { get; init; }
+    /// <summary>Enable experimental task reception for configured handlers and stores.</summary>
+    public bool EnableExperimentalTasks { get; init; } = true;
     /// <summary>Trusted ownership scope for retained tasks. Null isolates each connection/session.</summary>
     public string? TaskOwnerKey { get; init; }
     /// <summary>Extension request handlers copied when the client is created.</summary>
@@ -45,6 +47,23 @@ public sealed record McpClientOptions
     /// <summary>
     /// Build capabilities based on configured handlers.
     /// </summary>
+    private ClientTasksCapability? BuildTaskCapabilities()
+    {
+        if (!EnableExperimentalTasks || (SamplingHandler is null && ElicitationHandler is null && TaskStore is null)) return null;
+        var configured = Capabilities.Tasks;
+        return new ClientTasksCapability
+        {
+            List = configured is null ? new() : configured.List,
+            Cancel = configured is null ? new() : configured.Cancel,
+            Requests = new ClientTaskRequests
+            {
+                Sampling = SamplingHandler is null ? null : configured is null ? new SamplingTaskRequests { CreateMessage = new() } : configured.Requests?.Sampling,
+                Elicitation = ElicitationHandler is null ? null : configured is null ? new ElicitationTaskRequests { Create = new() } : configured.Requests?.Elicitation
+            },
+            ExtensionData = configured?.ExtensionData
+        };
+    }
+
     internal ClientCapabilities BuildCapabilities()
     {
         return new ClientCapabilities
@@ -58,16 +77,7 @@ public sealed record McpClientOptions
             Elicitation = ElicitationHandler is not null
                 ? Capabilities.Elicitation ?? new ElicitationCapability { Form = new EmptyCapability() }
                 : null,
-            Tasks = SamplingHandler is not null || ElicitationHandler is not null || TaskStore is not null ? new ClientTasksCapability
-            {
-                List = new(),
-                Cancel = new(),
-                Requests = new()
-                {
-                    Sampling = SamplingHandler is not null ? new SamplingTaskRequests { CreateMessage = new() } : null,
-                    Elicitation = ElicitationHandler is not null ? new ElicitationTaskRequests { Create = new() } : null
-                }
-            } : null,
+            Tasks = BuildTaskCapabilities(),
             Extensions = Capabilities.Extensions,
             ExtensionData = Capabilities.ExtensionData,
             Experimental = Capabilities.Experimental
@@ -91,6 +101,7 @@ public sealed class McpClient : IAsyncDisposable
     private readonly List<Task> _retiredHandlers = new();
     private readonly ITaskStore _taskStore;
     private string _taskOwnerKey;
+    private readonly PaginationHelper _taskPagination = new(Guid.NewGuid().ToString("N"));
     private long _nextId;
     private Task? _messageLoop;
     private CancellationTokenSource? _cts;
@@ -491,6 +502,11 @@ public sealed class McpClient : IAsyncDisposable
         long? ttlMs = null, CancellationToken ct = default)
     {
         _session.RequireServerCapability("tools");
+        RequireServerTask(McpMethods.ToolsCall);
+        var descriptor = (await ListToolsAsync(ct)).FirstOrDefault(tool => tool.Name == name);
+        if (descriptor?.Execution?.TaskSupport is not ("optional" or "required"))
+            throw new McpCapabilityNotAvailableException($"task execution for tool '{name}'");
+
         var args = arguments is JsonElement je
             ? je
             : arguments is not null
@@ -501,21 +517,50 @@ public sealed class McpClient : IAsyncDisposable
             new { name, arguments = args, task = new TaskMetadata { Ttl = ttlMs } }, ct);
     }
 
+    private void RequireServerTask(string method) =>
+        TaskProtocol.Require(TaskProtocol.Supports(_session.ServerCapabilities?.Tasks, method), _session.Revision, method);
+
     /// <summary>Experimental: get a task's current state.</summary>
-    public Task<McpTask> GetTaskAsync(string taskId, CancellationToken ct = default) =>
-        SendRequestAsync<McpTask>(McpMethods.TasksGet, new TaskIdParams { TaskId = taskId }, ct);
+    public Task<McpTask> GetTaskAsync(string taskId, CancellationToken ct = default)
+    {
+        RequireServerTask(McpMethods.TasksGet);
+        return SendRequestAsync<McpTask>(McpMethods.TasksGet, new TaskIdParams { TaskId = taskId }, ct);
+    }
 
-    /// <summary>Experimental: list the caller's tasks.</summary>
-    public async Task<IReadOnlyList<McpTask>> ListTasksAsync(CancellationToken ct = default) =>
-        (await SendRequestAsync<ListTasksResult>(McpMethods.TasksList, new PaginatedRequest(), ct)).Tasks;
+    /// <summary>Experimental: list all tasks owned by this caller, following opaque cursors.</summary>
+    public async Task<IReadOnlyList<McpTask>> ListTasksAsync(CancellationToken ct = default)
+    {
+        var tasks = new List<McpTask>();
+        string? cursor = null;
+        do
+        {
+            var page = await ListTasksPageAsync(new PaginatedRequest { Cursor = cursor }, ct: ct);
+            tasks.AddRange(page.Tasks);
+            cursor = page.NextCursor;
+        } while (cursor is not null);
+        return tasks;
+    }
 
-    /// <summary>Experimental: retrieve a completed task's result payload.</summary>
-    public Task<JsonElement> GetTaskResultAsync(string taskId, CancellationToken ct = default) =>
-        SendRequestAsync<JsonElement>(McpMethods.TasksResult, new TaskIdParams { TaskId = taskId }, ct);
+    /// <summary>Experimental: retrieve one task page, retaining its cursor and metadata.</summary>
+    public Task<ListTasksResult> ListTasksPageAsync(PaginatedRequest? request = null, McpRequestOptions? options = null, CancellationToken ct = default)
+    {
+        RequireServerTask(McpMethods.TasksList);
+        return SendRequestAsync<ListTasksResult>(McpMethods.TasksList, request ?? new PaginatedRequest(), ct, requestOptions: options);
+    }
+
+    /// <summary>Experimental: wait for and retrieve a task's final result payload.</summary>
+    public Task<JsonElement> GetTaskResultAsync(string taskId, CancellationToken ct = default)
+    {
+        RequireServerTask(McpMethods.TasksResult);
+        return SendRequestAsync<JsonElement>(McpMethods.TasksResult, new TaskIdParams { TaskId = taskId }, ct);
+    }
 
     /// <summary>Experimental: cancel a task.</summary>
-    public Task<McpTask> CancelTaskAsync(string taskId, CancellationToken ct = default) =>
-        SendRequestAsync<McpTask>(McpMethods.TasksCancel, new TaskIdParams { TaskId = taskId }, ct);
+    public Task<McpTask> CancelTaskAsync(string taskId, CancellationToken ct = default)
+    {
+        RequireServerTask(McpMethods.TasksCancel);
+        return SendRequestAsync<McpTask>(McpMethods.TasksCancel, new TaskIdParams { TaskId = taskId }, ct);
+    }
 
     #endregion
 
@@ -757,7 +802,7 @@ public sealed class McpClient : IAsyncDisposable
                 JsonRpcResponse response;
                 try { response = await DispatchServerRequestAsync(request, ct); }
                 catch (OperationCanceledException) when (ct.IsCancellationRequested) { return; }
-                catch (Exception ex) when (ex is ArgumentException or JsonException or McpCapabilityNotAvailableException)
+                catch (Exception ex) when (ex is ArgumentException or JsonException or McpCapabilityNotAvailableException or McpPaginationException)
                 {
                     response = JsonRpcResponse.Failure(request.Id, JsonRpcError.InvalidParams(ex.Message));
                 }
@@ -777,6 +822,12 @@ public sealed class McpClient : IAsyncDisposable
     {
         if (_session.State != McpSessionState.Ready && request.Method != McpMethods.Ping)
             return JsonRpcResponse.Failure(request.Id, JsonRpcError.InvalidRequest("The MCP session is not ready."));
+        var taskCapabilities = _options.BuildCapabilities().Tasks;
+        var supportsTask = _session.Revision?.AtLeast(ProtocolRevision.V2025_11_25) == true && TaskProtocol.Supports(taskCapabilities, request.Method);
+        if (request.Method.StartsWith("tasks/", StringComparison.Ordinal) && !supportsTask)
+            return JsonRpcResponse.Failure(request.Id, JsonRpcError.MethodNotFound("Task operation is not supported."));
+        if (request.Method is McpMethods.SamplingCreateMessage or McpMethods.ElicitationCreate && !supportsTask)
+            request = TaskProtocol.WithoutAugmentation(request);
         ProtocolShapeValidation.Request(request, _session.Revision ?? ProtocolRevision.Latest);
         var response = await DispatchServerRequestCoreAsync(request, ct);
         if (!response.IsError)
@@ -839,8 +890,8 @@ public sealed class McpClient : IAsyncDisposable
             case McpMethods.TasksGet:
                 return HandleClientTaskGet(request);
             case McpMethods.TasksList:
-                return JsonRpcResponse.Success(request.Id,
-                    ToWire(new ListTasksResult { Tasks = _taskStore.List(_taskOwnerKey) }));
+                var page = _taskPagination.GetPage(_taskStore.List(_taskOwnerKey), request.GetParams<PaginatedRequest>()?.Cursor);
+                return JsonRpcResponse.Success(request.Id, ToWire(new ListTasksResult { Tasks = page.Items, NextCursor = page.NextCursor }));
             case McpMethods.TasksResult:
                 return await TaskResults.WaitAsync(_taskStore, _taskOwnerKey, request, ct);
             case McpMethods.TasksCancel:

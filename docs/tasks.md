@@ -1,7 +1,7 @@
 # Experimental tasks
 
-Tasks are available only for MCP 2025-11-25 and remain experimental. The ongoing
-negotiation and pagination audit is tracked in #49; see the compliance matrix.
+Tasks are available only for MCP 2025-11-25 and remain experimental in the protocol.
+The #49/#72 implementation includes negotiation and pagination; see the compliance matrix.
 
 `CallToolAsTaskAsync`, `CreateMessageAsTaskAsync` and `ElicitAsTaskAsync` return a task
 immediately. Poll its state with `GetTaskAsync`/`GetClientTaskAsync`, or await the deferred
@@ -10,6 +10,18 @@ retrieval cancels that waiter, while `CancelTaskAsync`/`CancelClientTaskAsync` c
 execution. Completed, failed and cancelled states cannot be overwritten by late handlers.
 Nested peer requests carry related-task metadata and expose `input_required` until all
 pending peer input arrives. HTTP supports these requests through its SSE streams.
+
+## Negotiation and listing
+
+Task APIs check the negotiated revision and exact peer capability. Tool task calls also
+check `execution.taskSupport`; use task augmentation only for optional or required tools.
+Set `EnableExperimentalTasks = false` on either peer to disable task reception. A receiver
+without the relevant capability ignores task augmentation and processes that operation
+normally. Client task sub-capabilities can be restricted through `Capabilities.Tasks`.
+
+`ListTasksAsync` and `ListClientTasksAsync` follow every page. `ListTasksPageAsync` and
+`ListClientTasksPageAsync` retain the opaque cursor and metadata for manual paging.
+Cursors are signed and connection-scoped; invalid cursors return Invalid params.
 
 ## Stores and ownership
 
@@ -40,3 +52,6 @@ Task state, cancellation races, waiter independence, TTL, metadata, ordinary/def
 parity, injected ownership, HTTP isolation and input routing are exercised in the .NET test
 assemblies. `DurableTaskStoreTests` recreates a store from disk and retrieves a completed
 result from a new connection without registering or rerunning the original tool.
+
+The final acceptance suite passes 2,894 tests with no skips; all six coverage gates and
+both package API compatibility checks pass. Phase 7/8 release audits are tracked separately.
