@@ -30,6 +30,9 @@ P3 = experimental features, ecosystem integrations, and long-term full-complianc
   - [x] Complete 2020-12 runtime/meta-schema validation with network fetches disabled
   - [x] Complete registration metadata fields
 - [ ] #48 Complete high-level client/server operations
+  - [x] Freeze registration, enforce prompt arguments and list-change capabilities, and support multi-content static resources
+  - [x] Check sampling/elicitation sub-capabilities and expose roots/URL completion notifications
+  - [ ] Complete safe extension APIs, per-call controls and remaining protocol shape validation
 - [ ] #50 Conformance gates and coverage
 - [ ] #51 Evidence-backed documentation
 - [ ] #71 URI-template resolution
@@ -59,3 +62,7 @@ stream identity/capacity enforcement, retry hints and independent POST SSE resum
 2026-09-08: completed Tool-definition registration, attribute metadata and ValueTask support,
 revision-specific validation errors, output-schema enforcement and structured text fallback.
 Pinned official JSON Schema fixtures supplement adversarial validation tests.
+
+2026-09-08: server registration freezes atomically at RunAsync; required prompt arguments
+are checked before literal handler binding. Sampling/elicitation modes honor peer sub-capabilities.
+Root subscriptions detach on disposal and URL elicitation completion is exposed as a typed event.

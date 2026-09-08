@@ -77,7 +77,7 @@ public class ServerInitiatedRequestTests
         var (server, clientTask, cts) = Connect(options);
         await using var client = await clientTask;
 
-        var result = await server.ElicitAsync(new ElicitRequest { Message = "?" }, cts.Token);
+        var result = await server.ElicitAsync(ElicitRequest.Form("?", new ElicitationSchema { Properties = new Dictionary<string, PrimitiveSchemaDefinition>() }), cts.Token);
 
         Assert.Equal("decline", result.Action);
         cts.Dispose();

@@ -43,7 +43,7 @@ public sealed record McpClientOptions
         return new ClientCapabilities
         {
             Roots = RootProvider is not null
-                ? new RootsCapability { ListChanged = true }
+                ? Capabilities.Roots ?? new RootsCapability { ListChanged = true }
                 : null,
             Sampling = SamplingHandler is not null
                 ? Capabilities.Sampling ?? new SamplingCapability()
@@ -86,6 +86,7 @@ public sealed class McpClient : IAsyncDisposable
     private Task? _messageLoop;
     private CancellationTokenSource? _cts;
     private bool _disposed;
+    private EventHandler? _rootsChangedHandler;
 
     /// <summary>
     /// The negotiated session state and capabilities.
@@ -96,6 +97,7 @@ public sealed class McpClient : IAsyncDisposable
     internal int PendingRequestCount => _tracker.Count;
 
     // Events for server notifications
+    public event EventHandler<ElicitationCompleteParams>? ElicitationCompleted;
     public event EventHandler? ToolsChanged;
     public event EventHandler? ResourcesChanged;
     public event EventHandler<string>? ResourceUpdated;
@@ -149,11 +151,13 @@ public sealed class McpClient : IAsyncDisposable
         // Wire up root provider change notifications
         if (_options.RootProvider is not null)
         {
-            _options.RootProvider.RootsChanged += async (_, _) =>
+            _rootsChangedHandler = async (_, _) =>
             {
-                try { await SendNotificationAsync(McpMethods.NotificationsRootsListChanged); }
+                if (_session.State != McpSessionState.Ready || _options.BuildCapabilities().Roots?.ListChanged != true) return;
+                try { await NotifyRootsChangedAsync(); }
                 catch (Exception ex) { _logger.LogWarning(ex, "Failed to send roots/list_changed"); }
             };
+            _options.RootProvider.RootsChanged += _rootsChangedHandler;
         }
 
         // Send initialize request
@@ -186,6 +190,14 @@ public sealed class McpClient : IAsyncDisposable
     }
 
     #region Public API
+
+    /// <summary>Notify the server of root changes only when listChanged was advertised.</summary>
+    public Task NotifyRootsChangedAsync(CancellationToken ct = default)
+    {
+        if (_session.State != McpSessionState.Ready) throw new McpSessionException("The MCP session is not ready.");
+        if (_options.BuildCapabilities().Roots?.ListChanged != true) throw new McpCapabilityNotAvailableException("roots.listChanged");
+        return _transport.SendAsync(new JsonRpcNotification { Method = McpMethods.NotificationsRootsListChanged }, ct);
+    }
 
     public Task PingAsync(CancellationToken ct = default) =>
         SendRequestAsync<JsonElement>(McpMethods.Ping, null, ct);
@@ -532,6 +544,11 @@ public sealed class McpClient : IAsyncDisposable
     {
         switch (notification.Method)
         {
+            case McpMethods.NotificationsElicitationComplete:
+                if (_session.Revision?.AtLeast(ProtocolRevision.V2025_11_25) == true && _options.BuildCapabilities().Elicitation?.Url is not null &&
+                    notification.GetParams<ElicitationCompleteParams>() is { } completion)
+                    ElicitationCompleted?.Invoke(this, completion);
+                break;
             case McpMethods.NotificationsToolsListChanged:
                 ToolsChanged?.Invoke(this, EventArgs.Empty);
                 break;
@@ -592,6 +609,10 @@ public sealed class McpClient : IAsyncDisposable
                 JsonRpcResponse response;
                 try { response = await DispatchServerRequestAsync(request, ct); }
                 catch (OperationCanceledException) when (ct.IsCancellationRequested) { return; }
+                catch (Exception ex) when (ex is ArgumentException or JsonException or McpCapabilityNotAvailableException)
+                {
+                    response = JsonRpcResponse.Failure(request.Id, JsonRpcError.InvalidParams(ex.Message));
+                }
                 catch (Exception ex)
                 {
                     _logger.LogWarning(ex, "Error handling server request '{Method}'", request.Method);
@@ -624,6 +645,7 @@ public sealed class McpClient : IAsyncDisposable
                     return JsonRpcResponse.Failure(request.Id, JsonRpcError.MethodNotFound("Sampling not supported"));
 
                 var samplingReq = request.GetParams<CreateMessageRequest>()!;
+                PeerRequestValidation.Sampling(samplingReq, _options.BuildCapabilities(), _session.Revision ?? ProtocolRevision.Latest);
                 if (TryGetTaskMetadata(request.Params, out var samplingTaskMeta))
                 {
                     var task = _taskStore.Create(samplingTaskMeta, null);
@@ -639,6 +661,7 @@ public sealed class McpClient : IAsyncDisposable
                     return JsonRpcResponse.Failure(request.Id, JsonRpcError.MethodNotFound("Elicitation not supported"));
 
                 var elicitReq = request.GetParams<ElicitRequest>()!;
+                PeerRequestValidation.Elicitation(elicitReq, _options.BuildCapabilities(), _session.Revision ?? ProtocolRevision.Latest);
                 if (TryGetTaskMetadata(request.Params, out var elicitTaskMeta))
                 {
                     var task = _taskStore.Create(elicitTaskMeta, null);
@@ -736,6 +759,8 @@ public sealed class McpClient : IAsyncDisposable
     {
         if (_disposed) return;
         _disposed = true;
+        if (_rootsChangedHandler is not null && _options.RootProvider is not null)
+            _options.RootProvider.RootsChanged -= _rootsChangedHandler;
 
         _tracker.CancelAll("Client disposing");
         _cts?.Cancel();

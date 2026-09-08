@@ -25,7 +25,7 @@ See the **[compliance matrix](docs/compliance.md)** for exact, test-linked statu
 - JSON-RPC 2.0 with polymorphic serialization; bidirectional request/response correlation
 - Transports: graceful stdio shutdown and Streamable HTTP with bounded SSE polling, per-stream resumption, and concurrent stream routing
 - High-level client API: tools, resources (+ subscribe), prompts, completion, roots, sampling, elicitation, auto-pagination, capability gating
-- High-level server API: fluent + attribute registration; concurrent dispatch, cancellation, progress
+- High-level server API: fluent + attribute registration frozen at startup; multi-content resources, required prompt arguments, cancellation and progress
 - JSON Schema 2020-12 input validation, structured output enforcement, and complete tool metadata registration
 - Experimental tasks (task-augmented `tools/call` + `tasks/*`)
 - Security: opt-in Origin validation, principal-bound sessions with cross-user rejection, fail-closed body/session limits
