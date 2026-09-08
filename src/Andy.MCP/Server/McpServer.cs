@@ -933,6 +933,12 @@ public sealed class McpServer : IAsyncDisposable
 
     private ServerCapabilities BuildCapabilities() => new()
     {
+        Tasks = new ServerTasksCapability
+        {
+            List = new(),
+            Cancel = new(),
+            Requests = _tools.Count > 0 ? new ServerTaskRequests { Tools = new ToolTaskRequests { Call = new() } } : null
+        },
         Tools = _tools.Count > 0
             ? new ListChangedCapability { ListChanged = _options.ToolsListChanged }
             : null,

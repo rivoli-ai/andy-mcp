@@ -24,6 +24,10 @@ public abstract record Content
     [JsonPropertyName("_meta")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public JsonElement? Meta { get; init; }
+
+    /// <summary>Unknown wire fields retained for protocol extensions.</summary>
+    [JsonExtensionData]
+    public Dictionary<string, JsonElement>? ExtensionData { get; init; }
 }
 
 /// <summary>
@@ -35,6 +39,7 @@ public sealed record TextContent : Content
     public required string Text { get; init; }
 
     public TextContent() { }
+    [System.Diagnostics.CodeAnalysis.SetsRequiredMembers]
     public TextContent(string text) => Text = text;
 }
 
@@ -61,9 +66,11 @@ public sealed record ImageContent : Content
 public sealed record AudioContent : Content
 {
     [JsonPropertyName("data")]
+    [SinceRevision("2025-03-26")]
     public required string Data { get; init; }
 
     [JsonPropertyName("mimeType")]
+    [SinceRevision("2025-03-26")]
     public required string MimeType { get; init; }
 
     public static AudioContent FromBytes(byte[] bytes, string mimeType) =>
@@ -77,26 +84,37 @@ public sealed record AudioContent : Content
 /// </summary>
 public sealed record ResourceLink : Content
 {
+    [JsonPropertyName("icons")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    [SinceRevision("2025-11-25")]
+    public IReadOnlyList<Icon>? Icons { get; init; }
+
     [JsonPropertyName("uri")]
+    [SinceRevision("2025-06-18")]
     public required string Uri { get; init; }
 
     [JsonPropertyName("name")]
+    [SinceRevision("2025-06-18")]
     public required string Name { get; init; }
 
     [JsonPropertyName("title")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    [SinceRevision("2025-06-18")]
     public string? Title { get; init; }
 
     [JsonPropertyName("description")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    [SinceRevision("2025-06-18")]
     public string? Description { get; init; }
 
     [JsonPropertyName("mimeType")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    [SinceRevision("2025-06-18")]
     public string? MimeType { get; init; }
 
     [JsonPropertyName("size")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    [SinceRevision("2025-06-18")]
     public long? Size { get; init; }
 }
 

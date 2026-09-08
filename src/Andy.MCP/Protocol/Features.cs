@@ -10,11 +10,17 @@ namespace Andy.MCP.Protocol;
 /// </summary>
 public sealed record Tool
 {
+    [JsonPropertyName("execution")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    [SinceRevision("2025-11-25")]
+    public ToolExecution? Execution { get; init; }
+
     [JsonPropertyName("name")]
     public required string Name { get; init; }
 
     [JsonPropertyName("title")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    [SinceRevision("2025-06-18")]
     public string? Title { get; init; }
 
     [JsonPropertyName("description")]
@@ -26,10 +32,12 @@ public sealed record Tool
 
     [JsonPropertyName("outputSchema")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    [SinceRevision("2025-06-18")]
     public JsonElement? OutputSchema { get; init; }
 
     [JsonPropertyName("annotations")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    [SinceRevision("2025-03-26")]
     public ToolAnnotations? Annotations { get; init; }
 
     [JsonPropertyName("icons")]
@@ -39,7 +47,12 @@ public sealed record Tool
 
     [JsonPropertyName("_meta")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    [SinceRevision("2025-06-18")]
     public JsonElement? Meta { get; init; }
+
+    /// <summary>Unknown wire fields retained for protocol extensions.</summary>
+    [JsonExtensionData]
+    public Dictionary<string, JsonElement>? ExtensionData { get; init; }
 }
 
 /// <summary>
@@ -49,23 +62,32 @@ public sealed record ToolAnnotations
 {
     [JsonPropertyName("title")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    [SinceRevision("2025-03-26")]
     public string? Title { get; init; }
 
     [JsonPropertyName("readOnlyHint")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    [SinceRevision("2025-03-26")]
     public bool? ReadOnlyHint { get; init; }
 
     [JsonPropertyName("destructiveHint")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    [SinceRevision("2025-03-26")]
     public bool? DestructiveHint { get; init; }
 
     [JsonPropertyName("idempotentHint")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    [SinceRevision("2025-03-26")]
     public bool? IdempotentHint { get; init; }
 
     [JsonPropertyName("openWorldHint")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    [SinceRevision("2025-03-26")]
     public bool? OpenWorldHint { get; init; }
+
+    /// <summary>Unknown wire fields retained for protocol extensions.</summary>
+    [JsonExtensionData]
+    public Dictionary<string, JsonElement>? ExtensionData { get; init; }
 }
 
 /// <summary>
@@ -79,10 +101,19 @@ public sealed record ToolChoice
     public static ToolChoice Auto => new() { Mode = "auto" };
     public static ToolChoice Required => new() { Mode = "required" };
     public static ToolChoice None => new() { Mode = "none" };
+
+    /// <summary>Unknown wire fields retained for protocol extensions.</summary>
+    [JsonExtensionData]
+    public Dictionary<string, JsonElement>? ExtensionData { get; init; }
 }
 
 public sealed record CallToolRequest
 {
+    [JsonPropertyName("task")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    [SinceRevision("2025-11-25")]
+    public TaskMetadata? Task { get; init; }
+
     [JsonPropertyName("name")]
     public required string Name { get; init; }
 
@@ -93,7 +124,12 @@ public sealed record CallToolRequest
     /// <summary>Reserved protocol metadata (_meta), preserved round-trip.</summary>
     [JsonPropertyName("_meta")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    [SinceRevision("2025-11-25")]
     public JsonElement? Meta { get; init; }
+
+    /// <summary>Unknown wire fields retained for protocol extensions.</summary>
+    [JsonExtensionData]
+    public Dictionary<string, JsonElement>? ExtensionData { get; init; }
 }
 
 public sealed record CallToolResult
@@ -103,6 +139,7 @@ public sealed record CallToolResult
 
     [JsonPropertyName("structuredContent")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    [SinceRevision("2025-06-18")]
     public JsonElement? StructuredContent { get; init; }
 
     [JsonPropertyName("isError")]
@@ -119,6 +156,10 @@ public sealed record CallToolResult
 
     public static CallToolResult Error(string message) =>
         new() { Content = [new TextContent { Text = message }], IsError = true };
+
+    /// <summary>Unknown wire fields retained for protocol extensions.</summary>
+    [JsonExtensionData]
+    public Dictionary<string, JsonElement>? ExtensionData { get; init; }
 }
 
 #endregion
@@ -138,6 +179,7 @@ public sealed record Resource
 
     [JsonPropertyName("title")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    [SinceRevision("2025-06-18")]
     public string? Title { get; init; }
 
     [JsonPropertyName("description")]
@@ -163,7 +205,12 @@ public sealed record Resource
 
     [JsonPropertyName("_meta")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    [SinceRevision("2025-06-18")]
     public JsonElement? Meta { get; init; }
+
+    /// <summary>Unknown wire fields retained for protocol extensions.</summary>
+    [JsonExtensionData]
+    public Dictionary<string, JsonElement>? ExtensionData { get; init; }
 }
 
 /// <summary>
@@ -179,6 +226,7 @@ public sealed record ResourceTemplate
 
     [JsonPropertyName("title")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    [SinceRevision("2025-06-18")]
     public string? Title { get; init; }
 
     [JsonPropertyName("description")]
@@ -200,7 +248,12 @@ public sealed record ResourceTemplate
 
     [JsonPropertyName("_meta")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    [SinceRevision("2025-06-18")]
     public JsonElement? Meta { get; init; }
+
+    /// <summary>Unknown wire fields retained for protocol extensions.</summary>
+    [JsonExtensionData]
+    public Dictionary<string, JsonElement>? ExtensionData { get; init; }
 }
 
 public sealed record ReadResourceResult
@@ -212,6 +265,10 @@ public sealed record ReadResourceResult
     [JsonPropertyName("_meta")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public JsonElement? Meta { get; init; }
+
+    /// <summary>Unknown wire fields retained for protocol extensions.</summary>
+    [JsonExtensionData]
+    public Dictionary<string, JsonElement>? ExtensionData { get; init; }
 }
 
 #endregion
@@ -228,6 +285,7 @@ public sealed record Prompt
 
     [JsonPropertyName("title")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    [SinceRevision("2025-06-18")]
     public string? Title { get; init; }
 
     [JsonPropertyName("description")]
@@ -245,7 +303,12 @@ public sealed record Prompt
 
     [JsonPropertyName("_meta")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    [SinceRevision("2025-06-18")]
     public JsonElement? Meta { get; init; }
+
+    /// <summary>Unknown wire fields retained for protocol extensions.</summary>
+    [JsonExtensionData]
+    public Dictionary<string, JsonElement>? ExtensionData { get; init; }
 }
 
 public sealed record PromptArgument
@@ -255,6 +318,7 @@ public sealed record PromptArgument
 
     [JsonPropertyName("title")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    [SinceRevision("2025-06-18")]
     public string? Title { get; init; }
 
     [JsonPropertyName("description")]
@@ -264,6 +328,10 @@ public sealed record PromptArgument
     [JsonPropertyName("required")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public bool? Required { get; init; }
+
+    /// <summary>Unknown wire fields retained for protocol extensions.</summary>
+    [JsonExtensionData]
+    public Dictionary<string, JsonElement>? ExtensionData { get; init; }
 }
 
 public sealed record PromptMessage
@@ -273,6 +341,10 @@ public sealed record PromptMessage
 
     [JsonPropertyName("content")]
     public required Content Content { get; init; }
+
+    /// <summary>Unknown wire fields retained for protocol extensions.</summary>
+    [JsonExtensionData]
+    public Dictionary<string, JsonElement>? ExtensionData { get; init; }
 }
 
 public sealed record GetPromptResult
@@ -288,6 +360,10 @@ public sealed record GetPromptResult
     [JsonPropertyName("_meta")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public JsonElement? Meta { get; init; }
+
+    /// <summary>Unknown wire fields retained for protocol extensions.</summary>
+    [JsonExtensionData]
+    public Dictionary<string, JsonElement>? ExtensionData { get; init; }
 }
 
 #endregion

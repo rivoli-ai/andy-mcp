@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using System.Reflection;
+using Andy.MCP.Client;
 using System.Text.Json;
 using System.Text.Json.Serialization.Metadata;
 
@@ -10,7 +11,7 @@ namespace Andy.MCP.Protocol;
 /// serialization drops such properties when serializing for an older negotiated revision, so a
 /// peer never receives fields its revision does not define.
 /// </summary>
-[AttributeUsage(AttributeTargets.Property, Inherited = true)]
+[AttributeUsage(AttributeTargets.Property | AttributeTargets.Class, Inherited = true)]
 public sealed class SinceRevisionAttribute : Attribute
 {
     /// <summary>The dated protocol version string in which the property was introduced.</summary>
@@ -62,6 +63,27 @@ public static class RevisionAwareJson
     {
         if (typeInfo.Kind != JsonTypeInfoKind.Object)
             return;
+
+        if (typeInfo.Type.GetCustomAttribute<SinceRevisionAttribute>() is { } typeSince &&
+            ProtocolRevision.TryGet(typeSince.Version) is { } since && since.Ordinal > targetOrdinal)
+            typeInfo.OnSerializing = _ => throw new JsonException($"{typeInfo.Type.Name} is unavailable before {typeSince.Version}.");
+
+        if (typeInfo.Type == typeof(Content) && typeInfo.PolymorphismOptions is { } polymorphism)
+        {
+            for (var i = polymorphism.DerivedTypes.Count - 1; i >= 0; i--)
+            {
+                var type = polymorphism.DerivedTypes[i].DerivedType;
+                if ((type == typeof(AudioContent) && targetOrdinal < 1) ||
+                    (type == typeof(ResourceLink) && targetOrdinal < 2) ||
+                    ((type == typeof(ToolUseContent) || type == typeof(ToolResultContent)) && targetOrdinal < 3))
+                    polymorphism.DerivedTypes.RemoveAt(i);
+            }
+        }
+        if (targetOrdinal < 3 && (typeInfo.Type == typeof(SamplingMessage) || typeInfo.Type == typeof(CreateMessageResult)))
+        {
+            var content = typeInfo.Properties.First(p => p.Name == "content");
+            content.CustomConverter = new LegacySamplingContentConverter(targetOrdinal >= 1);
+        }
 
         for (int i = typeInfo.Properties.Count - 1; i >= 0; i--)
         {

@@ -62,7 +62,9 @@ public sealed class JsonRpcMessageConverter : JsonConverter<JsonRpcMessage>
         if (!hasMethod && hasError && (!hasId || idProp.ValueKind == JsonValueKind.Null))
             return new JsonRpcUncorrelatedError
             {
-                Error = JsonSerializer.Deserialize<JsonRpcError>(error.GetRawText(), ConverterlessOptions(options))!
+                Error = JsonSerializer.Deserialize<JsonRpcError>(error.GetRawText(), ConverterlessOptions(options))!,
+                ExtensionData = root.EnumerateObject().Where(p => p.Name is not ("jsonrpc" or "id" or "error"))
+                    .ToDictionary(p => p.Name, p => p.Value.Clone())
             };
 
         if (hasId && idProp.ValueKind != JsonValueKind.String &&
