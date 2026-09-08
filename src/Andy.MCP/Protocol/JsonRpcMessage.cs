@@ -101,3 +101,10 @@ public sealed record JsonRpcNotification : JsonRpcMessage
         return JsonSerializer.Deserialize<T>(Params.Value, options ?? McpJsonDefaults.Options);
     }
 }
+
+/// <summary>An error for which the peer could not read a request ID; never correlates to pending work.</summary>
+public sealed record JsonRpcUncorrelatedError : JsonRpcMessage
+{
+    [JsonPropertyName("error")]
+    public required JsonRpcError Error { get; init; }
+}

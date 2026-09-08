@@ -132,10 +132,13 @@ public sealed class StreamableHttpHandler
         {
             message = McpJsonDefaults.Deserialize(body);
         }
-        catch (Exception)
+        catch (Exception ex) when (ex is JsonException or JsonRpcParseException)
         {
             context.Response.StatusCode = 400;
-            await context.Response.WriteAsync("Invalid JSON-RPC message");
+            context.Response.ContentType = "application/json";
+            var error = ex is JsonRpcParseException ? JsonRpcError.InvalidRequest() : JsonRpcError.ParseError();
+            await context.Response.WriteAsync(
+                McpJsonDefaults.Serialize(new JsonRpcUncorrelatedError { Error = error }));
             return;
         }
 
