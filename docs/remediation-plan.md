@@ -1,0 +1,39 @@
+# Prioritized remediation — 2026-09-08
+
+User authorization: fix P1 and P2 issues and merge each verified increment.
+
+Priorities reflect remaining work, not whether an earlier partial PR merged:
+P1 = security, RPC correctness, release safety; P2 = stable protocol correctness and verification;
+P3 = experimental features, ecosystem integrations, and long-term full-compliance epics.
+
+## P1
+- [ ] #52 Release gating and .NET 10 package maintenance
+  - [x] Require same-commit cross-platform tests, interop and security before pack/publish
+  - [x] Run the documented example in CI and upload symbol packages
+  - [ ] Finish dependency, API compatibility and package-content validation
+- [ ] #42 Strict bidirectional JSON-RPC and lifecycle enforcement
+- [ ] #45 OAuth discovery and token lifecycle security
+- [ ] #46 ASP.NET Core authorization, Origin and principal-bound isolation
+
+## P2
+- [ ] #41 Complete revision-aware wire models
+- [ ] #43 Cancellation, progress and timeout cleanup
+- [ ] #44 Transport compliance and process shutdown
+- [ ] #47 Full JSON Schema validation and registration surface
+- [ ] #48 Complete high-level client/server operations
+- [ ] #50 Conformance gates and coverage
+- [ ] #51 Evidence-backed documentation
+- [ ] #71 URI-template resolution
+- [ ] #73 SSE stream closure and polling
+- [ ] #74 Official-schema corpus and independent client/server interop
+- [ ] #75 Attribute schema generation
+
+## P3
+#19, #20, #21, #30: optional ecosystem integration.
+#49, #72: experimental task lifecycle.
+#39, #68: full-compliance epics; remain open until all children and final gates pass.
+
+## Completion record
+2026-09-08: verified the merged ancestors behind closures #40 (e10e6e6), #69 (98042ae)
+and #76 (superseded by .NET 10-only migration 2f41cd6). Priority labels assigned to all
+23 remaining issues. Release safety implementation recorded above; overall work is in progress.

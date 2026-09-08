@@ -11,10 +11,12 @@ namespace Andy.MCP.Tests.Auth;
 /// </summary>
 public class OAuth401DiscoveryTests
 {
-    [Fact]
-    public async Task Unauthorized_Challenge_DrivesDiscoveryRefreshAndRetry()
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task Unauthorized_Challenge_DrivesDiscoveryRefreshAndRetry(bool explicitMetadata)
     {
-        var stub = new RoutingStub();
+        var stub = new RoutingStub { ExplicitMetadata = explicitMetadata };
 
         var store = new InMemoryTokenStore();
         await store.SaveTokensAsync("https://api.example.com/mcp", new OAuthTokens
@@ -37,12 +39,22 @@ public class OAuth401DiscoveryTests
         Assert.True(stub.DiscoveredPrm);
         Assert.True(stub.DiscoveredAuthServer);
         Assert.True(stub.Refreshed);
+        // Force another rejection, with another refresh token. Cached metadata must be reused.
+        await store.SaveTokensAsync("https://api.example.com/mcp", new OAuthTokens
+        {
+            AccessToken = "old-token", RefreshToken = "rt-old", ExpiresAt = DateTimeOffset.UtcNow.AddHours(1)
+        });
+        var next = await client.GetAsync("https://api.example.com/mcp");
+        Assert.Equal(HttpStatusCode.OK, next.StatusCode);
+        Assert.Equal(1, stub.AuthMetadataRequests);
         Assert.Equal("new-token", (await store.LoadTokensAsync("https://api.example.com/mcp"))!.AccessToken);
     }
 
     /// <summary>Routes the API, PRM, authorization-server metadata, and token endpoints.</summary>
     private sealed class RoutingStub : HttpMessageHandler
     {
+        public bool ExplicitMetadata { get; init; } = true;
+        public int AuthMetadataRequests { get; private set; }
         public bool DiscoveredPrm { get; private set; }
         public bool DiscoveredAuthServer { get; private set; }
         public bool Refreshed { get; private set; }
@@ -56,8 +68,9 @@ public class OAuth401DiscoveryTests
                 if (request.Headers.Authorization?.Parameter == "new-token")
                     return Ok("""{"ok":true}""");
                 var unauthorized = new HttpResponseMessage(HttpStatusCode.Unauthorized);
+                unauthorized.Headers.TryAddWithoutValidation("WWW-Authenticate", "Basic realm=other");
                 unauthorized.Headers.TryAddWithoutValidation("WWW-Authenticate",
-                    """Bearer resource_metadata="https://api.example.com/.well-known/oauth-protected-resource" """);
+                    ExplicitMetadata ? """Bearer resource_metadata="https://api.example.com/.well-known/oauth-protected-resource" """ : "Bearer");
                 return unauthorized;
             }
 
@@ -70,6 +83,7 @@ public class OAuth401DiscoveryTests
             if (url == "https://auth.example.com/.well-known/oauth-authorization-server")
             {
                 DiscoveredAuthServer = true;
+                AuthMetadataRequests++;
                 return Ok("""{"issuer":"https://auth.example.com","authorization_endpoint":"https://auth.example.com/authorize","token_endpoint":"https://auth.example.com/token","code_challenge_methods_supported":["S256"]}""");
             }
 

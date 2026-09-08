@@ -25,6 +25,13 @@ public static class SecurityHelpers
         if (uri.Scheme != "http" && uri.Scheme != "https")
             return UrlValidationResult.Invalid($"Unsupported scheme: '{uri.Scheme}'.");
 
+        if (!string.IsNullOrEmpty(uri.UserInfo) || !string.IsNullOrEmpty(uri.Fragment))
+            return UrlValidationResult.Invalid("Endpoint URLs must not contain credentials or fragments.");
+        var host = uri.IdnHost.Trim('[', ']').TrimEnd('.');
+        if (host.Equals("localhost", StringComparison.OrdinalIgnoreCase) ||
+            host.EndsWith(".localhost", StringComparison.OrdinalIgnoreCase) ||
+            (IPAddress.TryParse(host, out var ip) && IsPrivateOrReservedIp(ip)))
+            return UrlValidationResult.Invalid("Private or reserved endpoint address.");
         return UrlValidationResult.Valid();
     }
 
@@ -33,12 +40,19 @@ public static class SecurityHelpers
     /// </summary>
     public static bool IsPrivateOrReservedIp(IPAddress ip)
     {
-        if (IPAddress.IsLoopback(ip)) return true;
+        if (ip.IsIPv4MappedToIPv6) return IsPrivateOrReservedIp(ip.MapToIPv4());
+        if (IPAddress.IsLoopback(ip) || ip.Equals(IPAddress.IPv6Any)) return true;
 
         var bytes = ip.GetAddressBytes();
 
         if (ip.AddressFamily == AddressFamily.InterNetwork)
         {
+            if (bytes[0] == 0 || bytes[0] >= 224) return true;
+            if (bytes[0] == 100 && bytes[1] >= 64 && bytes[1] <= 127) return true;
+            if (bytes[0] == 192 && bytes[1] == 0 && (bytes[2] == 0 || bytes[2] == 2)) return true;
+            if (bytes[0] == 198 && (bytes[1] == 18 || bytes[1] == 19 ||
+                (bytes[1] == 51 && bytes[2] == 100))) return true;
+            if (bytes[0] == 203 && bytes[1] == 0 && bytes[2] == 113) return true;
             // 10.0.0.0/8
             if (bytes[0] == 10) return true;
             // 172.16.0.0/12
@@ -52,6 +66,9 @@ public static class SecurityHelpers
         }
         else if (ip.AddressFamily == AddressFamily.InterNetworkV6)
         {
+            // Only globally routable unicast; reject multicast, site-local, NAT64 and special space.
+            if ((bytes[0] & 0xE0) != 0x20) return true;
+            if (bytes[0] == 0x20 && bytes[1] == 0x01 && bytes[2] == 0x0d && bytes[3] == 0xb8) return true;
             // ::1 (loopback, already covered)
             if (ip.Equals(IPAddress.IPv6Loopback)) return true;
             // fc00::/7 (unique local)

@@ -261,7 +261,7 @@ public sealed class DynamicClientRegistrationClient
 
     public DynamicClientRegistrationClient(HttpClient? httpClient = null)
     {
-        _httpClient = httpClient ?? new HttpClient(new HttpClientHandler { AllowAutoRedirect = false });
+        _httpClient = httpClient ?? OAuthHttpTransport.CreateClient();
     }
 
     /// <summary>Register a new client at the registration endpoint (RFC 7591).</summary>
