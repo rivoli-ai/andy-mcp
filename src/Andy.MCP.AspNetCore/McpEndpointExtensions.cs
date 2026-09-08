@@ -13,6 +13,12 @@ namespace Andy.MCP.AspNetCore;
 /// </summary>
 public static class McpEndpointExtensions
 {
+    /// <summary>Map an MCP endpoint with default server options.</summary>
+    public static IEndpointConventionBuilder MapMcp(
+        this IEndpointRouteBuilder endpoints, string pattern, Action<McpServer> configureServer,
+        StreamableHttpServerOptions? options = null) =>
+        MapMcp(endpoints, pattern, configureServer, options, null);
+
     /// <summary>
     /// Map an MCP Streamable HTTP endpoint at the specified path.
     /// </summary>
@@ -25,8 +31,8 @@ public static class McpEndpointExtensions
         this IEndpointRouteBuilder endpoints,
         string pattern,
         Action<McpServer> configureServer,
-        StreamableHttpServerOptions? options = null,
-        McpServerOptions? serverOptions = null)
+        StreamableHttpServerOptions? options,
+        McpServerOptions? serverOptions)
     {
         var loggerFactory = endpoints.ServiceProvider.GetService(typeof(ILoggerFactory))
             as ILoggerFactory;
