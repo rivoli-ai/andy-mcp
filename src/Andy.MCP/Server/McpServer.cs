@@ -41,6 +41,9 @@ public sealed class McpServer : IAsyncDisposable
     private CancellationTokenSource? _cts;
     private bool _disposed;
 
+    private readonly object _registrationGate = new();
+    private bool _registrationFrozen;
+    public event EventHandler? RootsChanged;
     public McpSession Session => _session;
     public ResourceSubscriptionManager Subscriptions => _subscriptions;
 
@@ -94,17 +97,22 @@ public sealed class McpServer : IAsyncDisposable
     public McpServer AddTool(Tool tool,
         Func<JsonElement?, IProgress<McpProgress>, CancellationToken, Task<CallToolResult>> handler)
     {
-        ArgumentNullException.ThrowIfNull(tool);
-        ArgumentNullException.ThrowIfNull(handler);
-        ArgumentException.ThrowIfNullOrWhiteSpace(tool.Name);
-        ValidateToolSchema(tool.InputSchema, tool.Name);
-        if (tool.OutputSchema is { } output) ValidateToolSchema(output, tool.Name);
-        if (tool.Execution?.TaskSupport is { } support && support is not ("optional" or "required" or "forbidden"))
-            throw new ArgumentException("Invalid taskSupport.", nameof(tool));
-        if (tool.Meta is { ValueKind: not JsonValueKind.Object })
-            throw new ArgumentException("Tool _meta must be an object.", nameof(tool));
-        _tools[tool.Name] = new ToolHandler { Tool = tool, Handler = handler };
-        return this;
+        lock (_registrationGate)
+        {
+            if (_registrationFrozen) throw new InvalidOperationException("Registration is frozen after RunAsync starts.");
+
+            ArgumentNullException.ThrowIfNull(tool);
+            ArgumentNullException.ThrowIfNull(handler);
+            ArgumentException.ThrowIfNullOrWhiteSpace(tool.Name);
+            ValidateToolSchema(tool.InputSchema, tool.Name);
+            if (tool.OutputSchema is { } output) ValidateToolSchema(output, tool.Name);
+            if (tool.Execution?.TaskSupport is { } support && support is not ("optional" or "required" or "forbidden"))
+                throw new ArgumentException("Invalid taskSupport.", nameof(tool));
+            if (tool.Meta is { ValueKind: not JsonValueKind.Object })
+                throw new ArgumentException("Tool _meta must be an object.", nameof(tool));
+            _tools[tool.Name] = new ToolHandler { Tool = tool, Handler = handler };
+            return this;
+        }
     }
 
     private static void ValidateToolSchema(JsonElement schema, string name)
@@ -120,41 +128,65 @@ public sealed class McpServer : IAsyncDisposable
     public McpServer AddTool(string name, string description,
         Func<JsonElement?, CancellationToken, Task<CallToolResult>> handler)
     {
-        var emptySchema = McpJsonDefaults.ToElement(new { type = "object", properties = new { } });
-        return AddTool(name, description, emptySchema, handler);
+        lock (_registrationGate)
+        {
+            if (_registrationFrozen) throw new InvalidOperationException("Registration is frozen after RunAsync starts.");
+
+            var emptySchema = McpJsonDefaults.ToElement(new { type = "object", properties = new { } });
+            return AddTool(name, description, emptySchema, handler);
+        }
     }
 
     /// <summary>Register a schemaless tool whose handler receives an <see cref="IProgress{McpProgress}"/>.</summary>
     public McpServer AddTool(string name, string description,
         Func<JsonElement?, IProgress<McpProgress>, CancellationToken, Task<CallToolResult>> handler)
     {
-        var emptySchema = McpJsonDefaults.ToElement(new { type = "object", properties = new { } });
-        return AddTool(name, description, emptySchema, handler);
+        lock (_registrationGate)
+        {
+            if (_registrationFrozen) throw new InvalidOperationException("Registration is frozen after RunAsync starts.");
+
+            var emptySchema = McpJsonDefaults.ToElement(new { type = "object", properties = new { } });
+            return AddTool(name, description, emptySchema, handler);
+        }
     }
 
     public McpServer AddResource(string uri, string name,
         Func<string, CancellationToken, Task<ResourceContents>> handler,
-        string? description = null, string? mimeType = null)
+        string? description = null, string? mimeType = null) =>
+        AddResource(new Resource { Uri = uri, Name = name, Description = description, MimeType = mimeType },
+            async (value, ct) => new[] { await handler(value, ct) });
+
+    /// <summary>Register a complete resource descriptor with a multi-content reader.</summary>
+    public McpServer AddResource(Resource resource,
+        Func<string, CancellationToken, Task<IReadOnlyList<ResourceContents>>> handler)
     {
-        _resources[uri] = new ResourceHandler
+        lock (_registrationGate)
         {
-            Resource = new Resource { Uri = uri, Name = name, Description = description, MimeType = mimeType },
-            Handler = handler
-        };
-        return this;
+            if (_registrationFrozen) throw new InvalidOperationException("Registration is frozen after RunAsync starts.");
+
+            ArgumentNullException.ThrowIfNull(resource);
+            ArgumentNullException.ThrowIfNull(handler);
+            _resources[resource.Uri] = new ResourceHandler { Resource = resource, Handler = handler };
+            return this;
+        }
     }
 
     public McpServer AddResourceTemplate(string uriTemplate, string name, string? description = null, string? mimeType = null)
     {
-        _ = new UriTemplate(uriTemplate); // Validate before publishing the descriptor.
-        _resourceTemplates.Add(new ResourceTemplate
+        lock (_registrationGate)
         {
-            UriTemplate = uriTemplate,
-            Name = name,
-            Description = description,
-            MimeType = mimeType
-        });
-        return this;
+            if (_registrationFrozen) throw new InvalidOperationException("Registration is frozen after RunAsync starts.");
+
+            _ = new UriTemplate(uriTemplate); // Validate before publishing the descriptor.
+            _resourceTemplates.Add(new ResourceTemplate
+            {
+                UriTemplate = uriTemplate,
+                Name = name,
+                Description = description,
+                MimeType = mimeType
+            });
+            return this;
+        }
     }
 
     /// <summary>
@@ -165,44 +197,69 @@ public sealed class McpServer : IAsyncDisposable
         Func<string, IReadOnlyDictionary<string, string>, CancellationToken, Task<IReadOnlyList<ResourceContents>>> handler,
         string? description = null, string? mimeType = null)
     {
-        AddResourceTemplate(uriTemplate, name, description, mimeType);
-        _templateHandlers.Add(new ResourceTemplateHandler
+        lock (_registrationGate)
         {
-            Matcher = new UriTemplate(uriTemplate),
-            Handler = handler
-        });
-        return this;
+            if (_registrationFrozen) throw new InvalidOperationException("Registration is frozen after RunAsync starts.");
+
+            AddResourceTemplate(uriTemplate, name, description, mimeType);
+            _templateHandlers.Add(new ResourceTemplateHandler
+            {
+                Matcher = new UriTemplate(uriTemplate),
+                Handler = handler
+            });
+            return this;
+        }
     }
 
     public McpServer AddPrompt(string name, string description,
         Func<string, IDictionary<string, string>?, CancellationToken, Task<GetPromptResult>> handler,
-        IReadOnlyList<PromptArgument>? arguments = null)
+        IReadOnlyList<PromptArgument>? arguments = null) =>
+        AddPrompt(new Prompt { Name = name, Description = description, Arguments = arguments }, handler);
+
+    /// <summary>Register a complete prompt descriptor. Required arguments are checked before invoking its handler.</summary>
+    public McpServer AddPrompt(Prompt prompt,
+        Func<string, IDictionary<string, string>?, CancellationToken, Task<GetPromptResult>> handler)
     {
-        _prompts[name] = new PromptHandler
+        lock (_registrationGate)
         {
-            Prompt = new Prompt { Name = name, Description = description, Arguments = arguments },
-            Handler = handler
-        };
-        return this;
+            if (_registrationFrozen) throw new InvalidOperationException("Registration is frozen after RunAsync starts.");
+
+            ArgumentNullException.ThrowIfNull(prompt);
+            ArgumentNullException.ThrowIfNull(handler);
+            if (prompt.Arguments?.Select(a => a.Name).Distinct(StringComparer.Ordinal).Count() != prompt.Arguments?.Count)
+                throw new ArgumentException("Prompt argument names must be unique.", nameof(prompt));
+            _prompts[prompt.Name] = new PromptHandler { Prompt = prompt, Handler = handler };
+            return this;
+        }
     }
 
     public McpServer AddCompletion(string refType, string refName, string argumentName,
         Func<string, IDictionary<string, string>?, CancellationToken, Task<CompletionValues>> handler)
     {
-        _completions.Add(new CompletionRegistration
+        lock (_registrationGate)
         {
-            RefType = refType,
-            RefName = refName,
-            ArgumentName = argumentName,
-            Handler = handler
-        });
-        return this;
+            if (_registrationFrozen) throw new InvalidOperationException("Registration is frozen after RunAsync starts.");
+
+            _completions.Add(new CompletionRegistration
+            {
+                RefType = refType,
+                RefName = refName,
+                ArgumentName = argumentName,
+                Handler = handler
+            });
+            return this;
+        }
     }
 
     public McpServer WithLogging()
     {
-        _loggingEnabled = true;
-        return this;
+        lock (_registrationGate)
+        {
+            if (_registrationFrozen) throw new InvalidOperationException("Registration is frozen after RunAsync starts.");
+
+            _loggingEnabled = true;
+            return this;
+        }
     }
 
     #endregion
@@ -212,6 +269,11 @@ public sealed class McpServer : IAsyncDisposable
     /// </summary>
     public async Task RunAsync(CancellationToken cancellationToken = default)
     {
+        lock (_registrationGate)
+        {
+            if (_registrationFrozen) throw new InvalidOperationException("The server can only be started once.");
+            _registrationFrozen = true;
+        }
         _cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
 
         await _transport.StartAsync(_cts.Token);
@@ -476,14 +538,14 @@ public sealed class McpServer : IAsyncDisposable
     /// <summary>Ask the client to sample an LLM completion. Requires the client's sampling capability.</summary>
     public Task<CreateMessageResult> CreateMessageAsync(CreateMessageRequest request, CancellationToken cancellationToken = default)
     {
-        _session.RequireClientCapability("sampling");
+        PeerRequestValidation.Sampling(request, _session.ClientCapabilities, _session.Revision ?? ProtocolRevision.Latest);
         return SendRequestAsync<CreateMessageResult>(McpMethods.SamplingCreateMessage, request, cancellationToken);
     }
 
     /// <summary>Ask the client to elicit input from the user. Requires the client's elicitation capability.</summary>
     public Task<ElicitResult> ElicitAsync(ElicitRequest request, CancellationToken cancellationToken = default)
     {
-        _session.RequireClientCapability("elicitation");
+        PeerRequestValidation.Elicitation(request, _session.ClientCapabilities, _session.Revision ?? ProtocolRevision.Latest);
         return SendRequestAsync<ElicitResult>(McpMethods.ElicitationCreate, request, cancellationToken);
     }
 
@@ -492,14 +554,14 @@ public sealed class McpServer : IAsyncDisposable
     /// <summary>Experimental: ask the client to sample as a task; retrieve the result via the task APIs.</summary>
     public Task<CreateTaskResult> CreateMessageAsTaskAsync(CreateMessageRequest request, long? ttlMs = null, CancellationToken cancellationToken = default)
     {
-        _session.RequireClientCapability("sampling");
+        PeerRequestValidation.Sampling(request, _session.ClientCapabilities, _session.Revision ?? ProtocolRevision.Latest);
         return SendRequestAsync<CreateTaskResult>(McpMethods.SamplingCreateMessage, AugmentWithTask(request, ttlMs), cancellationToken);
     }
 
     /// <summary>Experimental: ask the client to elicit as a task; retrieve the result via the task APIs.</summary>
     public Task<CreateTaskResult> ElicitAsTaskAsync(ElicitRequest request, long? ttlMs = null, CancellationToken cancellationToken = default)
     {
-        _session.RequireClientCapability("elicitation");
+        PeerRequestValidation.Elicitation(request, _session.ClientCapabilities, _session.Revision ?? ProtocolRevision.Latest);
         return SendRequestAsync<CreateTaskResult>(McpMethods.ElicitationCreate, AugmentWithTask(request, ttlMs), cancellationToken);
     }
 
@@ -820,7 +882,7 @@ public sealed class McpServer : IAsyncDisposable
         if (_resources.TryGetValue(uri, out var handler))
         {
             var contents = await handler.Handler(uri, ct);
-            return JsonRpcResponse.Success(request.Id, ToWire(new ReadResourceResult { Contents = [contents] }));
+            return JsonRpcResponse.Success(request.Id, ToWire(new ReadResourceResult { Contents = contents }));
         }
 
         // No static resource — try resource templates (first match wins).
@@ -888,6 +950,10 @@ public sealed class McpServer : IAsyncDisposable
             ? JsonSerializer.Deserialize<Dictionary<string, string>>(args, McpJsonDefaults.Options)
             : null;
 
+        foreach (var argument in handler.Prompt.Arguments ?? [])
+            if (argument.Required == true && (arguments is null || !arguments.ContainsKey(argument.Name)))
+                return JsonRpcResponse.Failure(request.Id, JsonRpcError.InvalidParams($"Missing required prompt argument '{argument.Name}'."));
+        // Handlers own substitution. Values arrive literally and are never evaluated as templates or code.
         var result = await handler.Handler(name, arguments, ct);
         return JsonRpcResponse.Success(request.Id, ToWire(result));
     }
@@ -957,6 +1023,10 @@ public sealed class McpServer : IAsyncDisposable
                 _initialized = true;
                 _logger.LogInformation("Client initialized");
                 break;
+            case McpMethods.NotificationsRootsListChanged:
+                if (_initialized && _session.ClientCapabilities?.Roots?.ListChanged == true)
+                    RootsChanged?.Invoke(this, EventArgs.Empty);
+                break;
             case McpMethods.NotificationsProgress:
                 var progress = notification.GetParams<ProgressParams>();
                 if (progress is not null) _tracker.TryReportProgress(progress.ProgressToken, progress.Progress, progress.Total, progress.Message);
@@ -993,20 +1063,45 @@ public sealed class McpServer : IAsyncDisposable
         Logging = _loggingEnabled ? new EmptyCapability() : null,
     };
 
+    private void EnsureReady()
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        if (!_initialized || _session.State != McpSessionState.Ready)
+            throw new McpSessionException("The MCP session is not ready.");
+    }
+
     #region Notifications
+
+    /// <summary>Notify the client that a URL elicitation flow has completed.</summary>
+    public Task NotifyElicitationCompleteAsync(ElicitationCompleteParams parameters, CancellationToken ct = default)
+    {
+        EnsureReady();
+        if (_session.Revision?.AtLeast(ProtocolRevision.V2025_11_25) != true || _session.ClientCapabilities?.Elicitation?.Url is null)
+            throw new McpCapabilityNotAvailableException("elicitation.url");
+        ArgumentException.ThrowIfNullOrEmpty(parameters.ElicitationId);
+        return SendMessageAsync(new JsonRpcNotification { Method = McpMethods.NotificationsElicitationComplete, Params = ToWire(parameters) }, ct);
+    }
 
     public async Task NotifyToolsChangedAsync()
     {
+        EnsureReady();
+        if (!_options.ToolsListChanged || _tools.Count == 0)
+            throw new McpCapabilityNotAvailableException("NotifyToolsChangedAsync");
         await SendMessageAsync(new JsonRpcNotification { Method = McpMethods.NotificationsToolsListChanged });
     }
 
     public async Task NotifyResourcesChangedAsync()
     {
+        EnsureReady();
+        if (!_options.ResourcesListChanged || _resources.Count + _resourceTemplates.Count == 0)
+            throw new McpCapabilityNotAvailableException("NotifyResourcesChangedAsync");
         await SendMessageAsync(new JsonRpcNotification { Method = McpMethods.NotificationsResourcesListChanged });
     }
 
     public async Task NotifyResourceUpdatedAsync(string uri)
     {
+        EnsureReady();
+        if (!_options.ResourcesSubscribe) throw new McpCapabilityNotAvailableException("resources.subscribe");
         if (_subscriptions.HasSubscribers(uri))
         {
             await SendMessageAsync(new JsonRpcNotification
@@ -1019,6 +1114,9 @@ public sealed class McpServer : IAsyncDisposable
 
     public async Task NotifyPromptsChangedAsync()
     {
+        EnsureReady();
+        if (!_options.PromptsListChanged || _prompts.Count == 0)
+            throw new McpCapabilityNotAvailableException("NotifyPromptsChangedAsync");
         await SendMessageAsync(new JsonRpcNotification { Method = McpMethods.NotificationsPromptsListChanged });
     }
 
@@ -1078,7 +1176,7 @@ public sealed class McpServer : IAsyncDisposable
     private sealed class ResourceHandler
     {
         public required Resource Resource { get; init; }
-        public required Func<string, CancellationToken, Task<ResourceContents>> Handler { get; init; }
+        public required Func<string, CancellationToken, Task<IReadOnlyList<ResourceContents>>> Handler { get; init; }
     }
 
     private sealed class ResourceTemplateHandler

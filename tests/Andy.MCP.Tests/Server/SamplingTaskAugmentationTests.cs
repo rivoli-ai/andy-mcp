@@ -94,7 +94,7 @@ public class SamplingTaskAugmentationTests
         await using var _ = client;
 
         var created = await server.ElicitAsTaskAsync(
-            new ElicitRequest { Message = "confirm?" }, ttlMs: 60_000, cancellationToken: cts.Token);
+            ElicitRequest.Form("confirm?", new ElicitationSchema { Properties = new Dictionary<string, PrimitiveSchemaDefinition>() }), ttlMs: 60_000, cancellationToken: cts.Token);
 
         await PollUntilCompletedAsync(server, created.Task.TaskId, cts.Token);
 

@@ -122,6 +122,7 @@ public static class McpMethods
     public const string NotificationsRootsListChanged = "notifications/roots/list_changed";
     public const string SamplingCreateMessage = "sampling/createMessage";
     public const string ElicitationCreate = "elicitation/create";
+    public const string NotificationsElicitationComplete = "notifications/elicitation/complete";
 
     // Experimental tasks (MCP 2025-11-25)
     public const string TasksGet = "tasks/get";
