@@ -203,6 +203,8 @@ See the `docs/` directory:
 
 ## Project status
 
+**2026-09-08 HTTP recovery update:** session 404s trigger a coordinated fresh handshake and capability refresh. Old inbound handlers are cancelled; interrupted POST SSE operations with unknown outcomes are not replayed.
+
 **2026-09-08 HTTP bounds update:** request queues, response correlation and replay retention are bounded. Overload returns 429; expired replay cursors and conflicting negotiated-version headers are rejected. Undelivered events are never silently evicted.
 
 **2026-09-08 wire model update:** unknown protocol fields survive round trips, capability

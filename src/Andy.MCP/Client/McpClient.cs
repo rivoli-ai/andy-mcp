@@ -82,8 +82,9 @@ public sealed class McpClient : IAsyncDisposable
     private readonly ILogger _logger;
     private readonly McpSession _session = new();
     private readonly PendingRequestTracker _tracker = new();
-    private readonly InboundRequestRegistry _inbound = new();
-    private readonly InboundRequestRegistry _background = new();
+    private InboundRequestRegistry _inbound = new();
+    private InboundRequestRegistry _background = new();
+    private readonly List<Task> _retiredHandlers = new();
     private readonly ITaskStore _taskStore = new InMemoryTaskStore();
     private long _nextId;
     private Task? _messageLoop;
@@ -149,6 +150,7 @@ public sealed class McpClient : IAsyncDisposable
 
         await _transport.ConnectAsync(_cts.Token);
         _transport.Disconnected += OnTransportDisconnected;
+        if (_transport is StreamableHttpClientTransport http) http.SessionReinitialized += OnSessionReinitialized;
 
         _session.Transition(McpSessionState.Initializing);
 
@@ -859,6 +861,20 @@ public sealed class McpClient : IAsyncDisposable
 
     #endregion
 
+    private void OnSessionReinitialized(InitializeResult result)
+    {
+        // Swap before cancellation: a retiring handler can itself have triggered recovery.
+        var inbound = Interlocked.Exchange(ref _inbound, new InboundRequestRegistry());
+        var background = Interlocked.Exchange(ref _background, new InboundRequestRegistry());
+        _session.RefreshInitialization(result);
+        lock (_retiredHandlers)
+        {
+            _retiredHandlers.Add(inbound.StopAsync());
+            _retiredHandlers.Add(background.StopAsync());
+            _retiredHandlers.RemoveAll(task => task.IsCompletedSuccessfully);
+        }
+    }
+
     private void OnTransportDisconnected(object? sender, TransportDisconnectedEventArgs e)
     {
         _tracker.CancelAll("Transport disconnected");
@@ -873,6 +889,7 @@ public sealed class McpClient : IAsyncDisposable
         if (_rootsChangedHandler is not null && _options.RootProvider is not null)
             _options.RootProvider.RootsChanged -= _rootsChangedHandler;
 
+        if (_transport is StreamableHttpClientTransport http) http.SessionReinitialized -= OnSessionReinitialized;
         _tracker.CancelAll("Client disposing");
         _cts?.Cancel();
 
@@ -880,6 +897,9 @@ public sealed class McpClient : IAsyncDisposable
 
         await _inbound.StopAsync();
         await _background.StopAsync();
+        Task[] retired;
+        lock (_retiredHandlers) retired = _retiredHandlers.ToArray();
+        await Task.WhenAll(retired);
         _tracker.Dispose();
         await _transport.DisposeAsync();
         _cts?.Dispose();
