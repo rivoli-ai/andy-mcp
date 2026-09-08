@@ -203,6 +203,11 @@ See the `docs/` directory:
 
 ## Project status
 
+**2026-09-08 request lifetime update:** idle timeouts reset on increasing progress, bounded by
+MaximumRequestDuration. Inbound cancellation is isolated from outbound IDs, and shutdown awaits
+handler cleanup. Progress is sent in order before successful tool responses.
+
+
 **2026-09-08 RPC update:** invalid message envelopes are rejected before dispatch; transport
 errors without usable IDs remain uncorrelated. Readiness is checked in arrival order and
 duplicate in-flight requests preserve the original cancellation registration.
