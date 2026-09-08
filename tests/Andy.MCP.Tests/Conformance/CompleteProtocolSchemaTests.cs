@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using Andy.MCP.Protocol;
 using Json.Schema;
 namespace Andy.MCP.Tests.Conformance;
