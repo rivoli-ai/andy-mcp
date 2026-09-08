@@ -18,7 +18,7 @@ public class StreamableHttpValidationTests
             await foreach (var message in transport.Messages)
                 if (message is JsonRpcRequest request)
                     await transport.SendAsync(JsonRpcResponse.Success(request.Id));
-        });
+        }, new StreamableHttpServerOptions { AllowAnonymous = true });
 
     private static async Task<int> StatusForAsync(
         string method, string? contentType, string? accept, string body = "{}")

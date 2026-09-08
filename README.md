@@ -203,6 +203,12 @@ See the `docs/` directory:
 
 ## Project status
 
+**2026-09-08 HTTP authorization update:** protected HTTP endpoints require an explicit resource/issuer
+policy and an ASP.NET Core authenticated principal with matching audience and scopes. Present
+Origin headers are denied unless allowed. Trusted local callers can explicitly select
+AllowAnonymous = true. Sessions are bound to issuer and subject, expire, and close on shutdown.
+
+
 **Phase 7 + Phase 8 (Full MCP 2025-11-25 compliance) — in progress (updated 2026-07-25).**
 
 Landed and tested: 2025-11-25 schema + revision-aware serialization, bidirectional JSON-RPC and
