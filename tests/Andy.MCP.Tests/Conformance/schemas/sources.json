@@ -1,0 +1,18 @@
+{
+  "2024-11-05": {
+    "url": "https://raw.githubusercontent.com/modelcontextprotocol/modelcontextprotocol/main/schema/2024-11-05/schema.json",
+    "sha256": "61cea2392d4f284092d09bc84b9ac488c0d5618ac2b38a56942fc5b99fd960ce"
+  },
+  "2025-03-26": {
+    "url": "https://raw.githubusercontent.com/modelcontextprotocol/modelcontextprotocol/main/schema/2025-03-26/schema.json",
+    "sha256": "e720669548c8100a4282c49e580efd6ddf7f28899ea786fc8db251dbdb356131"
+  },
+  "2025-06-18": {
+    "url": "https://raw.githubusercontent.com/modelcontextprotocol/modelcontextprotocol/main/schema/2025-06-18/schema.json",
+    "sha256": "af845e7e5b9d27107d1690f0936022546177a1403e63ffb11470135b296a2e01"
+  },
+  "2025-11-25": {
+    "url": "https://raw.githubusercontent.com/modelcontextprotocol/modelcontextprotocol/main/schema/2025-11-25/schema.json",
+    "sha256": "268a5f82ba70fd7e4b6dc4aa1e64f116f74b4d0edcb69dc046829c79dd4e97e7"
+  }
+}

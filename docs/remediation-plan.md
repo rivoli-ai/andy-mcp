@@ -18,14 +18,17 @@ P3 = experimental features, ecosystem integrations, and long-term full-complianc
 
 ## P2
 - [ ] #41 Complete revision-aware wire models
+  - [x] Preserve extension fields, add capability/tool execution metadata, and correct older sampling serialization
+  - [ ] Complete remaining typed parameter/union and high-level sub-capability checks
 - [x] #43 Cancellation, progress and timeout cleanup
+
 - [ ] #44 Transport compliance and process shutdown
   - [x] Stdio EOF/SIGTERM/kill escalation and bounded GET SSE polling
   - [x] POST SSE cursor isolation, resumption and terminal-response completion
   - [ ] Finish HTTP session recovery, bounds and revision-specific transport claims
-- [ ] #47 Full JSON Schema validation and registration surface
+- [x] #47 Full JSON Schema validation and registration surface
   - [x] Complete 2020-12 runtime/meta-schema validation with network fetches disabled
-  - [ ] Complete registration metadata fields
+  - [x] Complete registration metadata fields
 - [ ] #48 Complete high-level client/server operations
 - [ ] #50 Conformance gates and coverage
 - [ ] #51 Evidence-backed documentation
@@ -53,3 +56,6 @@ flows, challenge refresh/rotation, CIMD/DCR, PKCE callbacks and concurrent scope
 
 2026-09-08: verified graceful stdio escalation, server-directed GET SSE closure and polling,
 stream identity/capacity enforcement, retry hints and independent POST SSE resumption.
+2026-09-08: completed Tool-definition registration, attribute metadata and ValueTask support,
+revision-specific validation errors, output-schema enforcement and structured text fallback.
+Pinned official JSON Schema fixtures supplement adversarial validation tests.

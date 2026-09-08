@@ -27,10 +27,9 @@ public class ToolValidationTests
         await using var client = await McpClient.ConnectAsync(ct, cancellationToken: cts.Token);
 
         // Call without required 'name' parameter
-        var ex = await Assert.ThrowsAsync<McpException>(() =>
-            client.CallToolAsync("greet", new { }, cts.Token));
-        Assert.Equal(McpErrorCodes.InvalidParams, ex.ErrorCode);
-        Assert.Contains("name", ex.Message);
+        var result = await client.CallToolAsync("greet", new { }, cts.Token);
+        Assert.True(result.IsError);
+        Assert.Contains("name", Assert.IsType<TextContent>(result.Content[0]).Text);
     }
 
     [Fact]
@@ -52,10 +51,9 @@ public class ToolValidationTests
         var serverTask = server.RunAsync(cts.Token);
         await using var client = await McpClient.ConnectAsync(ct, cancellationToken: cts.Token);
 
-        var ex = await Assert.ThrowsAsync<McpException>(() =>
-            client.CallToolAsync("add", new { a = "not a number", b = 2 }, cts.Token));
-        Assert.Equal(McpErrorCodes.InvalidParams, ex.ErrorCode);
-        Assert.Contains("wrong type", ex.Message);
+        var result = await client.CallToolAsync("add", new { a = "not a number", b = 2 }, cts.Token);
+        Assert.True(result.IsError);
+        Assert.Contains("wrong type", Assert.IsType<TextContent>(result.Content[0]).Text);
     }
 
     [Fact]

@@ -63,6 +63,13 @@ public sealed record SetLogLevelParams
 {
     [JsonPropertyName("level")]
     public required McpLogLevel Level { get; init; }
+
+    [JsonExtensionData]
+    public Dictionary<string, JsonElement>? ExtensionData { get; init; }
+
+    [JsonPropertyName("_meta")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public JsonElement? Meta { get; init; }
 }
 
 /// <summary>
@@ -79,4 +86,11 @@ public sealed record LogMessageParams
 
     [JsonPropertyName("data")]
     public required JsonElement Data { get; init; }
+
+    [JsonExtensionData]
+    public Dictionary<string, JsonElement>? ExtensionData { get; init; }
+
+    [JsonPropertyName("_meta")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public JsonElement? Meta { get; init; }
 }

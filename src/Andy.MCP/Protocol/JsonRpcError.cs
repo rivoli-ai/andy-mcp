@@ -35,4 +35,8 @@ public sealed record JsonRpcError
 
     public static JsonRpcError ResourceNotFound(string? message = null) =>
         new() { Code = McpErrorCodes.ResourceNotFound, Message = message ?? "Resource not found" };
+
+    /// <summary>Unknown wire fields retained for protocol extensions.</summary>
+    [JsonExtensionData]
+    public Dictionary<string, JsonElement>? ExtensionData { get; init; }
 }

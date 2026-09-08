@@ -98,18 +98,16 @@ public class ConformanceTests : IAsyncLifetime
     [Fact]
     public async Task CallTool_Add_MissingRequired_Error()
     {
-        var ex = await Assert.ThrowsAsync<McpException>(() =>
-            _client.CallToolAsync("add", new { a = 1 }, ct: _cts.Token));
-        Assert.Equal(McpErrorCodes.InvalidParams, ex.ErrorCode);
-        Assert.Contains("b", ex.Message);
+        var result = await _client.CallToolAsync("add", new { a = 1 }, ct: _cts.Token);
+        Assert.True(result.IsError);
+        Assert.Contains("b", Assert.IsType<TextContent>(result.Content[0]).Text);
     }
 
     [Fact]
     public async Task CallTool_Add_WrongType_Error()
     {
-        var ex = await Assert.ThrowsAsync<McpException>(() =>
-            _client.CallToolAsync("add", new { a = "not_a_number", b = 2 }, ct: _cts.Token));
-        Assert.Equal(McpErrorCodes.InvalidParams, ex.ErrorCode);
+        var result = await _client.CallToolAsync("add", new { a = "not_a_number", b = 2 }, ct: _cts.Token);
+        Assert.True(result.IsError);
     }
 
     [Fact]

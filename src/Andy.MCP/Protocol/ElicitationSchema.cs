@@ -23,6 +23,10 @@ public sealed record ElicitationSchema
     [JsonPropertyName("required")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public IReadOnlyList<string>? Required { get; init; }
+
+    /// <summary>Unknown wire fields retained for protocol extensions.</summary>
+    [JsonExtensionData]
+    public Dictionary<string, JsonElement>? ExtensionData { get; init; }
 }
 
 /// <summary>
@@ -176,6 +180,10 @@ public sealed record PrimitiveSchemaDefinition
             Items = JsonSerializer.SerializeToElement(new { type = "string", @enum = values }),
             Default = @default is null ? null : JsonSerializer.SerializeToElement(@default)
         };
+
+    /// <summary>Unknown wire fields retained for protocol extensions.</summary>
+    [JsonExtensionData]
+    public Dictionary<string, JsonElement>? ExtensionData { get; init; }
 }
 
 /// <summary>
@@ -198,4 +206,8 @@ public sealed record EnumOption
         Const = @const;
         Title = title;
     }
+
+    /// <summary>Unknown wire fields retained for protocol extensions.</summary>
+    [JsonExtensionData]
+    public Dictionary<string, JsonElement>? ExtensionData { get; init; }
 }

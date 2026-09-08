@@ -26,7 +26,7 @@ See the **[compliance matrix](docs/compliance.md)** for exact, test-linked statu
 - Transports: graceful stdio shutdown and Streamable HTTP with bounded SSE polling, per-stream resumption, and concurrent stream routing
 - High-level client API: tools, resources (+ subscribe), prompts, completion, roots, sampling, elicitation, auto-pagination, capability gating
 - High-level server API: fluent + attribute registration; concurrent dispatch, cancellation, progress
-- Recursive JSON Schema input validation and structured tool output enforcement
+- JSON Schema 2020-12 input validation, structured output enforcement, and complete tool metadata registration
 - Experimental tasks (task-augmented `tools/call` + `tasks/*`)
 - Security: opt-in Origin validation, principal-bound sessions with cross-user rejection, fail-closed body/session limits
 - OAuth: challenge parsing, correct 401 handling, safe concurrent refresh, PRM/RFC 8414/OIDC metadata discovery wired into the 401 flow, RFC 7592 managed registration, Client ID Metadata Documents, and opt-in PKCE/403 scope step-up (not a complete OAuth claim — see matrix)
@@ -203,6 +203,9 @@ See the `docs/` directory:
 
 ## Project status
 
+**2026-09-08 wire model update:** unknown protocol fields survive round trips, capability
+sub-options are explicit, and older sampling replies use the required scalar content shape.
+Frozen official schemas and client reply tests cover every advertised revision.
 **2026-09-08 request lifetime update:** idle timeouts reset on increasing progress, bounded by
 MaximumRequestDuration. Inbound cancellation is isolated from outbound IDs, and shutdown awaits
 handler cleanup. Progress is sent in order before successful tool responses.

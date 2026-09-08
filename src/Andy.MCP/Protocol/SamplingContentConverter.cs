@@ -9,7 +9,7 @@ namespace Andy.MCP.Protocol;
 /// (<c>SamplingMessageContentBlock | SamplingMessageContentBlock[]</c>).
 ///
 /// Reading accepts both the scalar and array forms. Writing always emits the array form, which is
-/// valid wherever multi-block sampling content is (2025-03-26 through 2025-11-25); the in-memory
+/// valid for 2025-11-25; revision-aware serialization uses a scalar for earlier peers; the in-memory
 /// model is normalized to a list either way.
 ///
 /// Only the content blocks valid for sampling are permitted: text, image, audio, tool_use, and
@@ -55,9 +55,34 @@ public sealed class SamplingContentConverter : JsonConverter<IReadOnlyList<Conte
     /// </summary>
     public static void EnsureValidSamplingBlock(Content block)
     {
+        if (block is null) throw new JsonException("Sampling content must not be null.");
         if (block is not (TextContent or ImageContent or AudioContent or ToolUseContent or ToolResultContent))
             throw new JsonException(
                 $"'{block.GetType().Name}' is not a valid sampling content block. Sampling permits only " +
                 "text, image, audio, tool_use, and tool_result content.");
+    }
+}
+
+
+/// <summary>Earlier revisions require exactly one text/image (or, from 2025-03-26, audio) block.</summary>
+internal sealed class LegacySamplingContentConverter(bool supportsAudio) : JsonConverter<IReadOnlyList<Content>>
+{
+    public override IReadOnlyList<Content> Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
+    {
+        if (reader.TokenType != JsonTokenType.StartObject) throw new JsonException("This revision requires one sampling content block.");
+        var block = JsonSerializer.Deserialize<Content>(ref reader, options)!;
+        Validate(block); return [block];
+    }
+
+    public override void Write(Utf8JsonWriter writer, IReadOnlyList<Content> value, JsonSerializerOptions options)
+    {
+        if (value.Count != 1) throw new JsonException("This revision requires exactly one sampling content block.");
+        Validate(value[0]); JsonSerializer.Serialize(writer, value[0], options);
+    }
+
+    private void Validate(Content block)
+    {
+        if (block is not (TextContent or ImageContent) && !(supportsAudio && block is AudioContent))
+            throw new JsonException("Sampling content is unavailable in this protocol revision.");
     }
 }

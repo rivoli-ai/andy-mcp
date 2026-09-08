@@ -1,0 +1,58 @@
+{
+  "allOf": {
+    "url": "https://raw.githubusercontent.com/json-schema-org/JSON-Schema-Test-Suite/f6fd52a0a95472e079cbfc6ef7f089702b80e045/tests/draft2020-12/allOf.json",
+    "sha256": "81045b06706a28f6aa337b485b41a764098e10ac73bb1d346ba0a4285a63e970"
+  },
+  "anyOf": {
+    "url": "https://raw.githubusercontent.com/json-schema-org/JSON-Schema-Test-Suite/f6fd52a0a95472e079cbfc6ef7f089702b80e045/tests/draft2020-12/anyOf.json",
+    "sha256": "7a6fe41602496c256334ffa3e6fb457b26ac23b97ca03cb16b724ad21a7d216d"
+  },
+  "oneOf": {
+    "url": "https://raw.githubusercontent.com/json-schema-org/JSON-Schema-Test-Suite/f6fd52a0a95472e079cbfc6ef7f089702b80e045/tests/draft2020-12/oneOf.json",
+    "sha256": "a8d80a786d07769cb9b8b9a8903ca4f7aa564446ae6b781c7f7f6ffea11ed363"
+  },
+  "not": {
+    "url": "https://raw.githubusercontent.com/json-schema-org/JSON-Schema-Test-Suite/f6fd52a0a95472e079cbfc6ef7f089702b80e045/tests/draft2020-12/not.json",
+    "sha256": "1fd6ef263efd365680c6aaf8f23aa5430d7b9f80b84f46b1208b1ed8353c28b4"
+  },
+  "items": {
+    "url": "https://raw.githubusercontent.com/json-schema-org/JSON-Schema-Test-Suite/f6fd52a0a95472e079cbfc6ef7f089702b80e045/tests/draft2020-12/items.json",
+    "sha256": "d924a8171f1f1d04ff026a4e3491d1376297145563158543005b7073b69ab913"
+  },
+  "properties": {
+    "url": "https://raw.githubusercontent.com/json-schema-org/JSON-Schema-Test-Suite/f6fd52a0a95472e079cbfc6ef7f089702b80e045/tests/draft2020-12/properties.json",
+    "sha256": "58f01566cfe3e1fc4fb851d3b2eab13768d65ba5dbc4e9f9387ceaf4244a0522"
+  },
+  "additionalProperties": {
+    "url": "https://raw.githubusercontent.com/json-schema-org/JSON-Schema-Test-Suite/f6fd52a0a95472e079cbfc6ef7f089702b80e045/tests/draft2020-12/additionalProperties.json",
+    "sha256": "b96bd533416386ac6421737b48c5c072870ab5dbea910585e9e8fa6305c7ca91"
+  },
+  "enum": {
+    "url": "https://raw.githubusercontent.com/json-schema-org/JSON-Schema-Test-Suite/f6fd52a0a95472e079cbfc6ef7f089702b80e045/tests/draft2020-12/enum.json",
+    "sha256": "1abe7eb883bde4a78c62f08e484e16f32b72ca5c1be725aa54d85cc4546b5031"
+  },
+  "if-then-else": {
+    "url": "https://raw.githubusercontent.com/json-schema-org/JSON-Schema-Test-Suite/f6fd52a0a95472e079cbfc6ef7f089702b80e045/tests/draft2020-12/if-then-else.json",
+    "sha256": "4bc76318e6df0e8294cb9aa8a3bf95f04fa9cfea96f295a3b55e725d1289c809"
+  },
+  "dependentRequired": {
+    "url": "https://raw.githubusercontent.com/json-schema-org/JSON-Schema-Test-Suite/f6fd52a0a95472e079cbfc6ef7f089702b80e045/tests/draft2020-12/dependentRequired.json",
+    "sha256": "0824c393115498ac1a62551c3174a3ccd54ee4ef323d5eb9de0dfe3a185ad666"
+  },
+  "prefixItems": {
+    "url": "https://raw.githubusercontent.com/json-schema-org/JSON-Schema-Test-Suite/f6fd52a0a95472e079cbfc6ef7f089702b80e045/tests/draft2020-12/prefixItems.json",
+    "sha256": "5b2006fb0d99f9df8e25e384d665edc57427e7849ac0f963f541626fd82bb522"
+  },
+  "contains": {
+    "url": "https://raw.githubusercontent.com/json-schema-org/JSON-Schema-Test-Suite/f6fd52a0a95472e079cbfc6ef7f089702b80e045/tests/draft2020-12/contains.json",
+    "sha256": "086782fc8b54ac77a4a2afe8b84f8cc7fc9ca7b22473ebd8db3480f2eb8d0ab6"
+  },
+  "pattern": {
+    "url": "https://raw.githubusercontent.com/json-schema-org/JSON-Schema-Test-Suite/f6fd52a0a95472e079cbfc6ef7f089702b80e045/tests/draft2020-12/pattern.json",
+    "sha256": "60713a3b01957fad54f00ab30b378463b3e07b35242c945a9325f8d6ae7080fc"
+  },
+  "format": {
+    "url": "https://raw.githubusercontent.com/json-schema-org/JSON-Schema-Test-Suite/f6fd52a0a95472e079cbfc6ef7f089702b80e045/tests/draft2020-12/format.json",
+    "sha256": "3baf934e2aeace523012f92994e3c9f4b6142d68ba9ece0c12becaffa52eaf5f"
+  }
+}

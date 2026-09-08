@@ -13,6 +13,10 @@ public abstract record JsonRpcMessage
 {
     [JsonPropertyName("jsonrpc")]
     public string JsonRpc { get; init; } = "2.0";
+
+    /// <summary>Unknown wire fields retained for protocol extensions.</summary>
+    [JsonExtensionData]
+    public Dictionary<string, JsonElement>? ExtensionData { get; init; }
 }
 
 /// <summary>
