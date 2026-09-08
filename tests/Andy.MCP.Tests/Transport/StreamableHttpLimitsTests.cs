@@ -18,7 +18,7 @@ public class StreamableHttpLimitsTests
             await foreach (var message in transport.Messages)
                 if (message is JsonRpcRequest request)
                     await transport.SendAsync(JsonRpcResponse.Success(request.Id));
-        }, options);
+        }, options with { AllowAnonymous = true });
 
     private static DefaultHttpContext InitContext(string body)
     {

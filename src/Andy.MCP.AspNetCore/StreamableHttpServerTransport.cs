@@ -19,9 +19,14 @@ public sealed record StreamableHttpServerOptions
 {
     /// <summary>
     /// Validate the Origin header. Return true to allow, false to reject.
-    /// If null, all origins are allowed.
+    /// Present origins are denied unless explicitly allowed.
     /// </summary>
     public Func<string?, bool>? ValidateOrigin { get; init; }
+    /// <summary>Explicit opt-out for trusted local deployments. Origin checks still apply.</summary>
+    public bool AllowAnonymous { get; init; }
+    /// <summary>Required policy; ASP.NET Core must validate token signatures/lifetimes first.</summary>
+    public McpHttpAuthorizationOptions? Authorization { get; init; }
+    public TimeProvider TimeProvider { get; init; } = TimeProvider.System;
 
     /// <summary>
     /// Session timeout. Sessions inactive longer than this are cleaned up.
@@ -44,9 +49,12 @@ public sealed record StreamableHttpServerOptions
 /// Handles Streamable HTTP MCP requests. Manages sessions and dispatches to server transports.
 /// Designed to be registered as a singleton and mapped to an endpoint.
 /// </summary>
-public sealed class StreamableHttpHandler
+public sealed class StreamableHttpHandler : IDisposable
 {
     private readonly ConcurrentDictionary<string, StreamableHttpSession> _sessions = new();
+    private readonly object _sessionGate = new();
+    private readonly ITimer _cleanupTimer;
+    private bool _disposed;
     private readonly StreamableHttpServerOptions _options;
     private readonly Func<IServerTransport, Task> _sessionHandler;
     private readonly ILogger<StreamableHttpHandler> _logger;
@@ -63,20 +71,50 @@ public sealed class StreamableHttpHandler
         _sessionHandler = sessionHandler;
         _options = options ?? new StreamableHttpServerOptions();
         _logger = logger ?? Microsoft.Extensions.Logging.Abstractions.NullLogger<StreamableHttpHandler>.Instance;
+        if (_options.SessionTimeout <= TimeSpan.Zero || _options.MaxSessions <= 0 || _options.MaxRequestBodyBytes <= 0)
+            throw new ArgumentOutOfRangeException(nameof(options));
+        _options.Authorization?.Validate();
+        var interval = TimeSpan.FromMilliseconds(Math.Clamp(_options.SessionTimeout.TotalMilliseconds, 100, 60_000));
+        _cleanupTimer = _options.TimeProvider.CreateTimer(_ => RemoveExpiredSessions(), null, interval, interval);
     }
 
     public async Task HandleAsync(HttpContext context)
     {
-        // Validate Origin
-        if (_options.ValidateOrigin is not null)
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        var origins = context.Request.Headers.Origin;
+        if (origins.Count > 1 || (origins.Count == 1 &&
+            (_options.ValidateOrigin is null || !_options.ValidateOrigin(origins[0]))))
         {
-            var origin = context.Request.Headers.Origin.FirstOrDefault();
-            if (!_options.ValidateOrigin(origin))
+            context.Response.StatusCode = 403;
+            return;
+        }
+        if (!_options.AllowAnonymous)
+        {
+            var auth = _options.Authorization;
+            if (auth is null)
+            {
+                context.Response.StatusCode = 503;
+                return;
+            }
+            var user = context.User;
+            if (user.Identity?.IsAuthenticated != true || GetUserKey(context) is null ||
+                !user.HasClaim("iss", auth.Issuer) || !user.HasClaim("aud", auth.Resource))
+            {
+                context.Response.StatusCode = 401;
+                context.Response.Headers.WWWAuthenticate = auth.Challenge("invalid_token");
+                return;
+            }
+            var scopes = user.FindAll("scope").Concat(user.FindAll("scp"))
+                .SelectMany(c => c.Value.Split(' ', StringSplitOptions.RemoveEmptyEntries))
+                .ToHashSet(StringComparer.Ordinal);
+            if (auth.RequiredScopes.Any(scope => !scopes.Contains(scope)))
             {
                 context.Response.StatusCode = 403;
+                context.Response.Headers.WWWAuthenticate = auth.Challenge("insufficient_scope");
                 return;
             }
         }
+        RemoveExpiredSessions();
 
         // Validate protocol version
         var version = context.Request.Headers["MCP-Protocol-Version"].FirstOrDefault();
@@ -142,16 +180,20 @@ public sealed class StreamableHttpHandler
         // Handle initialize — create new session
         if (message is JsonRpcRequest { Method: McpMethods.Initialize } initRequest)
         {
-            // Bound the number of live sessions to limit memory exhaustion.
-            if (_sessions.Count >= _options.MaxSessions)
+            StreamableHttpSession session;
+            string sessionId;
+            lock (_sessionGate)
             {
-                context.Response.StatusCode = 503; // Service Unavailable
-                return;
+                if (_disposed || _sessions.Count >= _options.MaxSessions)
+                {
+                    context.Response.StatusCode = 503;
+                    return;
+                }
+                sessionId = GenerateSessionId();
+                session = new StreamableHttpSession(sessionId, GetUserKey(context));
+                session.LastActivity = _options.TimeProvider.GetUtcNow();
+                _sessions[sessionId] = session;
             }
-
-            var sessionId = GenerateSessionId();
-            var session = new StreamableHttpSession(sessionId, GetUserKey(context));
-            _sessions[sessionId] = session;
 
             context.Response.Headers["Mcp-Session-Id"] = sessionId;
 
@@ -160,6 +202,7 @@ public sealed class StreamableHttpHandler
             {
                 try { await _sessionHandler(session); }
                 catch (Exception ex) { _logger.LogError(ex, "Session {Id} handler error", sessionId); }
+                finally { _sessions.TryRemove(sessionId, out _); session.Close(); }
             });
 
             // Register the response waiter BEFORE the request becomes visible to the
@@ -313,7 +356,32 @@ public sealed class StreamableHttpHandler
             return null;
         }
 
+        session.LastActivity = _options.TimeProvider.GetUtcNow();
         return session;
+    }
+
+    private void RemoveExpiredSessions()
+    {
+        lock (_sessionGate)
+        {
+            var now = _options.TimeProvider.GetUtcNow();
+            foreach (var pair in _sessions)
+                if (now - pair.Value.LastActivity >= _options.SessionTimeout &&
+                    _sessions.TryRemove(pair.Key, out var expired))
+                    expired.Close();
+        }
+    }
+
+    public void Dispose()
+    {
+        lock (_sessionGate)
+        {
+            if (_disposed) return;
+            _disposed = true;
+            _cleanupTimer.Dispose();
+            foreach (var session in _sessions.Values) session.Close();
+            _sessions.Clear();
+        }
     }
 
     /// <summary>
@@ -326,9 +394,9 @@ public sealed class StreamableHttpHandler
         if (user?.Identity?.IsAuthenticated != true)
             return null;
 
-        return user.FindFirst(ClaimTypes.NameIdentifier)?.Value
-            ?? user.FindFirst("sub")?.Value
-            ?? user.Identity.Name;
+        var subject = user.FindFirst("sub")?.Value ?? user.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+        if (string.IsNullOrWhiteSpace(subject)) return null;
+        return JsonSerializer.Serialize(new[] { user.FindFirst("iss")?.Value, subject });
     }
 
     /// <summary>
@@ -344,7 +412,7 @@ public sealed class StreamableHttpHandler
         using var buffer = new MemoryStream();
         var chunk = new byte[8192];
         int read;
-        while ((read = await context.Request.Body.ReadAsync(chunk)) > 0)
+        while ((read = await context.Request.Body.ReadAsync(chunk, context.RequestAborted)) > 0)
         {
             if (buffer.Length + read > max)
                 return null;
@@ -423,6 +491,12 @@ public sealed class StreamableHttpSession : IServerTransport
     internal int PendingResponseCount { get { lock (_sync) { return _pendingResponses.Count; } } }
     internal int BufferedResponseCount { get { lock (_sync) { return _bufferedResponses.Count; } } }
 
+    private long _lastActivityTicks;
+    internal DateTimeOffset LastActivity
+    {
+        get => new(Interlocked.Read(ref _lastActivityTicks), TimeSpan.Zero);
+        set => Interlocked.Exchange(ref _lastActivityTicks, value.UtcTicks);
+    }
     public string SessionId { get; }
 
     /// <summary>
