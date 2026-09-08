@@ -48,6 +48,9 @@ public sealed record StreamableHttpServerOptions
     /// <summary>Reconnection delay sent in the SSE priming event.</summary>
     public int SseRetryMilliseconds { get; init; } = 1000;
     public int MaxConcurrentStreamsPerSession { get; init; } = 16;
+    /// <summary>Use resumable SSE for non-initialize POST requests, including related server messages.</summary>
+    public bool UseSseResponses { get; init; }
+
     public int MaxConcurrentRequestsPerSession { get; init; } = 256;
 }
 
@@ -273,6 +276,14 @@ public sealed class StreamableHttpHandler : IDisposable
 
         if (message is JsonRpcRequest request)
         {
+            if (_options.UseSseResponses)
+            {
+                var streamId = existingSession.CreatePostStream(request.Id, out var close);
+                try { await existingSession.ReceiveMessageAsync(message); }
+                catch { existingSession.DiscardPostStream(streamId, close); throw; }
+                await WriteSseResponseAsync(context, existingSession, streamId, 0, close);
+                return;
+            }
             // Register the waiter before delivering the request (see initialize path).
             var responseTask = existingSession.RegisterResponseWaiter(request.Id, context.RequestAborted);
             try { await existingSession.ReceiveMessageAsync(message); }
@@ -329,6 +340,12 @@ public sealed class StreamableHttpHandler : IDisposable
         if (!session.TryOpenServerStream(streamId, resumeAfterSeq, resume, out var close, out var status))
         { context.Response.StatusCode = status; return; }
 
+        await WriteSseResponseAsync(context, session, streamId, resumeAfterSeq, close!);
+    }
+
+    private async Task WriteSseResponseAsync(HttpContext context, StreamableHttpSession session,
+        string streamId, long resumeAfterSeq, CancellationTokenSource close)
+    {
         using var poll = new CancellationTokenSource(_options.SsePollTimeout, _options.TimeProvider);
         using var linked = CancellationTokenSource.CreateLinkedTokenSource(context.RequestAborted, poll.Token, close!.Token);
         var ct = linked.Token;
@@ -504,7 +521,7 @@ public sealed class StreamableHttpHandler : IDisposable
 /// A per-session transport for the Streamable HTTP server.
 /// Receives messages from POST requests and sends responses/notifications.
 /// </summary>
-public sealed class StreamableHttpSession : IServerTransport
+public sealed class StreamableHttpSession : IServerTransport, IRequestContextTransport
 {
     private readonly Channel<JsonRpcMessage> _incoming;
 
@@ -515,11 +532,20 @@ public sealed class StreamableHttpSession : IServerTransport
     // "{streamId}.{seq}"; a reconnect reuses the stream id to resume that stream's own events.
     private readonly object _sseSync = new();
     private readonly LinkedList<SseEntry> _replay = new();
+    private readonly Dictionary<string, PostStream> _postStreams = new(StringComparer.Ordinal);
+    private readonly Dictionary<RequestId, string> _postRequests = new();
+    private readonly AsyncLocal<string?> _requestStream = new();
+    private sealed class PostStream(RequestId requestId)
+    {
+        public RequestId RequestId { get; } = requestId;
+        public bool Completed { get; set; }
+    }
     private long _seq;
     private readonly Dictionary<string, CancellationTokenSource> _activeStreams = new(StringComparer.Ordinal);
     private readonly HashSet<string> _knownStreams = new(StringComparer.Ordinal);
     private readonly Dictionary<string, long> _replayFloors = new(StringComparer.Ordinal);
     internal int MaxConcurrentStreams { get; set; } = 16;
+    internal int PendingPostCount { get { lock (_sseSync) return _postRequests.Count; } }
     internal int ActiveStreamCount { get { lock (_sseSync) return _activeStreams.Count; } }
     private const int MaxReplayEvents = 256;
     private TaskCompletionSource _sseSignal = new(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -529,6 +555,7 @@ public sealed class StreamableHttpSession : IServerTransport
         public required long Seq { get; init; }
         public required JsonRpcMessage Message { get; init; }
         public string? ClaimedBy { get; set; }
+        public bool Delivered { get; set; }
     }
 
     // All response-correlation state is guarded by _sync. _pendingResponses holds waiters
@@ -569,6 +596,66 @@ public sealed class StreamableHttpSession : IServerTransport
         _incoming = Channel.CreateBounded<JsonRpcMessage>(new BoundedChannelOptions(256) { FullMode = BoundedChannelFullMode.Wait });
     }
 
+    public IDisposable EnterRequestScope(RequestId requestId)
+    {
+        var previous = _requestStream.Value;
+        string? id;
+        lock (_sseSync) id = _postRequests.GetValueOrDefault(requestId);
+        _requestStream.Value = id;
+        return new RequestScope(() =>
+        {
+            _requestStream.Value = previous;
+            lock (_sseSync)
+            {
+                if (id is not null && _postRequests.TryGetValue(requestId, out var current) && current == id)
+                {
+                    _postRequests.Remove(requestId);
+                    if (_postStreams.TryGetValue(id, out var post)) post.Completed = true;
+                    foreach (var entry in _replay.Where(e => e.ClaimedBy == id && !e.Delivered).ToArray()) _replay.Remove(entry);
+                    var signal = _sseSignal;
+                    _sseSignal = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+                    signal.TrySetResult();
+                }
+            }
+        });
+    }
+
+    private sealed class RequestScope(Action exit) : IDisposable
+    {
+        public void Dispose() => exit();
+    }
+
+    internal string CreatePostStream(RequestId requestId, out CancellationTokenSource close)
+    {
+        lock (_sync)
+            lock (_sseSync)
+            {
+                if (!_connected) throw new McpHttpRequestRejectedException(404, "Session closed.");
+                if (_pendingResponses.ContainsKey(requestId) || _postRequests.ContainsKey(requestId))
+                    throw new McpHttpRequestRejectedException(409, "Duplicate request ID.");
+                if (_pendingResponses.Count + _postRequests.Count >= MaxPendingResponses ||
+                    _replay.Count(e => !e.Delivered) + _postRequests.Count >= MaxReplayEvents)
+                    throw new McpHttpRequestRejectedException(429, "Session request capacity exceeded.");
+                var id = NewStreamId();
+                if (!TryOpenServerStream(id, 0, false, out var reservation, out var status))
+                    throw new McpHttpRequestRejectedException(status, "POST stream capacity exceeded.");
+                _postStreams.Add(id, new PostStream(requestId));
+                _postRequests.Add(requestId, id);
+                close = reservation!;
+                return id;
+            }
+    }
+
+    internal void DiscardPostStream(string id, CancellationTokenSource close)
+    {
+        lock (_sseSync)
+        {
+            if (_postStreams.Remove(id, out var post)) _postRequests.Remove(post.RequestId);
+            _knownStreams.Remove(id);
+        }
+        ReleaseServerStream(id, close);
+    }
+
     public Task StartAsync(CancellationToken cancellationToken = default) => Task.CompletedTask;
 
     /// <summary>
@@ -579,6 +666,16 @@ public sealed class StreamableHttpSession : IServerTransport
     {
         if (message is JsonRpcResponse response)
         {
+            lock (_sseSync)
+            {
+                if (_postRequests.TryGetValue(response.Id, out var postId))
+                {
+                    AppendServerEvent(message, postId, terminal: true);
+                    _postRequests.Remove(response.Id);
+                    _postStreams[postId].Completed = true;
+                    return Task.CompletedTask;
+                }
+            }
             lock (_sync)
             {
                 // Route the response to the waiting POST handler.
@@ -602,26 +699,31 @@ public sealed class StreamableHttpSession : IServerTransport
         }
 
         // Server-initiated requests and notifications go to the SSE stream (via the replay buffer).
-        AppendServerEvent(message);
+        string? target;
+        lock (_sseSync)
+            target = _requestStream.Value is { } id && _postStreams.TryGetValue(id, out var post) && !post.Completed ? id : null;
+        AppendServerEvent(message, target);
         return Task.CompletedTask;
     }
 
-    private void AppendServerEvent(JsonRpcMessage message)
+    private void AppendServerEvent(JsonRpcMessage message, string? streamId = null, bool terminal = false)
     {
         TaskCompletionSource signal;
         lock (_sseSync)
         {
+            if (!terminal && _replay.Count(e => !e.Delivered) >= MaxReplayEvents - _postRequests.Count)
+                throw new McpHttpRequestRejectedException(429, "Undelivered SSE queue capacity exceeded.");
             while (_replay.Count >= MaxReplayEvents)
             {
                 var delivered = _replay.First;
-                while (delivered is not null && delivered.Value.ClaimedBy is null) delivered = delivered.Next;
+                while (delivered is not null && !delivered.Value.Delivered) delivered = delivered.Next;
                 if (delivered is null) throw new McpHttpRequestRejectedException(429, "Undelivered SSE queue capacity exceeded.");
                 var owner = delivered.Value.ClaimedBy!;
                 if (_knownStreams.Contains(owner)) _replayFloors[owner] = Math.Max(_replayFloors.GetValueOrDefault(owner), delivered.Value.Seq);
                 _replay.Remove(delivered);
             }
             _seq++;
-            _replay.AddLast(new SseEntry { Seq = _seq, Message = message });
+            _replay.AddLast(new SseEntry { Seq = _seq, Message = message, ClaimedBy = streamId });
 
             signal = _sseSignal;
             _sseSignal = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -678,8 +780,10 @@ public sealed class StreamableHttpSession : IServerTransport
             if (_activeStreams.Count >= MaxConcurrentStreams) { status = 429; return false; }
             if (_knownStreams.Count >= Math.Max(MaxReplayEvents, MaxConcurrentStreams) && !_knownStreams.Contains(id))
             {
-                var oldest = _knownStreams.FirstOrDefault(s => !_activeStreams.ContainsKey(s));
-                if (oldest is not null) { _knownStreams.Remove(oldest); _replayFloors.Remove(oldest); }
+                var oldest = _knownStreams.FirstOrDefault(s => !_activeStreams.ContainsKey(s) &&
+                    (!_postStreams.TryGetValue(s, out var post) || post.Completed && !_replay.Any(e => e.ClaimedBy == s && !e.Delivered)));
+                if (oldest is null) { status = 429; return false; }
+                _knownStreams.Remove(oldest); _replayFloors.Remove(oldest); _postStreams.Remove(oldest);
             }
             _knownStreams.Add(id);
             close = new CancellationTokenSource(); _activeStreams.Add(id, close); return true;
@@ -718,42 +822,28 @@ public sealed class StreamableHttpSession : IServerTransport
     internal async IAsyncEnumerable<(long Seq, JsonRpcMessage Message)> ReadServerEventsCoreAsync(
         string streamId, long resumeAfterSeq, [EnumeratorCancellation] CancellationToken ct = default)
     {
-        // Phase 1: resume this stream's own previously-delivered events.
         while (true)
         {
-            SseEntry? replayEntry;
-            lock (_sseSync)
-            {
-                replayEntry = _replay.FirstOrDefault(e => e.ClaimedBy == streamId && e.Seq > resumeAfterSeq);
-            }
-            if (replayEntry is null)
-                break;
-            resumeAfterSeq = replayEntry.Seq;
-            yield return (replayEntry.Seq, replayEntry.Message);
-        }
-
-        // Phase 2: claim and deliver unclaimed events (exactly-once across streams).
-        while (true)
-        {
-            SseEntry? claimed;
+            SseEntry? entry;
             Task signal;
+            bool terminal;
             lock (_sseSync)
             {
-                claimed = _replay.FirstOrDefault(e => e.ClaimedBy is null);
-                if (claimed is not null)
-                    claimed.ClaimedBy = streamId;
+                var isPost = _postStreams.TryGetValue(streamId, out var post);
+                entry = _replay.FirstOrDefault(e => e.Seq > resumeAfterSeq &&
+                    (e.ClaimedBy == streamId || (!isPost && e.ClaimedBy is null)));
+                terminal = isPost && (entry?.Message is JsonRpcResponse response && response.Id == post!.RequestId || entry is null && post!.Completed);
+                if (entry is not null) { entry.ClaimedBy = streamId; entry.Delivered = true; }
                 signal = _sseSignal.Task;
             }
-
-            if (claimed is not null)
+            if (entry is not null)
             {
-                yield return (claimed.Seq, claimed.Message);
-                continue;
+                resumeAfterSeq = entry.Seq;
+                yield return (entry.Seq, entry.Message);
             }
-
-            if (!_connected)
-                yield break;
-
+            if (terminal) yield break;
+            if (entry is not null) continue;
+            if (!_connected) yield break;
             try { await signal.WaitAsync(ct).ConfigureAwait(false); }
             catch (OperationCanceledException) { yield break; }
         }
@@ -808,6 +898,8 @@ public sealed class StreamableHttpSession : IServerTransport
                 return tcs.Task;
             }
 
+            lock (_sseSync)
+                if (_postRequests.ContainsKey(requestId)) throw new McpHttpRequestRejectedException(409, "Duplicate request ID.");
             if (_pendingResponses.ContainsKey(requestId))
                 throw new McpHttpRequestRejectedException(409, $"A request with id '{requestId}' is already awaiting a response on this session.");
             if (_pendingResponses.Count >= MaxPendingResponses)
@@ -861,8 +953,10 @@ public sealed class StreamableHttpSession : IServerTransport
 
         // Wake any SSE reader so it observes the closed state and completes.
         TaskCompletionSource signal;
+        CloseServerStreams();
         lock (_sseSync)
         {
+            _postRequests.Clear(); _postStreams.Clear(); _knownStreams.Clear(); _replayFloors.Clear();
             signal = _sseSignal;
         }
         signal.TrySetResult();

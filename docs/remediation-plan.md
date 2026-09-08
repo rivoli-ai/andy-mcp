@@ -27,7 +27,7 @@ P3 = experimental features, ecosystem integrations, and long-term full-complianc
   - [x] POST SSE cursor isolation, resumption and terminal-response completion
   - [x] Bound HTTP queues/replay and state the three supported HTTP revisions
   - [x] Automatically recover expired HTTP sessions with a fresh handshake and capability refresh
-  - [ ] Complete server POST SSE
+  - [x] Complete server POST SSE with request-scoped bidirectional routing and bounded replay
 - [x] #47 Full JSON Schema validation and registration surface
   - [x] Complete 2020-12 runtime/meta-schema validation with network fetches disabled
   - [x] Complete registration metadata fields
@@ -85,3 +85,7 @@ HTTP POSTs as well as response waits. Reserved standard method namespaces cannot
 2026-09-08: automatic HTTP session recovery coordinates concurrent 404s, restarts GET polling,
 refreshes peer capabilities, and cancels old inbound handlers. Recovery obeys call deadlines; an
 expired in-progress POST SSE result reports unknown outcome without repeating the operation.
+
+2026-09-08: optional server POST SSE routes nested sampling and notifications to their originating
+stream, resumes across polling without reposting tools, and reserves space for terminal responses.
+Abandoned handlers release their POST state; global GET streams cannot claim POST-owned events.
