@@ -23,10 +23,10 @@ P3 = experimental features, ecosystem integrations, and long-term full-complianc
   - [ ] Finish protocol shape validation and complete official-type coverage mapping
 - [x] #43 Cancellation, progress and timeout cleanup
 
-- [x] #44 Transport compliance and process shutdown
+- [ ] #44 Transport compliance and process shutdown (reopened for the #41 revision audit)
   - [x] Stdio EOF/SIGTERM/kill escalation and bounded GET SSE polling
   - [x] POST SSE cursor isolation, resumption and terminal-response completion
-  - [x] Bound HTTP queues/replay and state the three supported HTTP revisions
+  - [x] Bound HTTP queues/replay and state the two supported HTTP revisions
   - [x] Automatically recover expired HTTP sessions with a fresh handshake and capability refresh
   - [x] Complete server POST SSE with request-scoped bidirectional routing and bounded replay
 - [x] #47 Full JSON Schema validation and registration surface
@@ -92,9 +92,13 @@ stream, resumes across polling without reposting tools, and reserves space for t
 Abandoned handlers release their POST state; global GET streams cannot claim POST-owned events.
 
 2026-09-08: typed resource/prompt/subscription/logging APIs retain request metadata; list responses
-use typed models. Base request and notification metadata remain available on all four revisions.
+use typed models. Base request and notification metadata remain available for all four known schema revisions.
 Older elicitation retains boolean defaults and legacy titled enums; URL and multi-select modes
 fail explicitly when unavailable. Typed URL-elicitation-required errors validate their mode.
 2026-09-08: final transport audit exercises every supported HTTP revision against a real server
 in JSON and POST SSE modes. Stdio uses explicit UTF-8 and LF framing in both directions, with
 literal Unicode, escaped-newline and invalid-byte tests. HTTP legacy fallback is explicitly unsupported.
+
+2026-09-08: the full schema audit exposed mandatory batching in 2025-03-26. Since receiving
+batches is not implemented, remove that revision from client acceptance and server negotiation,
+retain its descriptor for schema conversion, and correct the transport matrix. Reverify #44 on merge.

@@ -28,7 +28,7 @@ public sealed class McpSession
     /// <summary>
     /// All protocol versions this implementation supports, newest first.
     /// </summary>
-    public static readonly IReadOnlyList<string> SupportedProtocolVersions = ProtocolRevision.AllVersions;
+    public static readonly IReadOnlyList<string> SupportedProtocolVersions = ProtocolRevision.SupportedVersions;
 
     private int _state = (int)McpSessionState.Uninitialized;
 
@@ -171,7 +171,7 @@ public sealed class McpSession
     public static string? NegotiateVersion(string clientVersion)
     {
         // If the client's requested revision is one we support, honor it.
-        if (ProtocolRevision.TryGet(clientVersion) is not null)
+        if (SupportedProtocolVersions.Contains(clientVersion))
             return clientVersion;
 
         // Otherwise offer our latest and let the client decide whether to proceed.
@@ -182,7 +182,7 @@ public sealed class McpSession
     /// Check if a client can accept a server's offered version.
     /// </summary>
     public static bool IsVersionAcceptable(string serverVersion) =>
-        ProtocolRevision.TryGet(serverVersion) is not null;
+        SupportedProtocolVersions.Contains(serverVersion);
 
     private static bool IsValidTransition(McpSessionState from, McpSessionState to) => (from, to) switch
     {

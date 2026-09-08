@@ -4,7 +4,7 @@ namespace Andy.MCP.Protocol;
 /// An MCP protocol revision (identified by its dated version string, e.g. "2025-11-25")
 /// together with the wire-schema features that revision introduced.
 ///
-/// This is the single source of truth for which revisions this implementation supports and
+/// This describes known schemas and the separate set of revisions offered by negotiation, and
 /// what each revision permits on the wire. Serialization, capability advertisement, and
 /// behavior that depends on the negotiated revision should consult the corresponding
 /// <see cref="ProtocolRevision"/> (obtained via <see cref="McpSession.Revision"/>) rather
@@ -40,7 +40,7 @@ public sealed record ProtocolRevision
     /// <summary>The newest revision this implementation supports.</summary>
     public static ProtocolRevision Latest => V2025_11_25;
 
-    /// <summary>All supported revisions, newest first.</summary>
+    /// <summary>All known schema revisions, newest first. Use Supported for negotiation.</summary>
     public static IReadOnlyList<ProtocolRevision> All { get; } = new[]
     {
         V2025_11_25,
@@ -49,12 +49,18 @@ public sealed record ProtocolRevision
         V2024_11_05,
     };
 
-    /// <summary>All supported revision version strings, newest first.</summary>
+    /// <summary>All known schema revision strings, newest first.</summary>
     public static IReadOnlyList<string> AllVersions { get; } =
         All.Select(r => r.Version).ToArray();
 
+    /// <summary>Negotiable revisions. March 2025 is excluded because its mandatory batching is not implemented.</summary>
+    public static IReadOnlyList<ProtocolRevision> Supported { get; } = Array.AsReadOnly(new[]
+    { V2025_11_25, V2025_06_18, V2024_11_05 });
+
+    public static IReadOnlyList<string> SupportedVersions { get; } = Array.AsReadOnly(Supported.Select(r => r.Version).ToArray());
+
     /// <summary>
-    /// Resolve a version string to its <see cref="ProtocolRevision"/>, or null if unsupported.
+    /// Resolve a version string to its <see cref="ProtocolRevision"/>, or null if unknown.
     /// </summary>
     public static ProtocolRevision? TryGet(string? version) =>
         version is null ? null : All.FirstOrDefault(r => r.Version == version);

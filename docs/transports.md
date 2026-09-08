@@ -4,8 +4,12 @@
 | --- | --- | --- |
 | 2025-11-25 | Supported | Supported |
 | 2025-06-18 | Supported | Supported |
-| 2025-03-26 | Supported | Supported |
+| 2025-03-26 | Unsupported: mandatory batching is not implemented | Unsupported: mandatory batching is not implemented |
 | 2024-11-05 | Supported | Unsupported; legacy HTTP+SSE fallback is not implemented |
+
+The [March 2025 batching requirement](https://modelcontextprotocol.io/specification/2025-03-26/basic#batching)
+is not implemented. That revision remains a known serialization descriptor but is excluded from
+client acceptance and server negotiation.
 
 HTTP sends the negotiated revision after initialization and rejects conflicting session headers.
 The server returns JSON by default. Set `StreamableHttpServerOptions.UseSseResponses = true`
@@ -42,7 +46,7 @@ See [HTTP authorization](http-security.md) for principal, audience, scope and Or
 
 ## Verification
 
-`HttpRevisionIntegrationTests` covers all three HTTP revisions with real JSON and SSE exchanges.
+`HttpRevisionIntegrationTests` covers both supported HTTP revisions with real JSON and SSE exchanges.
 `ServerPostSseTests` covers concurrent nested sampling, polling, terminal replay and queue capacity.
 `HttpSessionRecoveryTests` covers deletion, concurrent recovery, GET restart, capability refresh,
 old-handler cancellation and deadlines. `HttpBoundedSessionTests`, `SseReplayTests`,

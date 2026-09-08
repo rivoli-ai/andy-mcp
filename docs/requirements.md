@@ -26,7 +26,7 @@ https://modelcontextprotocol.io/specification/2025-06-18
 | `initialize` handshake with version negotiation | Implemented |
 | `notifications/initialized` confirmation | Implemented |
 | Capability negotiation (client + server) | Implemented |
-| Supported versions: 2025-06-18, 2025-03-26, 2024-11-05 | Implemented |
+| Negotiated revisions: 2025-11-25, 2025-06-18; 2024-11-05 over stdio only | Implemented; 2025-03-26 excluded because mandatory batching is not implemented |
 | Graceful shutdown (stdio: stdin close → SIGTERM → SIGKILL) | Implemented |
 | HTTP session termination via DELETE | Implemented |
 | Request timeouts with cancellation | Implemented |

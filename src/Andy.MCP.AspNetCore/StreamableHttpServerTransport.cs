@@ -203,7 +203,7 @@ public sealed class StreamableHttpHandler : IDisposable
         {
             if (context.Request.Headers.ContainsKey("Mcp-Session-Id") ||
                 (initRequest.Params is { } initParams && initParams.TryGetProperty("protocolVersion", out var requestedVersion) &&
-                 requestedVersion.ValueKind == JsonValueKind.String && requestedVersion.GetString() == "2024-11-05"))
+                 requestedVersion.ValueKind == JsonValueKind.String && requestedVersion.GetString() is "2024-11-05" or "2025-03-26"))
             {
                 context.Response.StatusCode = 400;
                 return;

@@ -43,7 +43,7 @@ public class HttpBoundedSessionTests
     }
 
     [Theory]
-    [InlineData("2025-03-26", 200)]
+    [InlineData("2025-03-26", 400)]
     [InlineData("2025-06-18", 200)]
     [InlineData("2025-11-25", 200)]
     [InlineData("2024-11-05", 400)]
