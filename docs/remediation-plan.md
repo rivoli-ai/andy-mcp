@@ -20,13 +20,15 @@ P3 = experimental features, ecosystem integrations, and long-term full-complianc
 - [ ] #43 Cancellation, progress and timeout cleanup
 - [ ] #44 Transport compliance and process shutdown
 - [ ] #47 Full JSON Schema validation and registration surface
+  - [x] Complete 2020-12 runtime/meta-schema validation with network fetches disabled
+  - [ ] Complete registration metadata fields
 - [ ] #48 Complete high-level client/server operations
 - [ ] #50 Conformance gates and coverage
 - [ ] #51 Evidence-backed documentation
 - [ ] #71 URI-template resolution
 - [ ] #73 SSE stream closure and polling
 - [ ] #74 Official-schema corpus and independent client/server interop
-- [ ] #75 Attribute schema generation
+- [x] #75 Attribute schema generation (PR96; merged-state 769 tests passed)
 
 ## P3
 #19, #20, #21, #30: optional ecosystem integration.
