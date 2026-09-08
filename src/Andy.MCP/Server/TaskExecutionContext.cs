@@ -67,9 +67,16 @@ internal sealed class TaskExecutionContext : IDisposable
             return response;
         if (!response.IsError)
             return response with { Result = WithRelatedTask(response.Result, id.GetString()!) };
-        var error = response.Error!;
+        return response with { Error = RelateError(response.Error!, id.GetString()!) };
+    }
+
+    internal static JsonRpcError RelateError(JsonRpcError error, string taskId)
+    {
         var extensions = error.ExtensionData is null ? new Dictionary<string, JsonElement>() : new(error.ExtensionData);
-        extensions["_meta"] = WithRelatedTask(null, id.GetString()!).GetProperty("_meta");
-        return response with { Error = error with { ExtensionData = extensions } };
+        var meta = extensions.TryGetValue("_meta", out var existing) && existing.ValueKind == JsonValueKind.Object
+            ? JsonNode.Parse(existing.GetRawText())!.AsObject() : new JsonObject();
+        meta["io.modelcontextprotocol/related-task"] = new JsonObject { ["taskId"] = taskId };
+        extensions["_meta"] = JsonSerializer.SerializeToElement(meta);
+        return error with { ExtensionData = extensions };
     }
 }

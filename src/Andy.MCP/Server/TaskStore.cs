@@ -29,6 +29,16 @@ public interface ITaskStore
     /// <summary>Mark a task failed with an optional message (server-internal).</summary>
     bool SetFailed(string taskId, string? statusMessage = null);
 
+    /// <summary>
+    /// Atomically retain a JSON-RPC error and mark a nonterminal task failed. Durable stores must
+    /// override this and GetError to preserve error code, data and extensions across restarts.
+    /// The default adapts legacy stores by retaining only the status message through SetFailed.
+    /// </summary>
+    bool SetError(string taskId, JsonRpcError error) => SetFailed(taskId, error.Message);
+
+    /// <summary>Retrieve an owned task's retained RPC error. Legacy stores return null.</summary>
+    JsonRpcError? GetError(string taskId, string? ownerKey) => null;
+
     /// <summary>Update a task's status (server-internal).</summary>
     bool UpdateStatus(string taskId, McpTaskStatus status, string? statusMessage = null);
 
@@ -48,6 +58,7 @@ public sealed class InMemoryTaskStore : ITaskStore
         public required McpTask Task { get; set; }
         public string? OwnerKey { get; init; }
         public JsonElement? Result { get; set; }
+        public JsonRpcError? Error { get; set; }
         public DateTimeOffset CreatedAt { get; init; }
     }
 
@@ -131,7 +142,27 @@ public sealed class InMemoryTaskStore : ITaskStore
     }
 
     public bool SetFailed(string taskId, string? statusMessage = null) =>
-        UpdateStatus(taskId, McpTaskStatus.Failed, statusMessage);
+        SetError(taskId, JsonRpcError.InternalError(statusMessage));
+
+    public bool SetError(string taskId, JsonRpcError error)
+    {
+        ArgumentNullException.ThrowIfNull(error);
+        lock (_sync)
+        {
+            PurgeExpired();
+            if (!_tasks.TryGetValue(taskId, out var entry) || IsTerminal(entry.Task.Status)) return false;
+            // Detach error data and extensions from caller-owned JsonDocuments.
+            entry.Error = McpJsonDefaults.ToElement(error).Deserialize<JsonRpcError>(McpJsonDefaults.Options)!;
+            entry.Task = Touch(entry.Task) with { Status = McpTaskStatus.Failed, StatusMessage = error.Message };
+            return true;
+        }
+    }
+
+    public JsonRpcError? GetError(string taskId, string? ownerKey)
+    {
+        lock (_sync)
+            return TryGetAuthorized(taskId, ownerKey, out var entry) ? entry.Error : null;
+    }
 
     public bool UpdateStatus(string taskId, McpTaskStatus status, string? statusMessage = null)
     {

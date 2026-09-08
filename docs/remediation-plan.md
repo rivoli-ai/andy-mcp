@@ -51,8 +51,9 @@ P3 = experimental features, ecosystem integrations, and long-term full-complianc
 - [x] Enforce terminal-state immutability, exact TTL expiry and detached failed-tool payload retention.
 - [x] Block result retrieval until terminal state and propagate task cancellation to running handlers.
 - [x] Route related-task input requests and resume after all pending peer input.
-- [ ] Retain exact RPC errors through durable stores.
-- [ ] Verify task capability negotiation and durable ownership in both directions.
+- [x] Retain exact RPC errors through durable stores and verify disk-backed store recreation.
+- [x] Isolate default owners and inject stores in both directions.
+- [ ] Complete the task capability and pagination audit.
 #39, #68: full-compliance epics; remain open until all children and final gates pass.
 
 ## Completion record
@@ -141,3 +142,8 @@ retrievals without allowing late completion to change the terminal state.
 propagate related-task metadata without losing vendor metadata, and return to working
 after every pending input completes. Real HTTP JSON/POST SSE elicitation and reverse
 sampling-to-tool tests verify observable transitions and deferred completion.
+
+2026-09-08: stores can retain RPC error codes, data and extensions; task execution
+preserves ordinary call error semantics and validates deferred payloads against the original
+request schema. Both peers accept injected stores and isolate default owner scopes.
+Disk-journal tests recreate stores and connections to retrieve prior results without reexecution.

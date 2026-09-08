@@ -27,7 +27,7 @@ See the **[compliance matrix](docs/compliance.md)** for exact, test-linked statu
 - High-level client API: tools, resources (+ subscribe), prompts, completion, roots, sampling, elicitation, auto-pagination and explicit pages, per-call deadlines, custom methods, capability gating
 - High-level server API: registration frozen at startup; RFC 6570 templates, multi-content resources, required prompt arguments, cancellation and progress
 - JSON Schema 2020-12 input validation, structured output enforcement, and complete tool metadata registration
-- Experimental tasks (task-augmented `tools/call` + `tasks/*`), with terminal-state and TTL enforcement, blocking result retrieval, handler cancellation and resumable peer input; end-to-end lifecycle work remains in progress (#49/#72)
+- Experimental tasks (task-augmented `tools/call` + `tasks/*`), with terminal-state and TTL enforcement, blocking result retrieval, handler cancellation and resumable peer input; injectable stores retain outcomes across connections, with disk-backed restart tests; end-to-end lifecycle work remains in progress (#49/#72)
 - Security: fail-closed HTTP authorization and present-Origin validation, issuer/subject-bound sessions, audience/scope checks and bounded resources
 - OAuth: challenge parsing, correct 401 handling, safe concurrent refresh, PRM/RFC 8414/OIDC metadata discovery wired into the 401 flow, RFC 7592 managed registration, Client ID Metadata Documents, and opt-in PKCE/403 scope step-up (not a complete OAuth claim — see matrix)
 - OpenTelemetry tracing, dependency injection, `IHostedService`, and `appsettings.json` binding
