@@ -8,8 +8,8 @@ namespace Andy.MCP.Protocol;
 /// union of a single content block or an array of content blocks
 /// (<c>SamplingMessageContentBlock | SamplingMessageContentBlock[]</c>).
 ///
-/// Reading accepts both the scalar and array forms. Writing always emits the array form, which is
-/// valid for 2025-11-25; revision-aware serialization uses a scalar for earlier peers; the in-memory
+/// Reading accepts both the scalar and array forms. Writing emits a scalar for one block, preserving
+/// compatibility with basic sampling in reference SDKs, and an array for multiple blocks; the in-memory
 /// model is normalized to a list either way.
 ///
 /// Only the content blocks valid for sampling are permitted: text, image, audio, tool_use, and
@@ -40,6 +40,12 @@ public sealed class SamplingContentConverter : JsonConverter<IReadOnlyList<Conte
 
     public override void Write(Utf8JsonWriter writer, IReadOnlyList<Content> value, JsonSerializerOptions options)
     {
+        if (value.Count == 1)
+        {
+            EnsureValidSamplingBlock(value[0]);
+            JsonSerializer.Serialize(writer, value[0], options);
+            return;
+        }
         writer.WriteStartArray();
         foreach (var block in value)
         {
