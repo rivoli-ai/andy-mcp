@@ -207,6 +207,10 @@ See the `docs/` directory:
 policy and an ASP.NET Core authenticated principal with matching audience and scopes. Present
 Origin headers are denied unless allowed. Trusted local callers can explicitly select
 AllowAnonymous = true. Sessions are bound to issuer and subject, expire, and close on shutdown.
+**2026-09-08 attribute schema update:** tool schemas use the .NET serializer contract, including
+nested records, JSON property names, required members, collections, nullable parameters, descriptions
+and serialized defaults. Attribute binding accepts the same enum shapes that the schema advertises.
+
 
 **2026-09-08 OAuth security update:** default OAuth, metadata and registration clients disable
 redirects/proxies and connect to a single vetted DNS resolution, rejecting private/reserved
