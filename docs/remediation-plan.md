@@ -25,7 +25,8 @@ P3 = experimental features, ecosystem integrations, and long-term full-complianc
 - [ ] #44 Transport compliance and process shutdown
   - [x] Stdio EOF/SIGTERM/kill escalation and bounded GET SSE polling
   - [x] POST SSE cursor isolation, resumption and terminal-response completion
-  - [ ] Finish HTTP session recovery, bounds and revision-specific transport claims
+  - [x] Bound HTTP queues/replay and state the three supported HTTP revisions
+  - [ ] Finish HTTP session recovery and server POST SSE
 - [x] #47 Full JSON Schema validation and registration surface
   - [x] Complete 2020-12 runtime/meta-schema validation with network fetches disabled
   - [x] Complete registration metadata fields
@@ -72,3 +73,6 @@ Upstream RFC example corpus and multi-content/error-channel integration tests ve
 2026-09-08: verified two simultaneously active HTTP GET streams route live notifications once,
 retain independent stream identities, and release reservations after polling. Resumption and
 explicit server closure are covered by SseReplayTests and SsePollingTests.
+
+2026-09-08: HTTP request/response and undelivered-event queues reject overload without leaking
+waiters or losing pending events. Replay gaps and inconsistent session revision headers fail explicitly.
