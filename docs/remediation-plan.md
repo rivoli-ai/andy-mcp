@@ -12,7 +12,7 @@ P3 = experimental features, ecosystem integrations, and long-term full-complianc
   - [x] Run the documented example in CI and upload symbol packages
   - [x] Finish dependency, API compatibility and package-content validation
 - [ ] #42 Strict bidirectional JSON-RPC and lifecycle enforcement
-- [ ] #45 OAuth discovery and token lifecycle security
+- [x] #45 OAuth discovery and token lifecycle security
 - [ ] #46 ASP.NET Core authorization, Origin and principal-bound isolation
 
 ## P2
@@ -39,3 +39,6 @@ P3 = experimental features, ecosystem integrations, and long-term full-complianc
 2026-09-08: verified the merged ancestors behind closures #40 (e10e6e6), #69 (98042ae)
 and #76 (superseded by .NET 10-only migration 2f41cd6). Priority labels assigned to all
 23 remaining issues. Release safety implementation recorded above; overall work is in progress.
+
+2026-09-08: OAuth acceptance audit verifies actual path-aware RFC 8414 and both OIDC fallback
+flows, challenge refresh/rotation, CIMD/DCR, PKCE callbacks and concurrent scope upgrades.

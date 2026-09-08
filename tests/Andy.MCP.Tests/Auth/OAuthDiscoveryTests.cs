@@ -72,6 +72,28 @@ public class OAuthDiscoveryTests
         Assert.Equal("https://auth.example.com/token", metadata.TokenEndpoint);
     }
 
+    [Theory]
+    [InlineData(0)]
+    [InlineData(1)]
+    [InlineData(2)]
+    public async Task AuthorizationServer_PathIssuer_ExecutesEachDiscoveryFallback(int supportedIndex)
+    {
+        string[] paths = ["/.well-known/oauth-authorization-server/tenant1",
+            "/.well-known/openid-configuration/tenant1", "/tenant1/.well-known/openid-configuration"];
+        var requested = new List<string>();
+        using var http = new HttpClient(new StubHandler(request =>
+        {
+            requested.Add(request.RequestUri!.AbsolutePath);
+            return request.RequestUri.AbsolutePath == paths[supportedIndex]
+                ? Json("""{"issuer":"https://auth.example.com/tenant1","authorization_endpoint":"https://auth.example.com/tenant1/authorize","token_endpoint":"https://auth.example.com/tenant1/token","code_challenge_methods_supported":["S256"]}""")
+                : new HttpResponseMessage(HttpStatusCode.NotFound);
+        }));
+        var metadata = await new OAuthMetadataDiscovery(http)
+            .DiscoverAuthorizationServerMetadataAsync(new Uri("https://auth.example.com/tenant1"));
+        Assert.Equal("https://auth.example.com/tenant1/token", metadata.TokenEndpoint);
+        Assert.Equal(paths.Take(supportedIndex + 1), requested);
+    }
+
     // ---- Validation ----
 
     [Fact]
