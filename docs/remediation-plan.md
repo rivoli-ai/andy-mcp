@@ -12,8 +12,9 @@ P3 = experimental features, ecosystem integrations, and long-term full-complianc
   - [x] Run the documented example in CI and upload symbol packages
   - [x] Finish dependency, API compatibility and package-content validation
 - [x] #42 Strict bidirectional JSON-RPC and lifecycle enforcement
-- [ ] #45 OAuth discovery and token lifecycle security
+- [x] #45 OAuth discovery and token lifecycle security
 - [x] #46 ASP.NET Core authorization, Origin and principal-bound isolation
+
 
 ## P2
 - [ ] #41 Complete revision-aware wire models
@@ -42,3 +43,7 @@ and #76 (superseded by .NET 10-only migration 2f41cd6). Priority labels assigned
 
 2026-09-08: completed strict RPC/lifecycle and request deadline/cleanup checks, including real
 HTTP bidirectional traffic, overlapping-ID cancellation and repeated concurrent shutdown.
+
+2026-09-08: OAuth acceptance audit verifies actual path-aware RFC 8414 and both OIDC fallback
+flows, challenge refresh/rotation, CIMD/DCR, PKCE callbacks and concurrent scope upgrades.
+
