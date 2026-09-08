@@ -79,9 +79,12 @@ public class TaskStoreTests
         var cancelled = store.Cancel(task.TaskId, "user-a");
         Assert.Equal(McpTaskStatus.Cancelled, cancelled!.Status);
 
-        // Completing a cancelled task is prevented at the cancel level (terminal).
+        // Repeated cancellation is rejected; late writers cannot overwrite cancellation.
         var again = store.Cancel(task.TaskId, "user-a");
-        Assert.Equal(McpTaskStatus.Cancelled, again!.Status);
+        Assert.Null(again);
+        Assert.False(store.SetResult(task.TaskId, McpJsonDefaults.ToElement(new { answer = 42 })));
+        Assert.False(store.SetFailed(task.TaskId, "late failure"));
+        Assert.Equal(McpTaskStatus.Cancelled, store.Get(task.TaskId, "user-a")!.Status);
     }
 
     [Fact]
