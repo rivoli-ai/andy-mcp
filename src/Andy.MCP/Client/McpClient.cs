@@ -522,6 +522,7 @@ public sealed class McpClient : IAsyncDisposable
     private async Task<T> SendRequestAsync<T>(string method, object? @params, CancellationToken ct,
         IProgress<McpProgress>? progress = null, RequestId? progressToken = null, McpRequestOptions? requestOptions = null)
     {
+        using var input = TaskExecutionContext.Current?.BeginInput();
         var id = NextId();
         using var activity = McpDiagnostics.StartClientRequest(
             method, id, _session.RemoteInfo?.Name, _session.ProtocolVersion);
@@ -530,7 +531,7 @@ public sealed class McpClient : IAsyncDisposable
         {
             Id = id,
             Method = method,
-            Params = @params is not null ? ToWire(@params) : null
+            Params = TaskExecutionContext.AttachCurrent(@params is not null ? ToWire(@params) : null)
         };
 
         if (requestOptions?.Progress is { } observer)
@@ -618,7 +619,7 @@ public sealed class McpClient : IAsyncDisposable
         var notification = new JsonRpcNotification
         {
             Method = method,
-            Params = @params is not null ? ToWire(@params) : null
+            Params = TaskExecutionContext.AttachCurrent(@params is not null ? ToWire(@params) : null)
         };
         ProtocolShapeValidation.Notification(notification, _session.Revision ?? ProtocolRevision.Latest);
         await _transport.SendAsync(notification);
@@ -776,7 +777,7 @@ public sealed class McpClient : IAsyncDisposable
             try { ProtocolShapeValidation.Result(request, response.Result, _session.Revision ?? ProtocolRevision.Latest); }
             catch (JsonException ex) { return JsonRpcResponse.Failure(request.Id, JsonRpcError.InternalError(ex.Message)); }
         }
-        return response;
+        return TaskExecutionContext.RelateResponse(request, response);
     }
 
     private async Task<JsonRpcResponse> DispatchServerRequestCoreAsync(JsonRpcRequest request, CancellationToken ct)
@@ -861,6 +862,7 @@ public sealed class McpClient : IAsyncDisposable
     {
         _background.Run(taskId, _cts?.Token ?? CancellationToken.None, async ct =>
         {
+            using var context = new TaskExecutionContext(_taskStore, taskId);
             try
             {
                 var result = await handler(ct);
