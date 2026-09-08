@@ -48,6 +48,7 @@ public static class RevisionAwareJson
                     Modifiers = { typeInfo => DropNewerProperties(typeInfo, ordinal) }
                 }
             };
+            if (ordinal < 3) options.Converters.Insert(0, new LegacyPrimitiveSchemaConverter(ordinal));
             return options;
         });
 
@@ -78,6 +79,15 @@ public static class RevisionAwareJson
                     ((type == typeof(ToolUseContent) || type == typeof(ToolResultContent)) && targetOrdinal < 3))
                     polymorphism.DerivedTypes.RemoveAt(i);
             }
+        }
+        if (targetOrdinal == 2 && typeInfo.Type == typeof(ElicitRequest))
+        {
+            typeInfo.OnSerializing = value =>
+            {
+                if (((ElicitRequest)value).IsUrlMode)
+                    throw new JsonException("URL elicitation requires protocol 2025-11-25.");
+            };
+            typeInfo.Properties.First(p => p.Name == "requestedSchema").CustomConverter = new LegacyRequestedSchemaConverter();
         }
         if (targetOrdinal < 3 && (typeInfo.Type == typeof(SamplingMessage) || typeInfo.Type == typeof(CreateMessageResult)))
         {

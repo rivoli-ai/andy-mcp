@@ -77,15 +77,11 @@ public class RevisionAwareJsonTests
     }
 
     [Fact]
-    public void ElicitationUrlMode_DroppedForOlderRevision()
+    public void ElicitationUrlMode_RejectsOlderRevisionInsteadOfProducingInvalidForm()
     {
         var request = ElicitRequest.ForUrl("Authorize", "id-1", "https://x/auth");
 
-        var older = RevisionAwareJson.ToElementForRevision(request, ProtocolRevision.V2025_06_18);
-        Assert.False(HasProp(older, "mode"));
-        Assert.False(HasProp(older, "url"));
-        Assert.False(HasProp(older, "elicitationId"));
-        Assert.Equal("Authorize", older.GetProperty("message").GetString());
+        Assert.Throws<JsonException>(() => RevisionAwareJson.ToElementForRevision(request, ProtocolRevision.V2025_06_18));
     }
 
     [Fact]

@@ -203,6 +203,8 @@ See the `docs/` directory:
 
 ## Project status
 
+**2026-09-08 parameter update:** typed resource, prompt, logging and subscription parameters preserve caller metadata. Older revisions retain base request/notification `_meta`; legacy elicitation preserves boolean defaults and adapts titled enums.
+
 **2026-09-08 POST SSE update:** `StreamableHttpServerOptions.UseSseResponses` enables resumable POST streams, including nested server requests without a separate GET listener. JSON responses remain the default.
 
 **2026-09-08 HTTP recovery update:** session 404s trigger a coordinated fresh handshake and capability refresh. Old inbound handlers are cancelled; interrupted POST SSE operations with unknown outcomes are not replayed.

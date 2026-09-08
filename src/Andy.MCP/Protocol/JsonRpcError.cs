@@ -36,6 +36,21 @@ public sealed record JsonRpcError
     public static JsonRpcError ResourceNotFound(string? message = null) =>
         new() { Code = McpErrorCodes.ResourceNotFound, Message = message ?? "Resource not found" };
 
+    /// <summary>Create the 2025-11-25 error requesting URL-based user interaction.</summary>
+    public static JsonRpcError UrlElicitationRequired(UrlElicitationRequiredData data, string? message = null)
+    {
+        ArgumentNullException.ThrowIfNull(data);
+        if (data.Elicitations.Any(e => e.Mode != "url" || e.RequestedSchema is not null ||
+            string.IsNullOrEmpty(e.ElicitationId) || !Uri.TryCreate(e.Url, UriKind.Absolute, out _)))
+            throw new ArgumentException("All required elicitations must be complete URL-mode requests.", nameof(data));
+        return new JsonRpcError
+        {
+            Code = McpErrorCodes.UrlElicitationRequired,
+            Message = message ?? "URL elicitation required",
+            Data = McpJsonDefaults.ToElement(data)
+        };
+    }
+
     /// <summary>Unknown wire fields retained for protocol extensions.</summary>
     [JsonExtensionData]
     public Dictionary<string, JsonElement>? ExtensionData { get; init; }

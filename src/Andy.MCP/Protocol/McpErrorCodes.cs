@@ -14,4 +14,5 @@ public static class McpErrorCodes
 
     // MCP-specific error codes
     public const int ResourceNotFound = -32002;
+    public const int UrlElicitationRequired = -32042;
 }

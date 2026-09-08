@@ -19,7 +19,8 @@ P3 = experimental features, ecosystem integrations, and long-term full-complianc
 ## P2
 - [ ] #41 Complete revision-aware wire models
   - [x] Preserve extension fields, add capability/tool execution metadata, and correct older sampling serialization
-  - [ ] Complete remaining typed parameter/union and high-level sub-capability checks
+  - [x] Add remaining stable typed parameters, enum builders and legacy metadata/elicitation conversion
+  - [ ] Finish protocol shape validation and complete official-type coverage mapping
 - [x] #43 Cancellation, progress and timeout cleanup
 
 - [ ] #44 Transport compliance and process shutdown
@@ -89,3 +90,8 @@ expired in-progress POST SSE result reports unknown outcome without repeating th
 2026-09-08: optional server POST SSE routes nested sampling and notifications to their originating
 stream, resumes across polling without reposting tools, and reserves space for terminal responses.
 Abandoned handlers release their POST state; global GET streams cannot claim POST-owned events.
+
+2026-09-08: typed resource/prompt/subscription/logging APIs retain request metadata; list responses
+use typed models. Base request and notification metadata remain available on all four revisions.
+Older elicitation retains boolean defaults and legacy titled enums; URL and multi-select modes
+fail explicitly when unavailable. Typed URL-elicitation-required errors validate their mode.
