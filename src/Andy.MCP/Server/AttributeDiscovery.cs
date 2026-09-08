@@ -1,4 +1,5 @@
 using System.Reflection;
+using System.Diagnostics.CodeAnalysis;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Text.Json.Schema;
@@ -19,6 +20,8 @@ public static class AttributeDiscovery
     /// <summary>
     /// Discover and register all attributed methods from a type.
     /// </summary>
+    [RequiresUnreferencedCode("Attribute discovery reflects over methods and serialized parameter types; preserve all registered types.")]
+    [RequiresDynamicCode("Attribute schemas and argument binding use runtime-generated serializer metadata.")]
     public static McpServer AddToolsFromType(this McpServer server, Type type, object? instance = null)
     {
         // Create at most one instance for the whole type, lazily and reused across every attributed
@@ -55,12 +58,16 @@ public static class AttributeDiscovery
     /// <summary>
     /// Discover and register all attributed methods from a type (generic).
     /// </summary>
+    [RequiresUnreferencedCode("Attribute discovery reflects over methods and serialized parameter types; preserve all registered types.")]
+    [RequiresDynamicCode("Attribute schemas and argument binding use runtime-generated serializer metadata.")]
     public static McpServer AddToolsFromType<T>(this McpServer server) =>
         server.AddToolsFromType(typeof(T));
 
     /// <summary>
     /// Discover and register all attributed methods from all types in an assembly.
     /// </summary>
+    [RequiresUnreferencedCode("Attribute discovery reflects over methods and serialized parameter types; preserve all registered types.")]
+    [RequiresDynamicCode("Attribute schemas and argument binding use runtime-generated serializer metadata.")]
     public static McpServer AddToolsFromAssembly(this McpServer server, Assembly assembly)
     {
         foreach (var type in assembly.GetTypes())
