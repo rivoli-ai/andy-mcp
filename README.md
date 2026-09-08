@@ -28,7 +28,7 @@ See the **[compliance matrix](docs/compliance.md)** for exact, test-linked statu
 - High-level server API: registration frozen at startup; RFC 6570 templates, multi-content resources, required prompt arguments, cancellation and progress
 - JSON Schema 2020-12 input validation, structured output enforcement, and complete tool metadata registration
 - Experimental tasks (task-augmented `tools/call` + `tasks/*`)
-- Security: opt-in Origin validation, principal-bound sessions with cross-user rejection, fail-closed body/session limits
+- Security: fail-closed HTTP authorization and present-Origin validation, issuer/subject-bound sessions, audience/scope checks and bounded resources
 - OAuth: challenge parsing, correct 401 handling, safe concurrent refresh, PRM/RFC 8414/OIDC metadata discovery wired into the 401 flow, RFC 7592 managed registration, Client ID Metadata Documents, and opt-in PKCE/403 scope step-up (not a complete OAuth claim — see matrix)
 - OpenTelemetry tracing, dependency injection, `IHostedService`, and `appsettings.json` binding
 
@@ -50,11 +50,7 @@ case-sensitive union of existing and challenged scopes, coordinates an upgrade p
 retries the original request once only after a new token covers that set. Failed interactions leave
 the existing token and original `403` intact.
 
-> **Not a full-compliance claim.** A few areas are still partial or not implemented — sampling
-> tool-calling (no server-driven tool loop), stdio SIGTERM shutdown, and SSE polling / server-initiated
-> stream closure. OAuth registration and scope step-up are host-integrated rather than
-> browser-integrated (see the boundaries above). The [compliance matrix](docs/compliance.md) marks
-> each honestly and links to tests.
+> **Alpha:** experimental task lifecycle and full-compliance epics remain open. Model/tool execution, user approval and identity-provider integration belong to the application. See the [evidence-backed matrix](docs/compliance.md).
 
 ## Quick Start
 
@@ -174,7 +170,8 @@ docs/
 ## Building
 
 ```bash
-dotnet build
+npm ci --ignore-scripts --prefix tests/interop  # Node 24, for independent interop
+dotnet build -p:RestoreLockedMode=true
 dotnet test
 ```
 
@@ -203,74 +200,18 @@ See the `docs/` directory:
 
 ## Project status
 
-**2026-09-08 conformance update:** pinned independent client/server interop covers stdio and HTTP JSON/SSE, including nested sampling. Official examples and per-surface line/branch coverage now gate CI. See [reproducible conformance](docs/conformance.md).
+**2026-09-08: stable P1/P2 remediation implemented and verified.** The work includes full
+negotiated schema coverage, strict bidirectional RPC, request lifetimes, high-level APIs,
+stdio and HTTP JSON/SSE recovery, OAuth/HTTP security and same-commit release gates.
+[Conformance](docs/conformance.md) includes pinned independent client/server interop,
+official examples and per-surface line/branch coverage thresholds. The
+[remediation plan](docs/remediation-plan.md) records the task-level evidence.
 
-**2026-09-08 schema audit:** 1,002 schema-derived fixtures cover every definition in the three negotiated revisions. Standard message shapes are checked at both high-level boundaries against frozen official schemas, with network resolution disabled.
-
-**2026-09-08 compatibility correction:** 2025-03-26 is excluded from negotiation because it requires receiving batches. Its schema descriptor remains available for conversion and audit. See the [transport matrix](docs/transports.md).
-
-**2026-09-08 parameter update:** typed resource, prompt, logging and subscription parameters preserve caller metadata. Older revisions retain base request/notification `_meta`; legacy elicitation preserves boolean defaults and adapts titled enums.
-
-**2026-09-08 POST SSE update:** `StreamableHttpServerOptions.UseSseResponses` enables resumable POST streams, including nested server requests without a separate GET listener. JSON responses remain the default.
-
-**2026-09-08 HTTP recovery update:** session 404s trigger a coordinated fresh handshake and capability refresh. Old inbound handlers are cancelled; interrupted POST SSE operations with unknown outcomes are not replayed.
-
-**2026-09-08 HTTP bounds update:** request queues, response correlation and replay retention are bounded. Overload returns 429; expired replay cursors and conflicting negotiated-version headers are rejected. Undelivered events are never silently evicted.
-
-**2026-09-08 wire model update:** unknown protocol fields survive round trips, capability
-sub-options are explicit, and older sampling replies use the required scalar content shape.
-Frozen official schemas and client reply tests cover every advertised revision.
-**2026-09-08 request lifetime update:** idle timeouts reset on increasing progress, bounded by
-MaximumRequestDuration. Inbound cancellation is isolated from outbound IDs, and shutdown awaits
-handler cleanup. Progress is sent in order before successful tool responses.
-
-
-**2026-09-08 package update:** .NET 10 dependencies and test tooling are refreshed, restores
-are locked, and release gates verify both NuGet packages. See [maintenance policy](docs/package-maintenance.md)
-for dependency updates, runtime migration and trimming limitations.
-**2026-09-08 RPC update:** invalid message envelopes are rejected before dispatch; transport
-errors without usable IDs remain uncorrelated. Readiness is checked in arrival order and
-duplicate in-flight requests preserve the original cancellation registration.
-**2026-09-08 schema validation update:** tool validation uses JSON Schema 2020-12, including local
-references, conditionals, dependent properties and unevaluated locations. External schema fetches
-are disabled. Registration schemas are checked against the complete meta-schema.
-
-
-**2026-09-08 HTTP authorization update:** protected HTTP endpoints require an explicit resource/issuer
-policy and an ASP.NET Core authenticated principal with matching audience and scopes. Present
-Origin headers are denied unless allowed. Trusted local callers can explicitly select
-AllowAnonymous = true. Sessions are bound to issuer and subject, expire, and close on shutdown.
-**2026-09-08 attribute schema update:** tool schemas use the .NET serializer contract, including
-nested records, JSON property names, required members, collections, nullable parameters, descriptions
-and serialized defaults. Attribute binding accepts the same enum shapes that the schema advertises.
-
-
-**2026-09-08 OAuth security update:** default OAuth, metadata and registration clients disable
-redirects/proxies and connect to a single vetted DNS resolution, rejecting private/reserved
-addresses. Custom injected HTTP clients must provide equivalent connection and redirect controls.
-Issuer/resource identities and PKCE advertisement are validated; path-aware RFC 8414/OIDC
-fallbacks are shared by both discovery APIs. Full compliance remains in progress.
-
-**2026-09-08 release-gate update:** package creation and publication now require the same-commit
-Linux/macOS/Windows tests, reference-server interop, and dependency security jobs. Documented
-in-process examples run in the test matrix. Phase 7/8 compliance remains in progress.
-
-
-**Phase 7 + Phase 8 (Full MCP 2025-11-25 compliance) — in progress (updated 2026-07-25).**
-
-Landed and tested: 2025-11-25 schema + revision-aware serialization, bidirectional JSON-RPC and
-lifecycle enforcement, concurrent dispatch with cancellation/progress/timeouts (fluent and
-attribute-based), Streamable HTTP validation + negotiated version + stdio parse errors, SSE replay /
-`Last-Event-ID` resumption / multiple concurrent streams, principal-bound HTTP sessions with
-fail-closed limits, recursive JSON Schema validation + structured outputs, resource-template handlers,
-client completion/subscribe APIs, experimental tasks (tools, sampling, elicitation; owner-scoped),
-OAuth 401/refresh hardening + PRM/RFC 8414/OIDC discovery, the `net10.0` migration, and a
-conformance suite that validates output against the **official schema** and runs live **interop
-against the reference server** in CI. The full suite is green on Linux, macOS, and Windows.
-
-Still **not** marked full-compliance: a few matrix rows remain partial/not-implemented (sampling
-tool-calling, OAuth dynamic client registration, stdio SIGTERM shutdown, SSE polling) — see the
-[compliance matrix](docs/compliance.md). The **ALPHA** wording stays until those close.
+**Phase 7/8 full compliance remains in progress; the project remains alpha.** Open P3 work
+covers experimental tasks (#49/#72), ecosystem integration (#19/#20/#21/#30) and the
+full-compliance epics (#39/#68). Legacy HTTP+SSE and March 2025 batch reception are unsupported.
+See [migration/API guidance](docs/high-level-apis.md), [HTTP security](docs/http-security.md),
+[OAuth examples](docs/oauth.md) and [runtime maintenance](docs/package-maintenance.md).
 
 ## License
 

@@ -46,5 +46,35 @@ Existing list APIs still fetch all pages automatically. `ListRootsResultAsync` p
 full roots result. Supplying progress options adds a fresh progress token while preserving
 other `_meta` entries. Server extension handlers may receive the functional progress reporter.
 
-Tests: `ExtensionApiTests` and `HttpRequestDeadlineTests`. Additional protocol shape validation
-remains tracked with #41/#48.
+Tests: `ExtensionApiTests` and `HttpRequestDeadlineTests`. Standard requests, results and
+notifications now validate against the frozen official schema for the negotiated revision
+at both boundaries; malformed params cannot reach handlers and invalid handler results
+become RPC errors. Custom methods retain lifecycle/correlation checks.
+
+## Migration to the revision-aware API
+
+- Upgrade the host to .NET 10. Package API compatibility checks preserve the previous public
+  method signatures, but do not preserve .NET 8 runtime support.
+- Default negotiation is 2025-11-25. 2025-06-18 remains supported; 2024-11-05 is stdio-only.
+  March 2025 is no longer accepted because required batch reception is absent. Use
+  `ProtocolRevision.Supported`, not `All`, when displaying negotiable versions.
+- Sampling `Content` is a list in memory. Both wire union forms are accepted; singleton
+  output is scalar for reference-SDK compatibility, and multiple blocks are arrays. Legacy
+  revisions require exactly one supported block. Tool definitions/toolChoice require
+  `sampling.tools`; the host executes tools/model loops and validates its interaction policy.
+- Form elicitation remains available in June 2025. Latest URL mode and multi-select fields
+  require latest capabilities. Legacy titled enums convert to enum/enumNames; unsupported
+  newer values fail explicitly. Handle `ElicitationCompleted` for URL completion.
+- Configure registrations before RunAsync. Required prompt arguments are literal strings;
+  handlers perform any substitution. Use typed parameter overloads to retain `_meta` and
+  explicit page APIs to retain result metadata/cursors.
+- Configure HTTP authorization/resource/issuer and Origin allow-lists explicitly. Trusted
+  local HTTP must opt into AllowAnonymous. Custom OAuth HttpClients own connection safety.
+- CancellationToken limits caller work; per-call options control one protocol request.
+  Progress can reset the idle timeout but never extends MaximumDuration. Observe cancellation
+  in handlers and report monotonic progress; runtime cleanup cancels and drains owned handlers.
+- Resource subscriptions are session-local. Handle `ResourceUpdated`, re-read when notified,
+  and re-establish subscriptions after a fresh connection. Automatic HTTP session recovery
+  starts with fresh subscriptions; interrupted POST SSE results can have unknown outcomes.
+- Experimental tasks remain incomplete (#49/#72). Do not treat task model availability as a
+  production-ready lifecycle or advertise unsupported task operations.

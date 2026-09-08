@@ -1,133 +1,103 @@
-# Andy.MCP compliance matrix
+# MCP compliance matrix — 2026-09-08
 
-This document states, honestly and with test evidence, what Andy.MCP implements against the
-[Model Context Protocol](https://modelcontextprotocol.io) specification. Status is deliberately
-granular rather than a single "compliant" claim.
+Andy.MCP remains **alpha**. Stable means a reachable, tested library surface; it does not
+certify every application behavior or declare full MCP compliance. Experimental tasks and
+the full-compliance epics #39/#68 remain open. Application policy, model execution and user
+approval belong to the host.
 
-- **Stable** — implemented, reachable through the high-level `McpClient`/`McpServer` APIs, and
-  covered by tests.
-- **Experimental** — implemented but the spec marks it experimental and/or the surface may change.
-- **Partial** — core is implemented; specific sub-behaviors listed below are not yet complete.
-- **Not implemented** — modeled or planned only.
+## Negotiated revisions
 
-Test links are relative to `tests/Andy.MCP.Tests/`.
+| Revision | Stdio | Streamable HTTP | Evidence / limitation |
+|---|---|---|---|
+| 2025-11-25 | Supported; default | Supported | [Complete schema corpus](../tests/Andy.MCP.Tests/Conformance/CompleteProtocolSchemaTests.cs), [real HTTP matrix](../tests/Andy.MCP.Tests/Transport/HttpRevisionIntegrationTests.cs) |
+| 2025-06-18 | Supported | Supported | [Schema corpus](../tests/Andy.MCP.Tests/Conformance/CompleteProtocolSchemaTests.cs) and [HTTP matrix](../tests/Andy.MCP.Tests/Transport/HttpRevisionIntegrationTests.cs); newer fields are removed or rejected |
+| 2024-11-05 | Supported | Unsupported | [Revision replies](../tests/Andy.MCP.Tests/Client/ClientRevisionReplyTests.cs); legacy HTTP+SSE is absent |
+| 2025-03-26 | Unsupported | Unsupported | Receiving batches is mandatory in this revision and absent; its descriptor is retained only for conversion/audit |
 
-## Protocol revisions
+Every definition in the three negotiated revisions is exercised against frozen official
+schemas. [Revision conversion](../tests/Andy.MCP.Tests/Protocol/RevisionAwareJsonTests.cs)
+checks newer-field exclusion. Negotiation support is not a full-feature certification.
 
-| Revision | Support | Notes |
-|----------|---------|-------|
-| **2025-11-25** | Stable (latest, negotiated) | Feature set below; revision-aware serialization strips newer fields from older sessions |
-| 2025-06-18 | Stable (negotiated down) | Core wire types; 2025-11-25-only fields omitted |
-| 2025-03-26 | Unsupported for negotiation | Mandatory receiving of JSON-RPC batches is not implemented; descriptor retained for schema conversion |
-| 2024-11-05 | Negotiated over stdio only | Legacy HTTP+SSE is not implemented |
+## Feature availability by revision
 
-Evidence: `Protocol/ProtocolRevisionTests.cs`, `Protocol/RevisionAwareJsonTests.cs`,
-`Protocol/LifecycleTests.cs`.
+Availability still requires the negotiated capability. “Absent” fields are omitted or rejected
+under that revision; unknown vendor extension data is retained independently.
 
-## Feature matrix (MCP 2025-11-25)
+| Feature | 2024-11-05 | 2025-06-18 | 2025-11-25 | Evidence |
+|---|---|---|---|---|
+| Core tools/resources/prompts, roots and completions | Available; completions has no flag | Available | Available | [Boundary/legacy completion tests](../tests/Andy.MCP.Tests/Conformance/ProtocolBoundaryTests.cs) |
+| Tool annotations, titles, structured outputs, resource links and audio | Absent | Available | Available | [Revision serialization](../tests/Andy.MCP.Tests/Protocol/RevisionAwareJsonTests.cs) |
+| Basic sampling | One text/image block | One text/image/audio block | Scalar or array of allowed blocks | [Sampling tests](../tests/Andy.MCP.Tests/Protocol/SamplingContentTests.cs), [revision replies](../tests/Andy.MCP.Tests/Client/ClientRevisionReplyTests.cs) |
+| Sampling tools/toolChoice and context sub-capability | Absent | Absent | Available models and capability checks | [Peer contracts](../tests/Andy.MCP.Tests/Server/HighLevelContractTests.cs) |
+| Form elicitation | Absent | Available with legacy enums/defaults | Available including richer enums/defaults | [Typed/legacy parameters](../tests/Andy.MCP.Tests/Protocol/TypedParameterTests.cs) |
+| URL elicitation, icons and extended implementation metadata | Absent | Absent | Available | [Complete definition corpus](../tests/Andy.MCP.Tests/Conformance/CompleteProtocolSchemaTests.cs) |
+| Task augmentation | Absent | Absent | Experimental/partial | [Task tests](../tests/Andy.MCP.Tests/Server/TaskAugmentedToolTests.cs) |
 
-| Feature | Status | Tests |
-|---------|--------|-------|
-| Lifecycle: initialize / initialized / enforcement / duplicate rejection | Stable | `Server/ServerLifecycleEnforcementTests.cs`, `Protocol/LifecycleTests.cs` |
-| Bidirectional JSON-RPC (server-initiated ping/roots/sampling/elicitation, response correlation) | Stable | `Server/ServerInitiatedRequestTests.cs` |
-| JSON-RPC error classification (parse / invalid request / invalid params / method not found) | Stable | `Server/ServerErrorClassificationTests.cs` |
-| Concurrent request dispatch; `notifications/cancelled`; client cancel/timeout cleanup | Stable | `Server/ServerConcurrencyCancellationTests.cs`, `Client/ClientCancellationTimeoutTests.cs` |
-| Progress (`notifications/progress`) end-to-end for tools (fluent + attribute-based injection) | Stable | `Server/ProgressEndToEndTests.cs`, `Server/AttributeToolFeatureTests.cs` |
-| Tools: list / call; recursive JSON Schema input validation; schema self-validation | Stable | `Server/McpServerTests.cs`, `Server/JsonSchemaValidatorRecursiveTests.cs`, `Server/ToolSchemaRegistrationTests.cs` |
-| Structured tool output (`outputSchema` + `structuredContent` enforcement) | Stable | `Server/StructuredOutputTests.cs` |
-| Resources: list / read; subscribe / unsubscribe (sub-capability gated) | Stable | `Client/ClientHighLevelApiTests.cs`, `Server/Phase3Tests.cs` |
-| Resource templates (handler binding, RFC 6570 URI-template resolution, multi-content reads) | Stable | `Server/ResourceTemplateHandlerTests.cs`, `Server/UriTemplateTests.cs` |
-| Prompts: list / get | Stable | `Server/McpServerTests.cs` |
-| Completion (`completion/complete`) | Stable | `Client/ClientHighLevelApiTests.cs` |
-| Sampling content scalar-or-array union; sampling capability sub-fields | Stable (models) | `Protocol/SamplingContentTests.cs`, `Protocol/SamplingCapabilityTests.cs` |
-| Sampling tool-calling (`tools`/`toolChoice`) | Partial — modeled and revision-gated; no server-driven tool loop | `Protocol/RevisionAwareJsonTests.cs` |
-| Elicitation: form + URL mode; typed schemas incl. enum/default | Stable | `Protocol/ElicitationSchemaTests.cs` |
-| `_meta` / extension-data round-trip across request/result/object types | Stable | `Protocol/MetaRoundTripTests.cs` |
-| Icons; Implementation description/websiteUrl | Stable (models) | `Protocol/ElicitationSchemaTests.cs`, `Protocol/RevisionAwareJsonTests.cs` |
-| Capability objects (exact sub-capabilities; template-only resource advertisement) | Stable | `Server/ServerCapabilityExactnessTests.cs` |
-| Experimental tasks (store; task-augmented `tools/call`, `sampling`, `elicitation`; `tasks/*`; owner-key isolation) | Experimental — `input_required` transitions and a tasks-capability advertisement still pending | `Server/TaskStoreTests.cs`, `Server/TaskAugmentedToolTests.cs`, `Server/SamplingTaskAugmentationTests.cs`, `Server/TaskOwnershipTests.cs` |
+## Stable features and experimental boundaries
+
+| Surface | Status / boundary | Passing test evidence |
+|---|---|---|
+| Lifecycle and bidirectional RPC | Stable | [ServerLifecycleEnforcementTests](../tests/Andy.MCP.Tests/Server/ServerLifecycleEnforcementTests.cs), [ServerInitiatedRequestTests](../tests/Andy.MCP.Tests/Server/ServerInitiatedRequestTests.cs) |
+| Strict envelopes, error channels and standard-message shape validation | Stable | [ProtocolBoundaryTests](../tests/Andy.MCP.Tests/Conformance/ProtocolBoundaryTests.cs), [ServerErrorClassificationTests](../tests/Andy.MCP.Tests/Server/ServerErrorClassificationTests.cs) |
+| Concurrent requests, cancellation, progress, idle and absolute deadlines | Stable | [ServerConcurrencyCancellationTests](../tests/Andy.MCP.Tests/Server/ServerConcurrencyCancellationTests.cs), [ClientCancellationTimeoutTests](../tests/Andy.MCP.Tests/Client/ClientCancellationTimeoutTests.cs), [ProgressEndToEndTests](../tests/Andy.MCP.Tests/Server/ProgressEndToEndTests.cs) |
+| Tools, full registration metadata, JSON Schema 2020-12 inputs and structured outputs | Stable | [ToolSchemaRegistrationTests](../tests/Andy.MCP.Tests/Server/ToolSchemaRegistrationTests.cs), [StructuredOutputTests](../tests/Andy.MCP.Tests/Server/StructuredOutputTests.cs) |
+| Resource reads, multi-content results, subscriptions and change notifications | Stable | [ClientHighLevelApiTests](../tests/Andy.MCP.Tests/Client/ClientHighLevelApiTests.cs), [HighLevelContractTests](../tests/Andy.MCP.Tests/Server/HighLevelContractTests.cs) |
+| RFC6570 resource-template matching and bound handlers | Stable | [ResourceTemplateHandlerTests](../tests/Andy.MCP.Tests/Server/ResourceTemplateHandlerTests.cs), [UriTemplateTests](../tests/Andy.MCP.Tests/Server/UriTemplateTests.cs) |
+| Prompts with required arguments passed literally to handlers | Stable | [HighLevelContractTests](../tests/Andy.MCP.Tests/Server/HighLevelContractTests.cs) |
+| Completions, explicit pagination and custom request/notification APIs | Stable | [ClientHighLevelApiTests](../tests/Andy.MCP.Tests/Client/ClientHighLevelApiTests.cs), [ExtensionApiTests](../tests/Andy.MCP.Tests/Server/ExtensionApiTests.cs) |
+| Roots, sampling, form/URL elicitation and exact peer sub-capability checks | Stable high-level operations; application supplies handlers and approvals | [HighLevelContractTests](../tests/Andy.MCP.Tests/Server/HighLevelContractTests.cs), [ServerInitiatedRequestTests](../tests/Andy.MCP.Tests/Server/ServerInitiatedRequestTests.cs) |
+| Sampling scalar/array content, tool definitions and tool-choice wire models | Stable wire models; application owns model/tool execution loops | [SamplingContentTests](../tests/Andy.MCP.Tests/Protocol/SamplingContentTests.cs), [SamplingCapabilityTests](../tests/Andy.MCP.Tests/Protocol/SamplingCapabilityTests.cs) |
+| Typed elicitation schema builders, legacy enums/defaults and URL completion | Stable | [ElicitationSchemaTests](../tests/Andy.MCP.Tests/Protocol/ElicitationSchemaTests.cs), [TypedParameterTests](../tests/Andy.MCP.Tests/Protocol/TypedParameterTests.cs), [HighLevelContractTests](../tests/Andy.MCP.Tests/Server/HighLevelContractTests.cs) |
+| Metadata, unknown extensions, icons and implementation descriptors | Stable wire models | [CompleteProtocolSchemaTests](../tests/Andy.MCP.Tests/Conformance/CompleteProtocolSchemaTests.cs), [MetaRoundTripTests](../tests/Andy.MCP.Tests/Protocol/MetaRoundTripTests.cs) |
+| Experimental tasks | Partial/experimental: stores, augmentation and isolation exist; lifecycle/advertisement work remains in #49/#72 | [TaskStoreTests](../tests/Andy.MCP.Tests/Server/TaskStoreTests.cs), [TaskAugmentedToolTests](../tests/Andy.MCP.Tests/Server/TaskAugmentedToolTests.cs), [TaskOwnershipTests](../tests/Andy.MCP.Tests/Server/TaskOwnershipTests.cs) |
 
 ## Transports
 
-| Transport | Status | Tests |
-|-----------|--------|-------|
-| stdio (LF framing, parse-error response, UTF-8) | Stable | `Transport/StdioServerTransportTests.cs`, `Transport/StdioClientTransportTests.cs` |
-| stdio graceful shutdown (SIGTERM grace → SIGKILL) | Not implemented | — |
-| Streamable HTTP server (POST JSON, response correlation, Content-Type/Accept validation) | Stable | `Transport/StreamableHttpServerTransportTests.cs`, `Transport/StreamableHttpValidationTests.cs` |
-| Streamable HTTP client (negotiated `MCP-Protocol-Version`, session id, 404 handling) | Stable | `Transport/StreamableHttpClientTransportTests.cs` |
-| SSE: GET stream with per-stream event ids | Stable | `Transport/SseReplayTests.cs`, `Transport/SseParserTests.cs` |
-| SSE: bounded replay, `Last-Event-ID` resumption, multiple concurrent streams (exactly-once routing) | Stable | `Transport/SseReplayTests.cs` |
-| SSE: polling / server-initiated stream closure (SEP-1699) | Not implemented | — |
-| 2024-11-05 HTTP+SSE fallback | Not implemented (not advertised as a separate transport) | — |
+| Surface | Status / boundary | Passing test evidence |
+|---|---|---|
+| UTF-8/LF stdio and process shutdown | Stable; Unix stdin→SIGTERM→kill, Windows stdin→kill | [StdioFramingTests](../tests/Andy.MCP.Tests/Transport/StdioFramingTests.cs), [StdioShutdownTests](../tests/Andy.MCP.Tests/Transport/StdioShutdownTests.cs) |
+| HTTP JSON and resumable POST SSE, including nested server requests | Stable | [HttpRevisionIntegrationTests](../tests/Andy.MCP.Tests/Transport/HttpRevisionIntegrationTests.cs), [ServerPostSseTests](../tests/Andy.MCP.Tests/Transport/ServerPostSseTests.cs) |
+| GET SSE, replay, independent streams and bounded polling | Stable | [SseReplayTests](../tests/Andy.MCP.Tests/Transport/SseReplayTests.cs), [SsePollingTests](../tests/Andy.MCP.Tests/Transport/SsePollingTests.cs), [ConcurrentGetStreamTests](../tests/Andy.MCP.Tests/Transport/ConcurrentGetStreamTests.cs) |
+| Bounded queues, overload, session expiry and coordinated recovery | Stable; expired in-flight outcomes are not replayed | [HttpBoundedSessionTests](../tests/Andy.MCP.Tests/Transport/HttpBoundedSessionTests.cs), [HttpSessionRecoveryTests](../tests/Andy.MCP.Tests/Transport/HttpSessionRecoveryTests.cs) |
+
+See [transport behavior](transports.md) for headers, queue limits, replay, recovery and
+unknown-outcome handling. Neither legacy HTTP+SSE fallback nor JSON-RPC batches are implemented.
 
 ## Security
 
-| Concern | Status | Tests |
-|---------|--------|-------|
-| Origin validation (403 on invalid present origin) | Stable (opt-in validator) | `Transport/StreamableHttpValidationTests.cs` |
-| Session ↔ authenticated principal binding; cross-user rejection (403) | Stable | `Transport/StreamableHttpSessionBindingTests.cs` |
-| Unguessable session ids (no identity leakage) | Stable | `Transport/StreamableHttpSessionBindingTests.cs` |
-| Fail-closed request body (413) and session (503) limits | Stable | `Transport/StreamableHttpLimitsTests.cs` |
-| OAuth: WWW-Authenticate parsing; correct 401 (no blind retry); safe concurrent refresh; expiry skew | Stable | `Auth/OAuthAuthorizationTests.cs` |
-| OAuth: PRM (RFC 9728) + authorization-server (RFC 8414 / OIDC) discovery, wired into the 401 flow | Stable | `Auth/OAuthDiscoveryTests.cs`, `Auth/OAuth401DiscoveryTests.cs` |
-| OAuth: RFC 7592 registration management (GET/PUT/DELETE, credential rotation) and Client ID Metadata Documents (validation + deterministic selection) | Stable | `Auth/DynamicClientRegistrationManagementTests.cs`, `Auth/ClientIdMetadataDocumentTests.cs` |
-| OAuth: interactive authorization + one 403 `insufficient_scope` step-up (library-owned PKCE S256 / state / callback validation; host supplies external interaction only) | Stable — host-integrated, not browser-integrated; not a complete OAuth interoperability claim | `Auth/OAuthInteractiveAuthorizationTests.cs`, `Auth/OAuthScopeStepUpTests.cs` |
+| Surface | Status / boundary | Passing test evidence |
+|---|---|---|
+| Origin, issuer/audience/scopes and principal-bound sessions | Stable enforcement; host must validate token signatures/lifetimes | [StreamableHttpSessionBindingTests](../tests/Andy.MCP.Tests/Transport/StreamableHttpSessionBindingTests.cs), [HttpAuthorizationTests](../tests/Andy.MCP.Tests/Transport/HttpAuthorizationTests.cs) |
+| OAuth challenge handling, refresh and metadata discovery | Stable library flow | [OAuthAuthorizationTests](../tests/Andy.MCP.Tests/Auth/OAuthAuthorizationTests.cs), [OAuthDiscoveryTests](../tests/Andy.MCP.Tests/Auth/OAuthDiscoveryTests.cs), [OAuth401DiscoveryTests](../tests/Andy.MCP.Tests/Auth/OAuth401DiscoveryTests.cs) |
+| CIMD, explicit DCR and RFC7592 management | Stable host-integrated registration | [ClientIdMetadataDocumentTests](../tests/Andy.MCP.Tests/Auth/ClientIdMetadataDocumentTests.cs), [DynamicClientRegistrationManagementTests](../tests/Andy.MCP.Tests/Auth/DynamicClientRegistrationManagementTests.cs) |
+| PKCE, callback validation and one scope step-up | Stable host-integrated interaction; no built-in browser or identity provider | [OAuthInteractiveAuthorizationTests](../tests/Andy.MCP.Tests/Auth/OAuthInteractiveAuthorizationTests.cs), [OAuthScopeStepUpTests](../tests/Andy.MCP.Tests/Auth/OAuthScopeStepUpTests.cs) |
 
-See **[Security configuration](#security-configuration)** below for required application settings.
+Protected HTTP fails closed without an explicit resource/issuer policy. The application
+must configure ASP.NET Core authentication with signature, lifetime and issuer validation.
+Andy.MCP then checks audience/scopes on each POST/GET/DELETE and binds the session to issuer
+and subject. Present Origin headers are denied unless an allow-list callback accepts them.
+No Origin header does not bypass authorization. Trusted local HTTP requires explicit
+`AllowAnonymous = true`; bind it to loopback. Stdio relies on process/OS access controls.
 
-## Conformance
+Default OAuth clients disable redirects and proxies and connect using vetted DNS results,
+rejecting private/reserved destinations. Custom injected HttpClients must supply equivalent
+connection controls. Never pass an incoming user token through to upstream tools; acquire
+credentials for each resource. See [HTTP configuration](http-security.md) and
+[OAuth discovery/registration](oauth.md) for host responsibilities and examples.
 
-Golden fixtures (valid messages round-trip) and negative fixtures (malformed messages rejected):
-`Conformance/MessageFixtureTests.cs`, `Conformance/ConformanceTests.cs`. CI collects code coverage
-on Linux/macOS/Windows and fails on known-vulnerable dependencies.
+Connection-level SSRF evidence: [OAuthEndpointSecurityTests](../tests/Andy.MCP.Tests/Auth/OAuthEndpointSecurityTests.cs).
 
-Serialized output is validated against the **official MCP 2025-11-25 JSON schema** with a JSON
-Schema 2020-12 validator: `Conformance/OfficialSchemaConformanceTests.cs` checks the library's
-serialization of the core types (Tool, Implementation, content blocks, CallToolResult, Resource,
-ResourceTemplate, Prompt, Icon, InitializeResult, ReadResourceResult, CreateMessageResult) against
-the committed `schema/2025-11-25/schema.json` `$defs`, plus a negative case proving the gate rejects
-non-conforming output. CI therefore fails if output violates the official schema.
+## Conformance and release evidence
 
-**Cross-implementation interop:** `Conformance/ReferenceServerInteropTests.cs` drives the Andy.MCP
-client against the official reference server (`@modelcontextprotocol/server-everything`) over stdio —
-initialize, list/call tools (`echo`), list/read resources, and list prompts — proving
-interoperability with an independent MCP implementation. It runs in a dedicated CI `interop` job
-(Node + the reference server) and is excluded from the normal test run.
+[Conformance gates](conformance.md) cover all negotiated schema definitions, 66 official
+examples, malformed messages, pinned independent client/server interop and per-surface
+line/branch coverage. The independent SDK cases cover stdio and HTTP JSON/SSE with nested
+sampling. Platform-sensitive tests run on Linux, macOS and Windows. All gates must pass for
+the same commit before packaging; package-content and API compatibility checks also gate release.
+Publication is separately restricted to configured release triggers. Passing CI does not
+change the alpha/full-compliance boundary or complete experimental task work.
 
-Not yet in place: full-corpus official-schema validation for every advertised revision, interop in
-the server→independent-client direction, and a coverage-threshold gate.
+## Migration
 
-## Security configuration
-
-Andy.MCP's HTTP handler defaults are permissive where the framework is expected to supply the
-control (e.g. Origin, authentication). Configure the following for a secure deployment:
-
-- **Origin** — set `StreamableHttpServerOptions.ValidateOrigin` to an allow-list; requests with a
-  present, disallowed Origin receive `403`. (No validator = all origins allowed — do not use in
-  production browser contexts.)
-- **Authentication** — place the MCP endpoint behind ASP.NET Core authentication so
-  `HttpContext.User` is populated; sessions then bind to the authenticated principal and reject
-  cross-user reuse with `403`.
-- **Resource limits** — `MaxRequestBodyBytes` (default 4 MB → `413`) and `MaxSessions` (default
-  10,000 → `503`) bound resource use; tune for your deployment.
-- **OAuth** — supply the resource, authorization-server metadata, and client id to
-  `OAuthDelegatingHandler`; a `401` triggers a genuine refresh or surfaces the challenge, never a
-  blind retry. To enable interactive scope step-up, also supply an
-  `IOAuthAuthorizationProvider` and a validated redirect URI. Only a Bearer `403` challenge with
-  `error="insufficient_scope"` and non-empty scopes starts one PKCE S256 interaction; the library
-  requests the ordinal scope union, validates the callback and returned scope set, coordinates
-  authorization by resource, then retries once. The host receives neither verifier nor state and
-  returns only the callback URI; failures preserve the original `403` and stored token. Do **not**
-  forward user tokens upstream (no token passthrough).
-
-## Local development
-
-For a local, non-browser deployment (stdio or trusted-host HTTP): authentication and Origin
-validation may be omitted, but the resource limits above still apply. See the README quick-start.
-
-## Migration (2025-06-18 → 2025-11-25)
-
-The library now negotiates **2025-11-25** by default and negotiates down for older clients. If you
-pinned behavior to 2025-06-18, no code change is required — older sessions still receive only the
-fields their revision defines (revision-aware serialization). New surfaces (elicitation URL mode,
-sampling capability sub-fields, icons, experimental tasks) are additive.
+See [migration and API contracts](high-level-apis.md#migration-to-the-revision-aware-api).
+The host must run .NET 10; accepting a 2025-06-18 peer does not preserve .NET 8 runtime support.

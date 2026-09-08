@@ -26,6 +26,7 @@
 
   <ItemGroup>
     <Using Include="Xunit" />
+    <Compile Include="../../examples/Andy.MCP.Examples/OAuthDiscoveryExample.cs" Link="Examples/OAuthDiscoveryExample.cs" />
   </ItemGroup>
 
   <ItemGroup>

@@ -52,4 +52,5 @@ See [HTTP authorization](http-security.md) for principal, audience, scope and Or
 old-handler cancellation and deadlines. `HttpBoundedSessionTests`, `SseReplayTests`,
 `ConcurrentGetStreamTests` and `SsePollingTests` cover bounds and independent stream identities.
 `StdioFramingTests`, `StdioShutdownTests` and `StdioServerTransportTests` cover framing, graceful
-shutdown and malformed input. The suite runs on Linux, Windows and macOS in CI.
+shutdown and malformed input. The suite runs on Linux, Windows and macOS in CI. Independent official SDK client/server
+checks also cover stdio and both HTTP response modes; see [conformance gates](conformance.md).

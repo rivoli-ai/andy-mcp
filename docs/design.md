@@ -131,13 +131,13 @@ MCP defines two error channels for tools:
 2. **Tool execution errors**: Success response with `isError: true`
 
 The server handles this by:
-- Validating inputs before calling the handler → protocol error
+- Validating tool inputs before calling the handler → revision-specific protocol/tool error (see tool-registration.md)
 - Catching handler exceptions → wrapping in `CallToolResult.Error()` → isError response
 
 ## Threading Model
 
 - `McpClient`: Single message loop task reads from transport, correlates responses via `PendingRequestTracker`, dispatches server requests to background tasks
-- `McpServer`: Single message loop reads from transport, dispatches to handlers, sends responses
+- `McpServer`: Single message loop reads from transport and dispatches tracked concurrent handlers, while correlating outbound responses
 - `PendingRequestTracker`: `ConcurrentDictionary`-based, thread-safe for concurrent requests
 - `McpSession`: State transitions via `Interlocked.CompareExchange`
 - Transports: `Channel<T>` for write queuing, ensuring message ordering
