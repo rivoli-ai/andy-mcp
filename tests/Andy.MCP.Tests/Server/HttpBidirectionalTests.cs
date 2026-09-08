@@ -24,7 +24,7 @@ public class HttpBidirectionalTests
         {
             server = s;
             s.AddTool("echo", "echo", (_, _) => Task.FromResult(CallToolResult.Text("ok")));
-        });
+        }, new StreamableHttpServerOptions { AllowAnonymous = true });
         await app.StartAsync(timeout.Token);
         await using var transport = new StreamableHttpClientTransport(new StreamableHttpClientTransportOptions { Endpoint = new Uri(app.Urls.Single() + "/mcp") });
         await using var client = await McpClient.ConnectAsync(transport, cancellationToken: timeout.Token);

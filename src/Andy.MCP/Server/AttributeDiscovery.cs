@@ -1,5 +1,10 @@
 using System.Reflection;
 using System.Text.Json;
+using System.Text.Json.Nodes;
+using System.Text.Json.Schema;
+using System.Text.Json.Serialization;
+using System.Text.Json.Serialization.Metadata;
+using System.ComponentModel;
 using System.Text.RegularExpressions;
 using Andy.MCP.Protocol;
 
@@ -95,55 +100,74 @@ public static class AttributeDiscovery
         }, annotations);
     }
 
+    private static readonly JsonSerializerOptions ArgumentOptions = CreateArgumentOptions();
+
+    private static JsonSerializerOptions CreateArgumentOptions()
+    {
+        var options = new JsonSerializerOptions(McpJsonDefaults.Options)
+        {
+            TypeInfoResolver = new DefaultJsonTypeInfoResolver(),
+            RespectNullableAnnotations = true,
+            RespectRequiredConstructorParameters = true
+        };
+        options.Converters.Add(new JsonStringEnumConverter());
+        options.MakeReadOnly();
+        return options;
+    }
+
     private static JsonElement GenerateInputSchema(MethodInfo method)
     {
-        var properties = new Dictionary<string, object>();
-        var required = new List<string>();
-
-        foreach (var param in method.GetParameters())
+        var properties = new JsonObject();
+        var required = new JsonArray();
+        var nullability = new NullabilityInfoContext();
+        foreach (var parameter in method.GetParameters())
         {
-            if (IsInjectedParameter(param)) continue;
-
-            var paramAttr = param.GetCustomAttribute<McpParamAttribute>();
-            var schemaType = GetJsonSchemaType(param.ParameterType);
-            var prop = new Dictionary<string, object> { ["type"] = schemaType };
-
-            var desc = paramAttr?.Description;
-            if (desc is not null) prop["description"] = desc;
-
-            // Array/collection element schema.
-            if (schemaType == "array" && ElementTypeOf(param.ParameterType) is { } elementType)
-                prop["items"] = new Dictionary<string, object> { ["type"] = GetJsonSchemaType(elementType) };
-
-            // Enum values (also for a nullable enum).
-            var enumType = Nullable.GetUnderlyingType(param.ParameterType) ?? param.ParameterType;
-            if (enumType.IsEnum)
-                prop["enum"] = Enum.GetNames(enumType);
-
-            if (param.HasDefaultValue && param.DefaultValue is not null)
-                prop["default"] = param.DefaultValue;
-
-            properties[param.Name!] = prop;
-
-            // Determine if required
-            if (paramAttr?.Required == true)
+            if (IsInjectedParameter(parameter)) continue;
+            var metadata = parameter.GetCustomAttribute<McpParamAttribute>();
+            var name = parameter.Name!;
+            var nullable = nullability.Create(parameter).ReadState == NullabilityState.Nullable;
+            var node = ArgumentOptions.GetJsonSchemaAsNode(parameter.ParameterType, new JsonSchemaExporterOptions
             {
-                required.Add(param.Name!);
-            }
-            else if (!param.HasDefaultValue && !IsNullableType(param.ParameterType))
+                TreatNullObliviousAsNonNullable = true,
+                TransformSchemaNode = (context, schema) =>
+                {
+                    if (schema is JsonObject obj && context.PropertyInfo?.AttributeProvider is { } provider)
+                    {
+                        var description = provider.GetCustomAttributes(typeof(DescriptionAttribute), true)
+                            .OfType<DescriptionAttribute>().FirstOrDefault();
+                        if (description is not null) obj["description"] = description.Description;
+                    }
+                    return schema;
+                }
+            });
+            RebaseReferences(node, "#/properties/" + name.Replace("~", "~0").Replace("/", "~1"));
+            if (nullable)
+                node = new JsonObject { ["anyOf"] = new JsonArray(node, new JsonObject { ["type"] = "null" }) };
+            if (node is JsonObject property)
             {
-                required.Add(param.Name!);
+                if (metadata?.Description is { } description) property["description"] = description;
+                if (parameter.HasDefaultValue)
+                    property["default"] = JsonSerializer.SerializeToNode(parameter.DefaultValue, parameter.ParameterType, ArgumentOptions);
             }
+            properties[name] = node;
+            if (metadata?.Required == true || (!parameter.HasDefaultValue && !nullable))
+                required.Add(name);
         }
-
-        var schema = new Dictionary<string, object>
-        {
-            ["type"] = "object",
-            ["properties"] = properties
-        };
+        var schema = new JsonObject { ["type"] = "object", ["properties"] = properties };
         if (required.Count > 0) schema["required"] = required;
+        return JsonSerializer.SerializeToElement(schema);
+    }
 
-        return McpJsonDefaults.ToElement(schema);
+    private static void RebaseReferences(JsonNode? node, string prefix)
+    {
+        if (node is JsonObject obj)
+        {
+            if (obj["$ref"] is JsonValue value && value.TryGetValue<string>(out var reference) && reference.StartsWith('#'))
+                obj["$ref"] = prefix + reference[1..];
+            foreach (var child in obj.ToArray()) RebaseReferences(child.Value, prefix);
+        }
+        else if (node is JsonArray array)
+            foreach (var child in array) RebaseReferences(child, prefix);
     }
 
     private static object?[] BindParameters(
@@ -170,7 +194,7 @@ public static class AttributeDiscovery
 
             if (args is not null && args.Value.TryGetProperty(param.Name!, out var value))
             {
-                values[i] = JsonSerializer.Deserialize(value, param.ParameterType, McpJsonDefaults.Options);
+                values[i] = JsonSerializer.Deserialize(value, param.ParameterType, ArgumentOptions);
             }
             else if (param.HasDefaultValue)
             {
@@ -320,20 +344,6 @@ public static class AttributeDiscovery
         param.ParameterType == typeof(CancellationToken)
         || param.ParameterType == typeof(IProgress<McpProgress>);
 
-    private static string GetJsonSchemaType(Type type)
-    {
-        type = Nullable.GetUnderlyingType(type) ?? type;
-
-        if (type == typeof(string)) return "string";
-        if (type == typeof(int) || type == typeof(long) || type == typeof(short) || type == typeof(byte)) return "integer";
-        if (type == typeof(float) || type == typeof(double) || type == typeof(decimal)) return "number";
-        if (type == typeof(bool)) return "boolean";
-        if (type.IsArray || (type.IsGenericType && type.GetGenericTypeDefinition() == typeof(List<>))) return "array";
-        if (type.IsEnum) return "string";
-
-        return "object";
-    }
-
     private static bool IsNullableType(Type type) =>
         !type.IsValueType || Nullable.GetUnderlyingType(type) is not null;
 
@@ -350,19 +360,6 @@ public static class AttributeDiscovery
     {
         try { return Activator.CreateInstance(type)!; }
         catch { throw new InvalidOperationException($"Cannot create instance of '{type.Name}'. Make it have a parameterless constructor or use static methods."); }
-    }
-
-    private static Type? ElementTypeOf(Type type)
-    {
-        if (type.IsArray)
-            return type.GetElementType();
-        if (type.IsGenericType &&
-            (type.GetGenericTypeDefinition() == typeof(List<>) ||
-             type.GetGenericTypeDefinition() == typeof(IReadOnlyList<>) ||
-             type.GetGenericTypeDefinition() == typeof(IList<>) ||
-             type.GetGenericTypeDefinition() == typeof(IEnumerable<>)))
-            return type.GetGenericArguments()[0];
-        return null;
     }
 
     #endregion

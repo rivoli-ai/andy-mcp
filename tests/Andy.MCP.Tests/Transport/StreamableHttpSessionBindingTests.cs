@@ -19,7 +19,7 @@ public class StreamableHttpSessionBindingTests
             await foreach (var message in transport.Messages)
                 if (message is JsonRpcRequest request)
                     await transport.SendAsync(JsonRpcResponse.Success(request.Id));
-        });
+        }, new StreamableHttpServerOptions { AllowAnonymous = true });
 
     private static DefaultHttpContext BuildContext(string method, string json, string? sessionId, string? userId)
     {

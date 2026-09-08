@@ -108,7 +108,7 @@ public class StreamableHttpServerTransportTests
     [Fact]
     public async Task Handler_Initialize_ReturnsResponseOnPost_WithSessionId()
     {
-        var handler = new StreamableHttpHandler(EchoHandler());
+        var handler = new StreamableHttpHandler(EchoHandler(), new StreamableHttpServerOptions { AllowAnonymous = true });
 
         var (status, body, headers) = await PostAsync(handler, InitJson(1));
 
@@ -127,7 +127,7 @@ public class StreamableHttpServerTransportTests
     [Fact]
     public async Task Handler_FastResponse_CompletesPost_UnderRepeatedRuns()
     {
-        var handler = new StreamableHttpHandler(EchoHandler());
+        var handler = new StreamableHttpHandler(EchoHandler(), new StreamableHttpServerOptions { AllowAnonymous = true });
 
         for (int i = 0; i < 200; i++)
         {
@@ -146,7 +146,7 @@ public class StreamableHttpServerTransportTests
     [Fact]
     public async Task Handler_ConcurrentInitialize_CorrectCorrelation_NoCrossRouting()
     {
-        var handler = new StreamableHttpHandler(EchoHandler());
+        var handler = new StreamableHttpHandler(EchoHandler(), new StreamableHttpServerOptions { AllowAnonymous = true });
 
         var tasks = Enumerable.Range(0, 50).Select(async i =>
         {

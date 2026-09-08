@@ -47,7 +47,7 @@ public class StrictMessageTests
     [InlineData("""{"jsonrpc":"2.0","id":1,"method":null}""", McpErrorCodes.InvalidRequest)]
     public async Task HttpMalformedMessage_ReturnsClassifiedJsonError(string input, int code)
     {
-        var handler = new StreamableHttpHandler(_ => Task.CompletedTask);
+        var handler = new StreamableHttpHandler(_ => Task.CompletedTask, new StreamableHttpServerOptions { AllowAnonymous = true });
         var context = new DefaultHttpContext();
         context.Request.Method = "POST";
         context.Request.ContentType = "application/json";
