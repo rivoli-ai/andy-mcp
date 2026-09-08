@@ -81,7 +81,8 @@ public class ToolRegistrationMetadataTests
             else await client.CallToolAsync("test", ct: deadline.Token);
         }
         if (allowed) await Invoke();
-        else Assert.Equal(McpErrorCodes.InvalidParams, (await Assert.ThrowsAsync<McpException>(Invoke)).ErrorCode);
+        else if (augmented) await Assert.ThrowsAsync<McpCapabilityNotAvailableException>(Invoke);
+        else Assert.Equal(McpErrorCodes.MethodNotFound, (await Assert.ThrowsAsync<McpException>(Invoke)).ErrorCode);
         deadline.Cancel();
         await run;
     }

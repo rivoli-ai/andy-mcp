@@ -19,7 +19,7 @@ of 100% compliance. The [revision-specific matrix](compliance.md) is the status 
 | Origin, authentication, audience/scopes, session binding and SSRF controls | Implemented library enforcement with required host configuration: [security evidence](compliance.md#security) |
 | Official schemas/examples, independent client/server interoperability, critical coverage | Implemented CI gates: [reproduction and thresholds](conformance.md) |
 | Dependency injection, hosted connections, tracing and attributes | Implemented: [configuration tests](../tests/Andy.MCP.Tests/Configuration), [attribute tests](../tests/Andy.MCP.Tests/Server/AttributeRegistrationTests.cs), [tracing tests](../tests/Andy.MCP.Tests/Protocol/McpDiagnosticsTests.cs) |
-| Experimental task lifecycle and task-capability advertisement | Partial; #49 and #72 remain P3 |
+| Experimental task lifecycle and task-capability advertisement | Implemented and verified; remains experimental in the protocol. See [task guide](tasks.md) |
 | Legacy 2024 HTTP+SSE; 2025-03-26 required batch reception | Unsupported; excluded from applicable transport negotiation |
 | Native AOT and trimming certification | Unsupported; [maintenance limitations](package-maintenance.md) |
 | Andy Engine, Gateway and Containers integration | Open P3 issues #19/#20/#21 under #30 |

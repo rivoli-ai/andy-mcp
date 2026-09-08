@@ -27,7 +27,7 @@ See the **[compliance matrix](docs/compliance.md)** for exact, test-linked statu
 - High-level client API: tools, resources (+ subscribe), prompts, completion, roots, sampling, elicitation, auto-pagination and explicit pages, per-call deadlines, custom methods, capability gating
 - High-level server API: registration frozen at startup; RFC 6570 templates, multi-content resources, required prompt arguments, cancellation and progress
 - JSON Schema 2020-12 input validation, structured output enforcement, and complete tool metadata registration
-- Experimental tasks (task-augmented `tools/call` + `tasks/*`), with terminal-state and TTL enforcement, blocking result retrieval, handler cancellation and resumable peer input; injectable stores retain outcomes across connections, with disk-backed restart tests; end-to-end lifecycle work remains in progress (#49/#72)
+- [Experimental tasks](docs/tasks.md): tools, sampling and elicitation; deferred results, cancellation, related input, pagination and injectable stores
 - Security: fail-closed HTTP authorization and present-Origin validation, issuer/subject-bound sessions, audience/scope checks and bounded resources
 - OAuth: challenge parsing, correct 401 handling, safe concurrent refresh, PRM/RFC 8414/OIDC metadata discovery wired into the 401 flow, RFC 7592 managed registration, Client ID Metadata Documents, and opt-in PKCE/403 scope step-up (not a complete OAuth claim — see matrix)
 - OpenTelemetry tracing, dependency injection, `IHostedService`, and `appsettings.json` binding
@@ -50,7 +50,7 @@ case-sensitive union of existing and challenged scopes, coordinates an upgrade p
 retries the original request once only after a new token covers that set. Failed interactions leave
 the existing token and original `403` intact.
 
-> **Alpha:** experimental task lifecycle and full-compliance epics remain open. Model/tool execution, user approval and identity-provider integration belong to the application. See the [evidence-backed matrix](docs/compliance.md).
+> **Alpha:** task lifecycle implementation is verified; full-compliance release audits remain open. Model/tool execution, user approval and identity-provider integration belong to the application. See the [evidence-backed matrix](docs/compliance.md).
 
 ## Quick Start
 
@@ -207,9 +207,13 @@ stdio and HTTP JSON/SSE recovery, OAuth/HTTP security and same-commit release ga
 official examples and per-surface line/branch coverage thresholds. The
 [remediation plan](docs/remediation-plan.md) records the task-level evidence.
 
-**Phase 7/8 full compliance remains in progress; the project remains alpha.** Open P3 work
-covers experimental tasks (#49/#72), ecosystem integration (#19/#20/#21/#30) and the
-full-compliance epics (#39/#68). Legacy HTTP+SSE and March 2025 batch reception are unsupported.
+**2026-09-08: experimental task lifecycle implemented and verified (#49/#72).**
+The 2,894-test suite covers both directions, HTTP input flows, ownership and disk-backed
+store recreation. Tasks remain experimental in the MCP specification.
+
+**Phase 7/8 full compliance remains in progress; the project remains alpha.** Remaining P3
+work covers ecosystem integration (#19/#20/#21/#30) and the final release/compliance audits
+(#39/#68). Legacy HTTP+SSE and March 2025 batch reception are unsupported.
 See [migration/API guidance](docs/high-level-apis.md), [HTTP security](docs/http-security.md),
 [OAuth examples](docs/oauth.md) and [runtime maintenance](docs/package-maintenance.md).
 

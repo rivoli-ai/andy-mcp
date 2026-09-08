@@ -46,14 +46,14 @@ P3 = experimental features, ecosystem integrations, and long-term full-complianc
 
 ## P3
 #19, #20, #21, #30: optional ecosystem integration.
-#49, #72: experimental task lifecycle.
+#49, #72: experimental task lifecycle implemented and verified.
 
 - [x] Enforce terminal-state immutability, exact TTL expiry and detached failed-tool payload retention.
 - [x] Block result retrieval until terminal state and propagate task cancellation to running handlers.
 - [x] Route related-task input requests and resume after all pending peer input.
 - [x] Retain exact RPC errors through durable stores and verify disk-backed store recreation.
 - [x] Isolate default owners and inject stores in both directions.
-- [ ] Complete the task capability and pagination audit.
+- [x] Complete the task capability and pagination audit.
 #39, #68: full-compliance epics; remain open until all children and final gates pass.
 
 ## Completion record
@@ -147,3 +147,9 @@ sampling-to-tool tests verify observable transitions and deferred completion.
 preserves ordinary call error semantics and validates deferred payloads against the original
 request schema. Both peers accept injected stores and isolate default owner scopes.
 Disk-journal tests recreate stores and connections to retrieve prior results without reexecution.
+
+2026-09-08: completed the #49/#72 task acceptance audit: revision/capability gates,
+per-tool task modes, unsupported augmentation fallback, signed pagination in both directions,
+invalid-input outcome parity, immutable states, TTL and owner isolation, related input routing,
+and disk-backed client/server result retrieval. Full local suite: 2,894 passed, zero skipped;
+all coverage gates and both API checks passed. Phase 7/8 release/compliance audits remain open.

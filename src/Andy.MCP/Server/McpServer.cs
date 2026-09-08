@@ -421,6 +421,10 @@ public sealed class McpServer : IAsyncDisposable
 
         try
         {
+            var supportsTask = _session.Revision?.AtLeast(ProtocolRevision.V2025_11_25) == true && TaskProtocol.Supports(BuildCapabilities().Tasks, request.Method);
+            if (request.Method.StartsWith("tasks/", StringComparison.Ordinal) && !supportsTask)
+                return JsonRpcResponse.Failure(request.Id, JsonRpcError.MethodNotFound("Task operation is not supported."));
+            if (request.Method == McpMethods.ToolsCall && !supportsTask) request = TaskProtocol.WithoutAugmentation(request);
             ProtocolShapeValidation.Request(request, _session.Revision ?? ProtocolRevision.Latest);
             // Lifecycle enforcement: initialize is valid only once, and no operation other than
             // ping is accepted until the client's notifications/initialized has been received.
@@ -642,6 +646,7 @@ public sealed class McpServer : IAsyncDisposable
     /// <summary>Experimental: ask the client to sample as a task; retrieve the result via the task APIs.</summary>
     public Task<CreateTaskResult> CreateMessageAsTaskAsync(CreateMessageRequest request, long? ttlMs = null, CancellationToken cancellationToken = default)
     {
+        RequireClientTask(McpMethods.SamplingCreateMessage);
         PeerRequestValidation.Sampling(request, _session.ClientCapabilities, _session.Revision ?? ProtocolRevision.Latest);
         return SendRequestAsync<CreateTaskResult>(McpMethods.SamplingCreateMessage, AugmentWithTask(request, ttlMs), cancellationToken);
     }
@@ -649,21 +654,55 @@ public sealed class McpServer : IAsyncDisposable
     /// <summary>Experimental: ask the client to elicit as a task; retrieve the result via the task APIs.</summary>
     public Task<CreateTaskResult> ElicitAsTaskAsync(ElicitRequest request, long? ttlMs = null, CancellationToken cancellationToken = default)
     {
+        RequireClientTask(McpMethods.ElicitationCreate);
         PeerRequestValidation.Elicitation(request, _session.ClientCapabilities, _session.Revision ?? ProtocolRevision.Latest);
         return SendRequestAsync<CreateTaskResult>(McpMethods.ElicitationCreate, AugmentWithTask(request, ttlMs), cancellationToken);
     }
 
-    /// <summary>Experimental: get the state of a task the client is running.</summary>
-    public Task<McpTask> GetClientTaskAsync(string taskId, CancellationToken cancellationToken = default) =>
-        SendRequestAsync<McpTask>(McpMethods.TasksGet, new TaskIdParams { TaskId = taskId }, cancellationToken);
+    private void RequireClientTask(string method) =>
+        TaskProtocol.Require(TaskProtocol.Supports(_session.ClientCapabilities?.Tasks, method), _session.Revision, method);
 
-    /// <summary>Experimental: retrieve the deferred result of a task the client ran.</summary>
-    public Task<JsonElement> GetClientTaskResultAsync(string taskId, CancellationToken cancellationToken = default) =>
-        SendRequestAsync<JsonElement>(McpMethods.TasksResult, new TaskIdParams { TaskId = taskId }, cancellationToken);
+    /// <summary>Experimental: get a client task's state.</summary>
+    public Task<McpTask> GetClientTaskAsync(string taskId, CancellationToken cancellationToken = default)
+    {
+        RequireClientTask(McpMethods.TasksGet);
+        return SendRequestAsync<McpTask>(McpMethods.TasksGet, new TaskIdParams { TaskId = taskId }, cancellationToken);
+    }
 
-    /// <summary>Experimental: cancel a task the client is running.</summary>
-    public Task<McpTask> CancelClientTaskAsync(string taskId, CancellationToken cancellationToken = default) =>
-        SendRequestAsync<McpTask>(McpMethods.TasksCancel, new TaskIdParams { TaskId = taskId }, cancellationToken);
+    /// <summary>Experimental: wait for a client task's final result.</summary>
+    public Task<JsonElement> GetClientTaskResultAsync(string taskId, CancellationToken cancellationToken = default)
+    {
+        RequireClientTask(McpMethods.TasksResult);
+        return SendRequestAsync<JsonElement>(McpMethods.TasksResult, new TaskIdParams { TaskId = taskId }, cancellationToken);
+    }
+
+    /// <summary>Experimental: cancel a client task.</summary>
+    public Task<McpTask> CancelClientTaskAsync(string taskId, CancellationToken cancellationToken = default)
+    {
+        RequireClientTask(McpMethods.TasksCancel);
+        return SendRequestAsync<McpTask>(McpMethods.TasksCancel, new TaskIdParams { TaskId = taskId }, cancellationToken);
+    }
+
+    /// <summary>Experimental: list all retained client tasks, following opaque cursors.</summary>
+    public async Task<IReadOnlyList<McpTask>> ListClientTasksAsync(CancellationToken cancellationToken = default)
+    {
+        var tasks = new List<McpTask>();
+        string? cursor = null;
+        do
+        {
+            var page = await ListClientTasksPageAsync(new PaginatedRequest { Cursor = cursor }, cancellationToken: cancellationToken);
+            tasks.AddRange(page.Tasks);
+            cursor = page.NextCursor;
+        } while (cursor is not null);
+        return tasks;
+    }
+
+    /// <summary>Experimental: retrieve one client task page.</summary>
+    public Task<ListTasksResult> ListClientTasksPageAsync(PaginatedRequest? request = null, McpRequestOptions? options = null, CancellationToken cancellationToken = default)
+    {
+        RequireClientTask(McpMethods.TasksList);
+        return SendRequestAsync<ListTasksResult>(McpMethods.TasksList, request ?? new PaginatedRequest(), cancellationToken, options);
+    }
 
     /// <summary>Serialize a request for the negotiated revision and attach task-augmentation metadata.</summary>
     private JsonElement AugmentWithTask<T>(T request, long? ttlMs)
@@ -718,21 +757,27 @@ public sealed class McpServer : IAsyncDisposable
                 JsonRpcError.InvalidParams($"Unknown tool: '{callReq.Name}'"));
         }
 
+        var augmented = TryGetTaskMetadata(request.Params, out var taskMetadata);
+        var taskSupport = handler.Tool.Execution?.TaskSupport ?? "forbidden";
+        if ((augmented && (taskSupport == "forbidden" || !(_session.Revision ?? ProtocolRevision.Latest).AtLeast(ProtocolRevision.V2025_11_25))) ||
+            (!augmented && taskSupport == "required" && _options.EnableExperimentalTasks && (_session.Revision ?? ProtocolRevision.Latest).AtLeast(ProtocolRevision.V2025_11_25)))
+            return JsonRpcResponse.Failure(request.Id, JsonRpcError.MethodNotFound("Tool task augmentation does not match its execution requirements."));
+
         // Validate input against schema
         var validationErrors = JsonSchemaValidator.Validate(callReq.Arguments, handler.Tool.InputSchema);
         if (validationErrors.Count > 0)
         {
             var message = $"Input validation failed: {string.Join("; ", validationErrors)}";
+            if (augmented)
+            {
+                var failedTask = _taskStore.Create(taskMetadata, TaskOwnerKey);
+                _taskStore.SetResult(failedTask.TaskId, ToWire(CallToolResult.Error(message)));
+                return JsonRpcResponse.Success(request.Id, ToWire(new CreateTaskResult { Task = failedTask }));
+            }
             return (_session.Revision ?? ProtocolRevision.Latest).AtLeast(ProtocolRevision.V2025_11_25)
                 ? JsonRpcResponse.Success(request.Id, ToWire(CallToolResult.Error(message)))
                 : JsonRpcResponse.Failure(request.Id, JsonRpcError.InvalidParams(message));
         }
-
-        var augmented = TryGetTaskMetadata(request.Params, out var taskMetadata);
-        var taskSupport = handler.Tool.Execution?.TaskSupport ?? "forbidden";
-        if ((augmented && (taskSupport == "forbidden" || !(_session.Revision ?? ProtocolRevision.Latest).AtLeast(ProtocolRevision.V2025_11_25))) ||
-            (!augmented && taskSupport == "required"))
-            return JsonRpcResponse.Failure(request.Id, JsonRpcError.InvalidParams("Tool task augmentation does not match its execution requirements."));
 
         var reporter = CreateProgressReporter(callReq.Meta);
 
@@ -854,8 +899,11 @@ public sealed class McpServer : IAsyncDisposable
             : JsonRpcResponse.Success(request.Id, ToWire(task));
     }
 
-    private JsonRpcResponse HandleTasksList(JsonRpcRequest request) =>
-        JsonRpcResponse.Success(request.Id, ToWire(new ListTasksResult { Tasks = _taskStore.List(TaskOwnerKey) }));
+    private JsonRpcResponse HandleTasksList(JsonRpcRequest request)
+    {
+        var page = _pagination.GetPage(_taskStore.List(TaskOwnerKey), request.GetParams<PaginatedRequest>()?.Cursor);
+        return JsonRpcResponse.Success(request.Id, ToWire(new ListTasksResult { Tasks = page.Items, NextCursor = page.NextCursor }));
+    }
 
     private JsonRpcResponse HandleTasksCancel(JsonRpcRequest request)
     {
@@ -1136,12 +1184,12 @@ public sealed class McpServer : IAsyncDisposable
 
     private ServerCapabilities BuildCapabilities() => new()
     {
-        Tasks = new ServerTasksCapability
+        Tasks = _options.EnableExperimentalTasks ? new ServerTasksCapability
         {
             List = new(),
             Cancel = new(),
-            Requests = _tools.Count > 0 ? new ServerTaskRequests { Tools = new ToolTaskRequests { Call = new() } } : null
-        },
+            Requests = _tools.Values.Any(h => h.Tool.Execution?.TaskSupport is "optional" or "required") ? new ServerTaskRequests { Tools = new ToolTaskRequests { Call = new() } } : null
+        } : null,
         Tools = _tools.Count > 0
             ? new ListChangedCapability { ListChanged = _options.ToolsListChanged }
             : null,
@@ -1307,6 +1355,8 @@ public sealed record McpServerOptions
     /// across connections (with a distinct <see cref="TaskOwnerKey"/> each) for durable tasks.
     /// </summary>
     public ITaskStore? TaskStore { get; init; }
+    /// <summary>Enable experimental task reception and retained task operations.</summary>
+    public bool EnableExperimentalTasks { get; init; } = true;
 
     /// <summary>
     /// Owner key that scopes this server's tasks in a shared/durable store. Null keeps tasks owned
