@@ -33,7 +33,7 @@ P3 = experimental features, ecosystem integrations, and long-term full-complianc
 - [ ] #50 Conformance gates and coverage
 - [ ] #51 Evidence-backed documentation
 - [ ] #71 URI-template resolution
-- [ ] #73 SSE stream closure and polling
+- [x] #73 SSE stream closure and polling
 - [ ] #74 Official-schema corpus and independent client/server interop
 - [x] #75 Attribute schema generation (PR96; merged-state 769 tests passed)
 
@@ -59,3 +59,7 @@ stream identity/capacity enforcement, retry hints and independent POST SSE resum
 2026-09-08: completed Tool-definition registration, attribute metadata and ValueTask support,
 revision-specific validation errors, output-schema enforcement and structured text fallback.
 Pinned official JSON Schema fixtures supplement adversarial validation tests.
+
+2026-09-08: verified two simultaneously active HTTP GET streams route live notifications once,
+retain independent stream identities, and release reservations after polling. Resumption and
+explicit server closure are covered by SseReplayTests and SsePollingTests.
