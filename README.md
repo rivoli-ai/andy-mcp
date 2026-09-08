@@ -23,7 +23,7 @@ See the **[compliance matrix](docs/compliance.md)** for exact, test-linked statu
 
 - MCP 2025-11-25 negotiated by default, with revision-aware serialization for older peers
 - JSON-RPC 2.0 with polymorphic serialization; bidirectional request/response correlation
-- Transports: stdio and Streamable HTTP with SSE replay, `Last-Event-ID` resumption, and multiple concurrent streams (exactly-once)
+- Transports: graceful stdio shutdown and Streamable HTTP with bounded SSE polling, per-stream resumption, and concurrent stream routing
 - High-level client API: tools, resources (+ subscribe), prompts, completion, roots, sampling, elicitation, auto-pagination, capability gating
 - High-level server API: fluent + attribute registration; concurrent dispatch, cancellation, progress
 - JSON Schema 2020-12 input validation, structured output enforcement, and complete tool metadata registration

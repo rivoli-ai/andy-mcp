@@ -54,7 +54,10 @@ public sealed class StreamableHttpClientTransport : IClientTransport
     private readonly Channel<JsonRpcMessage> _incoming;
     private string? _sessionId;
     private string? _negotiatedVersion;
+    private RequestId? _initializeId;
     private string? _lastEventId;
+    private readonly TaskCompletionSource _sessionReady = new(TaskCreationOptions.RunContinuationsAsynchronously);
+    private TimeSpan? _serverRetry;
     private Task? _sseListenTask;
     private CancellationTokenSource? _cts;
     private volatile bool _connected;
@@ -113,6 +116,7 @@ public sealed class StreamableHttpClientTransport : IClientTransport
         ObjectDisposedException.ThrowIf(_disposed, this);
         if (!_connected) throw new InvalidOperationException("Transport is not connected.");
 
+        if (message is JsonRpcRequest { Method: "initialize" } initialize) _initializeId = initialize.Id;
         var json = McpJsonDefaults.Serialize(message);
         using var request = new HttpRequestMessage(HttpMethod.Post, _options.Endpoint)
         {
@@ -171,7 +175,25 @@ public sealed class StreamableHttpClientTransport : IClientTransport
             {
                 // SSE stream response — parse events
                 var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
-                await ProcessSseStreamAsync(stream, cancellationToken);
+                var state = new SseStreamState();
+                var expected = message is JsonRpcRequest posted ? posted.Id : (RequestId?)null;
+                var complete = await ProcessSseStreamAsync(stream, cancellationToken, state, expected);
+                while (!complete && expected is not null)
+                {
+                    if (state.Cursor is null)
+                        throw new IOException("POST SSE ended without a response or resumable event ID.");
+                    await Task.Delay(state.Retry ?? _options.SseReconnectDelay, cancellationToken);
+                    using var resume = new HttpRequestMessage(HttpMethod.Get, _options.Endpoint);
+                    ApplyHeaders(resume);
+                    resume.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("text/event-stream"));
+                    resume.Headers.TryAddWithoutValidation("Last-Event-ID", state.Cursor);
+                    using var resumed = await _httpClient.SendAsync(resume, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
+                    resumed.EnsureSuccessStatusCode();
+                    if (resumed.Content.Headers.ContentType?.MediaType != "text/event-stream")
+                        throw new IOException("POST SSE resumption requires text/event-stream.");
+                    await using var resumedStream = await resumed.Content.ReadAsStreamAsync(cancellationToken);
+                    complete = await ProcessSseStreamAsync(resumedStream, cancellationToken, state, expected);
+                }
             }
             else
             {
@@ -196,8 +218,8 @@ public sealed class StreamableHttpClientTransport : IClientTransport
     /// </summary>
     private async Task SseListenLoopAsync(CancellationToken ct)
     {
-        // Wait briefly for initialization to complete before opening GET stream
-        await Task.Delay(500, ct);
+        // GET cannot race session creation; initialization releases this signal.
+        await _sessionReady.Task.WaitAsync(ct);
 
         while (!ct.IsCancellationRequested && _connected)
         {
@@ -230,23 +252,39 @@ public sealed class StreamableHttpClientTransport : IClientTransport
 
                 var stream = await response.Content.ReadAsStreamAsync(ct);
                 await ProcessSseStreamAsync(stream, ct);
+                await Task.Delay(_serverRetry ?? _options.SseReconnectDelay, ct);
             }
             catch (OperationCanceledException) { return; }
             catch (Exception ex)
             {
                 _logger.LogWarning(ex, "SSE listen stream disconnected, reconnecting in {Delay}",
                     _options.SseReconnectDelay);
-                await Task.Delay(_options.SseReconnectDelay, ct);
+                await Task.Delay(_serverRetry ?? _options.SseReconnectDelay, ct);
             }
         }
     }
 
-    private async Task ProcessSseStreamAsync(Stream stream, CancellationToken ct)
+    private sealed class SseStreamState
+    {
+        public string? Cursor;
+        public TimeSpan? Retry;
+    }
+
+    private async Task<bool> ProcessSseStreamAsync(Stream stream, CancellationToken ct,
+        SseStreamState? state = null, RequestId? expected = null)
     {
         await foreach (var evt in SseParser.ParseAsync(stream, ct))
         {
+            if (evt.Retry is { } retry && retry >= 0)
+            {
+                var delay = TimeSpan.FromMilliseconds(Math.Clamp(retry, 10, 60_000));
+                if (state is null) _serverRetry = delay; else state.Retry = delay;
+            }
             if (evt.Id is not null)
-                _lastEventId = evt.Id;
+            {
+                var cursor = string.IsNullOrEmpty(evt.Id) ? null : evt.Id;
+                if (state is null) _lastEventId = cursor; else state.Cursor = cursor;
+            }
 
             if (evt.EventType != "message" || string.IsNullOrEmpty(evt.Data))
                 continue;
@@ -254,13 +292,17 @@ public sealed class StreamableHttpClientTransport : IClientTransport
             try
             {
                 var message = McpJsonDefaults.Deserialize(evt.Data);
+                CaptureNegotiatedVersion(message);
                 await _incoming.Writer.WriteAsync(message, ct);
+                if (expected is { } id && message is JsonRpcResponse terminal && terminal.Id == id)
+                    return true;
             }
-            catch (JsonRpcParseException ex)
+            catch (Exception ex) when (ex is JsonRpcParseException or JsonException)
             {
                 _logger.LogWarning(ex, "Failed to parse SSE event data as JSON-RPC");
             }
         }
+        return false;
     }
 
     /// <summary>
@@ -272,13 +314,14 @@ public sealed class StreamableHttpClientTransport : IClientTransport
         if (_negotiatedVersion is not null)
             return;
 
-        if (message is JsonRpcResponse { Result: { } result } &&
+        if (message is JsonRpcResponse { Result: { } result } response && response.Id == _initializeId &&
             result.TryGetProperty("protocolVersion", out var pv) &&
             pv.ValueKind == JsonValueKind.String &&
             pv.GetString() is { } version &&
             McpSession.SupportedProtocolVersions.Contains(version))
         {
             _negotiatedVersion = version;
+            _sessionReady.TrySetResult();
         }
     }
 
@@ -293,7 +336,9 @@ public sealed class StreamableHttpClientTransport : IClientTransport
         if (_options.AdditionalHeaders is not null)
         {
             foreach (var (key, value) in _options.AdditionalHeaders)
-                request.Headers.TryAddWithoutValidation(key, value);
+                if (!key.Equals("MCP-Protocol-Version", StringComparison.OrdinalIgnoreCase) &&
+                    !key.Equals("Mcp-Session-Id", StringComparison.OrdinalIgnoreCase))
+                    request.Headers.TryAddWithoutValidation(key, value);
         }
     }
 
@@ -310,7 +355,8 @@ public sealed class StreamableHttpClientTransport : IClientTransport
             {
                 using var request = new HttpRequestMessage(HttpMethod.Delete, _options.Endpoint);
                 ApplyHeaders(request);
-                await _httpClient.SendAsync(request, CancellationToken.None);
+                using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(2));
+                using var response = await _httpClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, timeout.Token);
             }
             catch (Exception ex)
             {
