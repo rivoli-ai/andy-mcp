@@ -77,7 +77,7 @@ public class StructuredOutputTests
     }
 
     [Fact]
-    public async Task DeclaredOutputSchema_WithoutStructuredContent_IsAllowed()
+    public async Task DeclaredOutputSchema_WithoutStructuredContent_IsRejected()
     {
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(15));
         await using var client = await ConnectAsync(s =>
@@ -85,7 +85,7 @@ public class StructuredOutputTests
                 (JsonElement? _, CancellationToken _) => Task.FromResult(CallToolResult.Text("text only")),
                 outputSchema: OutputSchema), cts.Token);
 
-        var result = await client.CallToolAsync("add", null, cts.Token);
-        Assert.Equal("text only", ((TextContent)result.Content[0]).Text);
+        var ex = await Assert.ThrowsAsync<McpException>(() => client.CallToolAsync("add", null, cts.Token));
+        Assert.Contains("requires structuredContent", ex.Message);
     }
 }

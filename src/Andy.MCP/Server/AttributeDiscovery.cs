@@ -1,4 +1,5 @@
 using System.Reflection;
+using System.Runtime.ExceptionServices;
 using System.Diagnostics.CodeAnalysis;
 using System.Text.Json;
 using System.Text.Json.Nodes;
@@ -96,15 +97,36 @@ public static class AttributeDiscovery
             Title = attr.Title,
             ReadOnlyHint = attr.ReadOnly ? true : null,
             DestructiveHint = attr.Destructive ? null : false, // Default is true, only set if explicitly false
-            IdempotentHint = attr.Idempotent ? true : null
+            IdempotentHint = attr.Idempotent ? true : null,
+            OpenWorldHint = attr.OpenWorld ? null : false
         };
 
-        server.AddTool(name, description, schema, async (args, progress, ct) =>
+        var tool = attr.DefinitionJson is { } definition
+            ? JsonSerializer.Deserialize<Tool>(definition, McpJsonDefaults.Options)!
+            : new Tool
+            {
+                Name = name,
+                Title = attr.Title,
+                Description = description,
+                Annotations = annotations,
+                InputSchema = attr.InputSchemaJson is { } input ? JsonSerializer.Deserialize<JsonElement>(input) : schema,
+                OutputSchema = attr.OutputSchemaJson is { } output ? JsonSerializer.Deserialize<JsonElement>(output) : null,
+                Icons = attr.IconsJson is { } icons ? JsonSerializer.Deserialize<List<Icon>>(icons, McpJsonDefaults.Options) : null,
+                Meta = attr.MetaJson is { } meta ? JsonSerializer.Deserialize<JsonElement>(meta) : null,
+                Execution = new ToolExecution { TaskSupport = attr.TaskSupport }
+            };
+        server.AddTool(tool, async (args, progress, ct) =>
         {
             var parameters = BindParameters(method, args, progress, ct);
-            var result = method.Invoke(method.IsStatic ? null : instance, parameters);
-            return await CoerceToolResult(result, method.ReturnType);
-        }, annotations);
+            object? result;
+            try { result = method.Invoke(method.IsStatic ? null : instance, parameters); }
+            catch (TargetInvocationException ex) when (ex.InnerException is not null)
+            {
+                ExceptionDispatchInfo.Capture(ex.InnerException).Throw();
+                throw;
+            }
+            return await CoerceToolResult(result, method.ReturnType, tool.OutputSchema is not null);
+        });
     }
 
     private static readonly JsonSerializerOptions ArgumentOptions = CreateArgumentOptions();
@@ -218,8 +240,18 @@ public static class AttributeDiscovery
         return values;
     }
 
-    private static async Task<CallToolResult> CoerceToolResult(object? result, Type returnType)
+    private static async Task<CallToolResult> CoerceToolResult(object? result, Type returnType, bool structured)
     {
+        if (result is ValueTask valueTask)
+        {
+            await valueTask;
+            return CallToolResult.Text("");
+        }
+        if (returnType.IsGenericType && returnType.GetGenericTypeDefinition() == typeof(ValueTask<>))
+        {
+            result = returnType.GetMethod("AsTask")!.Invoke(result, null);
+            returnType = typeof(Task<>).MakeGenericType(returnType.GetGenericArguments());
+        }
         // Unwrap Task<T>
         if (result is Task task)
         {
@@ -235,6 +267,11 @@ public static class AttributeDiscovery
             }
         }
 
+        if (structured && result is not CallToolResult)
+        {
+            var value = JsonSerializer.SerializeToElement(result, ArgumentOptions);
+            return new CallToolResult { StructuredContent = value, Content = [new TextContent(value.GetRawText())] };
+        }
         return result switch
         {
             CallToolResult ctr => ctr,
