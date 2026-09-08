@@ -50,7 +50,8 @@ P3 = experimental features, ecosystem integrations, and long-term full-complianc
 
 - [x] Enforce terminal-state immutability, exact TTL expiry and detached failed-tool payload retention.
 - [x] Block result retrieval until terminal state and propagate task cancellation to running handlers.
-- [ ] Retain exact RPC errors and route related-task input requests.
+- [x] Route related-task input requests and resume after all pending peer input.
+- [ ] Retain exact RPC errors through durable stores.
 - [ ] Verify task capability negotiation and durable ownership in both directions.
 #39, #68: full-compliance epics; remain open until all children and final gates pass.
 
@@ -135,3 +136,8 @@ Transition-matrix and concurrent cancellation/completion tests cover these invar
 directions, keeps independent waiter cancellation, and returns failed tool payloads with
 related-task metadata. Cancelling a task stops its background handler and releases pending
 retrievals without allowing late completion to change the terminal state.
+
+2026-09-08: background tasks now enter input_required during nested peer requests,
+propagate related-task metadata without losing vendor metadata, and return to working
+after every pending input completes. Real HTTP JSON/POST SSE elicitation and reverse
+sampling-to-tool tests verify observable transitions and deferred completion.

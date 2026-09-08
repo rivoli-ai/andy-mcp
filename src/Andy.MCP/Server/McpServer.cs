@@ -389,7 +389,12 @@ public sealed class McpServer : IAsyncDisposable
     /// <summary>Serializes outbound writes so concurrent handlers never interleave on the transport.</summary>
     private async Task SendMessageAsync(JsonRpcMessage message, CancellationToken ct = default)
     {
-        if (message is JsonRpcNotification notification) ProtocolShapeValidation.Notification(notification, _session.Revision ?? ProtocolRevision.Latest);
+        if (message is JsonRpcNotification notification)
+        {
+            notification = notification with { Params = TaskExecutionContext.AttachCurrent(notification.Params) };
+            ProtocolShapeValidation.Notification(notification, _session.Revision ?? ProtocolRevision.Latest);
+            message = notification;
+        }
         await _writeLock.WaitAsync(ct);
         try
         {
@@ -469,7 +474,7 @@ public sealed class McpServer : IAsyncDisposable
             else
                 McpDiagnostics.SetSuccess(activity);
 
-            return response;
+            return TaskExecutionContext.RelateResponse(request, response);
         }
         catch (JsonException ex)
         {
@@ -506,12 +511,13 @@ public sealed class McpServer : IAsyncDisposable
     /// </summary>
     private async Task<T> SendRequestAsync<T>(string method, object? @params, CancellationToken ct, McpRequestOptions? requestOptions = null)
     {
+        using var input = TaskExecutionContext.Current?.BeginInput();
         var id = NextId();
         var request = new JsonRpcRequest
         {
             Id = id,
             Method = method,
-            Params = @params is not null ? ToWire(@params) : null
+            Params = TaskExecutionContext.AttachCurrent(@params is not null ? ToWire(@params) : null)
         };
 
         if (requestOptions?.Progress is not null)
@@ -805,6 +811,7 @@ public sealed class McpServer : IAsyncDisposable
     {
         _background.Run(taskId, _cts?.Token ?? CancellationToken.None, async ct =>
         {
+            using var context = new TaskExecutionContext(_taskStore, taskId);
             try
             {
                 var result = await handler.Handler(arguments, reporter, ct);
