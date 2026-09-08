@@ -203,6 +203,11 @@ See the `docs/` directory:
 
 ## Project status
 
+**2026-09-08 schema validation update:** tool validation uses JSON Schema 2020-12, including local
+references, conditionals, dependent properties and unevaluated locations. External schema fetches
+are disabled. Registration schemas are checked against the complete meta-schema.
+
+
 **2026-09-08 HTTP authorization update:** protected HTTP endpoints require an explicit resource/issuer
 policy and an ASP.NET Core authenticated principal with matching audience and scopes. Present
 Origin headers are denied unless allowed. Trusted local callers can explicitly select
