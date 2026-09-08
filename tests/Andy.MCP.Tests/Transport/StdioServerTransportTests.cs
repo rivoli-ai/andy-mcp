@@ -23,7 +23,7 @@ public class StdioServerTransportTests
 
         using var doc = JsonDocument.Parse(written);
         var root = doc.RootElement;
-        Assert.Equal(JsonValueKind.Null, root.GetProperty("id").ValueKind);
+        Assert.False(root.TryGetProperty("id", out _));
         Assert.Equal(McpErrorCodes.ParseError, root.GetProperty("error").GetProperty("code").GetInt32());
     }
 

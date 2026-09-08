@@ -24,30 +24,50 @@ public sealed class JsonRpcMessageConverter : JsonConverter<JsonRpcMessage>
         using var doc = JsonDocument.ParseValue(ref reader);
         var root = doc.RootElement;
 
-        // Validate jsonrpc field
-        if (root.TryGetProperty("jsonrpc", out var jsonrpcProp))
-        {
-            var version = jsonrpcProp.GetString();
-            if (version != "2.0")
-                throw new JsonRpcParseException($"Unsupported JSON-RPC version: '{version}'. Expected '2.0'.");
-        }
-        else
-        {
-            throw new JsonRpcParseException("Missing required 'jsonrpc' field.");
-        }
+        var names = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var property in root.EnumerateObject())
+            if (!names.Add(property.Name))
+                throw new JsonRpcParseException("Duplicate JSON-RPC field: " + property.Name);
+
+        if (!root.TryGetProperty("jsonrpc", out var version) ||
+            version.ValueKind != JsonValueKind.String || version.GetString() != "2.0")
+            throw new JsonRpcParseException("Expected JSON-RPC version 2.0.");
 
         var hasId = root.TryGetProperty("id", out var idProp);
-        var hasMethod = root.TryGetProperty("method", out _);
-        var hasResult = root.TryGetProperty("result", out _);
-        var hasError = root.TryGetProperty("error", out _);
+        var hasMethod = root.TryGetProperty("method", out var method);
+        var hasResult = root.TryGetProperty("result", out var result);
+        var hasError = root.TryGetProperty("error", out var error);
+        var hasParams = root.TryGetProperty("params", out var parameters);
 
-        // Reject null id
-        if (hasId && idProp.ValueKind == JsonValueKind.Null)
-            throw new JsonRpcParseException("Request 'id' must not be null.");
+        if (hasMethod)
+        {
+            if (method.ValueKind != JsonValueKind.String || string.IsNullOrEmpty(method.GetString()))
+                throw new JsonRpcParseException("Method must be a nonempty string.");
+            if (hasResult || hasError)
+                throw new JsonRpcParseException("A request or notification cannot contain a response.");
+            if (hasParams && parameters.ValueKind != JsonValueKind.Object)
+                throw new JsonRpcParseException("MCP params must be an object.");
+        }
+        else if (hasParams)
+            throw new JsonRpcParseException("A response cannot contain params.");
 
-        // Reject response with both result and error
-        if (hasResult && hasError)
-            throw new JsonRpcParseException("Response must not contain both 'result' and 'error'.");
+        if (hasResult && (hasError || result.ValueKind != JsonValueKind.Object))
+            throw new JsonRpcParseException("A result response must contain an object and no error.");
+        if (hasError && (error.ValueKind != JsonValueKind.Object ||
+            !error.TryGetProperty("code", out var code) || code.ValueKind != JsonValueKind.Number || !code.TryGetInt32(out _) ||
+            !error.TryGetProperty("message", out var errorMessage) || errorMessage.ValueKind != JsonValueKind.String))
+            throw new JsonRpcParseException("An error must contain an integer code and string message.");
+
+        // Errors without a readable ID must not be correlated to request zero.
+        if (!hasMethod && hasError && (!hasId || idProp.ValueKind == JsonValueKind.Null))
+            return new JsonRpcUncorrelatedError
+            {
+                Error = JsonSerializer.Deserialize<JsonRpcError>(error.GetRawText(), ConverterlessOptions(options))!
+            };
+
+        if (hasId && idProp.ValueKind != JsonValueKind.String &&
+            !(idProp.ValueKind == JsonValueKind.Number && idProp.TryGetInt64(out _)))
+            throw new JsonRpcParseException("Request ID must be a string or integer.");
 
         var rawJson = root.GetRawText();
 
@@ -83,6 +103,9 @@ public sealed class JsonRpcMessageConverter : JsonConverter<JsonRpcMessage>
                 break;
             case JsonRpcResponse response:
                 JsonSerializer.Serialize(writer, response, converterless);
+                break;
+            case JsonRpcUncorrelatedError uncorrelated:
+                JsonSerializer.Serialize(writer, uncorrelated, converterless);
                 break;
             case JsonRpcNotification notification:
                 JsonSerializer.Serialize(writer, notification, converterless);

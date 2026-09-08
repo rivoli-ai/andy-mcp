@@ -482,6 +482,9 @@ public sealed class McpClient : IAsyncDisposable
     {
         switch (message)
         {
+            case JsonRpcUncorrelatedError error:
+                _logger.LogWarning("Peer reported uncorrelated protocol error {Code}", error.Error.Code);
+                break;
             case JsonRpcResponse response:
                 // Correlate with pending request
                 if (!_tracker.TryComplete(response.Id, response))

@@ -112,7 +112,11 @@ public sealed class StdioServerTransport : IServerTransport
                     // Unparseable input: reply with a JSON-RPC parse error (id: null), per spec,
                     // rather than silently dropping it.
                     _logger.LogWarning(ex, "Failed to parse JSON-RPC message from stdin");
-                    await _outgoing.Writer.WriteAsync(ParseErrorLine(), ct);
+                    var error = ex is JsonRpcParseException
+                        ? JsonRpcError.InvalidRequest()
+                        : JsonRpcError.ParseError();
+                    await _outgoing.Writer.WriteAsync(
+                        McpJsonDefaults.Serialize(new JsonRpcUncorrelatedError { Error = error }), ct);
                 }
             }
         }
@@ -127,15 +131,6 @@ public sealed class StdioServerTransport : IServerTransport
             _incoming.Writer.TryComplete();
             Disconnected?.Invoke(this, new TransportDisconnectedEventArgs { Reason = "stdin closed" });
         }
-    }
-
-    /// <summary>
-    /// A JSON-RPC parse-error response with a null id, for input that cannot be parsed at all.
-    /// </summary>
-    private static string ParseErrorLine()
-    {
-        var error = JsonSerializer.Serialize(JsonRpcError.ParseError(), McpJsonDefaults.Options);
-        return "{\"jsonrpc\":\"2.0\",\"id\":null,\"error\":" + error + "}";
     }
 
     private async Task WriteLoopAsync(CancellationToken ct)
