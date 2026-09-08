@@ -33,7 +33,8 @@ P3 = experimental features, ecosystem integrations, and long-term full-complianc
 - [ ] #48 Complete high-level client/server operations
   - [x] Freeze registration, enforce prompt arguments and list-change capabilities, and support multi-content static resources
   - [x] Check sampling/elicitation sub-capabilities and expose roots/URL completion notifications
-  - [ ] Complete safe extension APIs, per-call controls and remaining protocol shape validation
+  - [x] Complete safe extension APIs, per-call controls and explicit pagination
+  - [ ] Complete remaining protocol shape validation with #41
 - [ ] #50 Conformance gates and coverage
 - [ ] #51 Evidence-backed documentation
 - [x] #71 URI-template resolution
@@ -76,3 +77,6 @@ explicit server closure are covered by SseReplayTests and SsePollingTests.
 
 2026-09-08: HTTP request/response and undelivered-event queues reject overload without leaking
 waiters or losing pending events. Replay gaps and inconsistent session revision headers fail explicitly.
+2026-09-08: extension requests/notifications use existing lifecycle and correlation safety,
+manual page APIs preserve cursors and result metadata, and per-call deadlines interrupt blocked
+HTTP POSTs as well as response waits. Reserved standard method namespaces cannot be overridden.

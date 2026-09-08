@@ -26,4 +26,25 @@ one process; it establishes receipt of the initialization notification. Runtime 
 require a ready session. Verification: `HighLevelContractTests` and existing bidirectional,
 completion, subscription, progress and task augmentation tests.
 
-Safe custom requests, per-call controls and additional shape validation remain tracked in #48.
+`RequestCustomAsync<T>` and `NotifyCustomAsync` on both peers use the existing transport,
+revision serializer, request correlation and cancellation tracking. Register server handlers
+with `AddCustomRequestHandler`; configure client handlers with
+`McpClientOptions.CustomRequestHandlers` before connecting. Reserved standard method namespaces
+cannot be overridden. Custom parameters and results must remain JSON objects. Custom
+notifications are exposed through `CustomNotificationReceived` with all metadata intact.
+
+`McpRequestOptions` supplies an idle `Timeout`, `MaximumDuration` and progress observer.
+Null timeout values inherit connection defaults; `Timeout.InfiniteTimeSpan` disables that
+particular deadline. Options are available on extension requests, typed tool calls, explicit
+page APIs and overloads for the other stable request operations. Timeouts interrupt blocked
+HTTP writes/POSTs and send cancellation to the peer. A deadline is per protocol request;
+use a caller cancellation token when imposing a budget across multiple requests.
+
+The `ListToolsPageAsync`, `ListResourcesPageAsync`, `ListResourceTemplatesPageAsync` and
+`ListPromptsPageAsync` APIs return the full page result, preserving cursor and metadata.
+Existing list APIs still fetch all pages automatically. `ListRootsResultAsync` preserves the
+full roots result. Supplying progress options adds a fresh progress token while preserving
+other `_meta` entries. Server extension handlers may receive the functional progress reporter.
+
+Tests: `ExtensionApiTests` and `HttpRequestDeadlineTests`. Additional protocol shape validation
+remains tracked with #41/#48.

@@ -43,6 +43,8 @@ public sealed class McpServer : IAsyncDisposable
 
     private readonly object _registrationGate = new();
     private bool _registrationFrozen;
+    private readonly Dictionary<string, Func<JsonElement?, IProgress<McpProgress>, CancellationToken, Task<JsonElement>>> _customHandlers = new(StringComparer.Ordinal);
+    public event EventHandler<JsonRpcNotification>? CustomNotificationReceived;
     public event EventHandler? RootsChanged;
     public McpSession Session => _session;
     public ResourceSubscriptionManager Subscriptions => _subscriptions;
@@ -262,6 +264,21 @@ public sealed class McpServer : IAsyncDisposable
         }
     }
 
+    public McpServer AddCustomRequestHandler(string method, Func<JsonElement?, CancellationToken, Task<JsonElement>> handler) =>
+        AddCustomRequestHandler(method, (parameters, _, ct) => handler(parameters, ct));
+
+    public McpServer AddCustomRequestHandler(string method, Func<JsonElement?, IProgress<McpProgress>, CancellationToken, Task<JsonElement>> handler)
+    {
+        lock (_registrationGate)
+        {
+            if (_registrationFrozen) throw new InvalidOperationException("Registration is frozen after RunAsync starts.");
+            ExtensionMethods.RequireCustom(method);
+            ArgumentNullException.ThrowIfNull(handler);
+            _customHandlers[method] = handler;
+            return this;
+        }
+    }
+
     #endregion
 
     /// <summary>
@@ -435,8 +452,7 @@ public sealed class McpServer : IAsyncDisposable
                 McpMethods.TasksList => HandleTasksList(request),
                 McpMethods.TasksResult => HandleTasksResult(request),
                 McpMethods.TasksCancel => HandleTasksCancel(request),
-                _ => JsonRpcResponse.Failure(request.Id,
-                    JsonRpcError.MethodNotFound($"Unknown method: '{request.Method}'"))
+                _ => await HandleCustomRequestAsync(request, ct)
             };
 
             if (response.IsError)
@@ -479,7 +495,7 @@ public sealed class McpServer : IAsyncDisposable
     /// params are serialized for the negotiated revision. Server-initiated request IDs are tracked
     /// independently of client-initiated ones, so overlapping numeric IDs never cross-correlate.
     /// </summary>
-    private async Task<T> SendRequestAsync<T>(string method, object? @params, CancellationToken ct)
+    private async Task<T> SendRequestAsync<T>(string method, object? @params, CancellationToken ct, McpRequestOptions? requestOptions = null)
     {
         var id = NextId();
         var request = new JsonRpcRequest
@@ -489,14 +505,26 @@ public sealed class McpServer : IAsyncDisposable
             Params = @params is not null ? ToWire(@params) : null
         };
 
-        var pending = _tracker.Track(id, _options.RequestTimeout, _options.MaximumRequestDuration, _options.TimeProvider);
+        if (requestOptions?.Progress is not null)
+            request = request with { Params = ExtensionMethods.WithProgress(request.Params, (RequestId)Guid.NewGuid().ToString("N")) };
+        ExtensionMethods.ObjectParameters(request.Params);
+        var pending = _tracker.Track(id, requestOptions?.Timeout ?? _options.RequestTimeout,
+            requestOptions?.MaximumDuration ?? _options.MaximumRequestDuration, _options.TimeProvider);
+        if (requestOptions?.Progress is { } progressObserver) pending.OnProgress(progressObserver);
         if (request.Params is { } parameters && parameters.TryGetProperty("_meta", out var metadata) &&
             metadata.ValueKind == JsonValueKind.Object && metadata.TryGetProperty("progressToken", out var token))
             pending.ProgressToken = token.ValueKind == JsonValueKind.String ? (RequestId)token.GetString()! :
                 token.ValueKind == JsonValueKind.Number && token.TryGetInt64(out var number) ? (RequestId)number : (RequestId?)null;
         try
         {
-            await SendMessageAsync(request, ct);
+            using var sendCancellation = CancellationTokenSource.CreateLinkedTokenSource(ct, pending.CancellationToken);
+            try { await SendMessageAsync(request, sendCancellation.Token); }
+            catch (OperationCanceledException) when (!ct.IsCancellationRequested && pending.Task.IsCompleted)
+            {
+                // Preserve the tracked timeout error when it interrupted a blocking HTTP POST/write.
+                await pending.Task;
+                throw;
+            }
             var response = await pending.Task.WaitAsync(ct);
 
             if (response.IsError)
@@ -521,6 +549,49 @@ public sealed class McpServer : IAsyncDisposable
             throw;
         }
         finally { pending.Dispose(); }
+    }
+
+    public Task<T> RequestCustomAsync<T>(string method, object? parameters = null, McpRequestOptions? options = null, CancellationToken ct = default)
+    {
+        EnsureReady(); ExtensionMethods.RequireCustom(method);
+        return SendRequestAsync<T>(method, parameters, ct, options);
+    }
+
+    public Task NotifyCustomAsync(string method, object? parameters = null, CancellationToken ct = default)
+    {
+        EnsureReady(); ExtensionMethods.RequireCustom(method);
+        return SendMessageAsync(new JsonRpcNotification { Method = method, Params = ExtensionMethods.ObjectParameters(parameters is null ? null : ToWire(parameters)) }, ct);
+    }
+
+    private async Task<JsonRpcResponse> HandleCustomRequestAsync(JsonRpcRequest request, CancellationToken ct)
+    {
+        if (!_customHandlers.TryGetValue(request.Method, out var handler))
+            return JsonRpcResponse.Failure(request.Id, JsonRpcError.MethodNotFound($"Unknown method: '{request.Method}'"));
+        var meta = request.Params is { } parameters && parameters.TryGetProperty("_meta", out var metadata) ? metadata : (JsonElement?)null;
+        var progress = CreateProgressReporter(meta);
+        var result = ExtensionMethods.ObjectResult(await handler(request.Params, progress, ct));
+        if (progress is ServerProgress reports) await reports.CompleteAsync();
+        return JsonRpcResponse.Success(request.Id, result);
+    }
+
+    public Task PingClientAsync(McpRequestOptions options, CancellationToken ct = default)
+    {
+        EnsureReady(); return SendRequestAsync<JsonElement>(McpMethods.Ping, null, ct, options);
+    }
+    public Task<ListRootsResult> ListRootsResultAsync(McpRequestOptions? options = null, CancellationToken ct = default)
+    {
+        EnsureReady(); _session.RequireClientCapability("roots");
+        return SendRequestAsync<ListRootsResult>(McpMethods.RootsList, null, ct, options);
+    }
+    public Task<CreateMessageResult> CreateMessageAsync(CreateMessageRequest request, McpRequestOptions options, CancellationToken ct = default)
+    {
+        EnsureReady(); PeerRequestValidation.Sampling(request, _session.ClientCapabilities, _session.Revision ?? ProtocolRevision.Latest);
+        return SendRequestAsync<CreateMessageResult>(McpMethods.SamplingCreateMessage, request, ct, options);
+    }
+    public Task<ElicitResult> ElicitAsync(ElicitRequest request, McpRequestOptions options, CancellationToken ct = default)
+    {
+        EnsureReady(); PeerRequestValidation.Elicitation(request, _session.ClientCapabilities, _session.Revision ?? ProtocolRevision.Latest);
+        return SendRequestAsync<ElicitResult>(McpMethods.ElicitationCreate, request, ct, options);
     }
 
     /// <summary>Ping the client and wait for its acknowledgement.</summary>
@@ -1036,6 +1107,7 @@ public sealed class McpServer : IAsyncDisposable
                 if (cancelled is not null) _inflight.Cancel(cancelled.RequestId);
                 break;
             default:
+                if (_initialized) CustomNotificationReceived?.Invoke(this, notification);
                 _logger.LogDebug("Unhandled notification: {Method}", notification.Method);
                 break;
         }

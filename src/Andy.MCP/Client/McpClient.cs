@@ -19,6 +19,9 @@ public sealed record McpClientOptions
     /// <summary>Hard deadline that progress cannot extend. Null disables the hard deadline.</summary>
     public TimeSpan? MaximumRequestDuration { get; init; } = TimeSpan.FromMinutes(5);
     public TimeProvider TimeProvider { get; init; } = TimeProvider.System;
+    /// <summary>Extension request handlers copied when the client is created.</summary>
+    public IReadOnlyDictionary<string, Func<JsonElement?, CancellationToken, Task<JsonElement>>> CustomRequestHandlers { get; init; } =
+        new Dictionary<string, Func<JsonElement?, CancellationToken, Task<JsonElement>>>();
 
     /// <summary>
     /// Root provider for the roots capability. If set, roots capability is declared.
@@ -87,6 +90,7 @@ public sealed class McpClient : IAsyncDisposable
     private CancellationTokenSource? _cts;
     private bool _disposed;
     private EventHandler? _rootsChangedHandler;
+    private readonly Dictionary<string, Func<JsonElement?, CancellationToken, Task<JsonElement>>> _customHandlers;
 
     /// <summary>
     /// The negotiated session state and capabilities.
@@ -98,6 +102,7 @@ public sealed class McpClient : IAsyncDisposable
 
     // Events for server notifications
     public event EventHandler<ElicitationCompleteParams>? ElicitationCompleted;
+    public event EventHandler<JsonRpcNotification>? CustomNotificationReceived;
     public event EventHandler? ToolsChanged;
     public event EventHandler? ResourcesChanged;
     public event EventHandler<string>? ResourceUpdated;
@@ -109,6 +114,8 @@ public sealed class McpClient : IAsyncDisposable
     {
         _transport = transport;
         _options = options;
+        _customHandlers = new(options.CustomRequestHandlers, StringComparer.Ordinal);
+        foreach (var method in _customHandlers.Keys) ExtensionMethods.RequireCustom(method);
         _logger = logger ?? NullLogger.Instance;
     }
 
@@ -197,6 +204,89 @@ public sealed class McpClient : IAsyncDisposable
         if (_session.State != McpSessionState.Ready) throw new McpSessionException("The MCP session is not ready.");
         if (_options.BuildCapabilities().Roots?.ListChanged != true) throw new McpCapabilityNotAvailableException("roots.listChanged");
         return _transport.SendAsync(new JsonRpcNotification { Method = McpMethods.NotificationsRootsListChanged }, ct);
+    }
+
+    /// <summary>Send an extension request through normal correlation, cancellation and deadline tracking.</summary>
+    public Task<T> RequestCustomAsync<T>(string method, object? parameters = null, McpRequestOptions? options = null, CancellationToken ct = default)
+    {
+        RequireReady();
+        ExtensionMethods.RequireCustom(method);
+        return SendRequestAsync<T>(method, parameters, ct, requestOptions: options);
+    }
+
+    public Task NotifyCustomAsync(string method, object? parameters = null, CancellationToken ct = default)
+    {
+        RequireReady();
+        ExtensionMethods.RequireCustom(method);
+        return _transport.SendAsync(new JsonRpcNotification { Method = method, Params = ExtensionMethods.ObjectParameters(parameters is null ? null : ToWire(parameters)) }, ct);
+    }
+
+    private void RequireReady()
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        if (_session.State != McpSessionState.Ready) throw new McpSessionException("The MCP session is not ready.");
+    }
+
+    public Task<ToolsListResult> ListToolsPageAsync(PaginatedRequest? request = null, McpRequestOptions? options = null, CancellationToken ct = default)
+    {
+        RequireReady(); _session.RequireServerCapability("tools");
+        return SendRequestAsync<ToolsListResult>(McpMethods.ToolsList, request, ct, requestOptions: options);
+    }
+    public Task<ResourcesListResult> ListResourcesPageAsync(PaginatedRequest? request = null, McpRequestOptions? options = null, CancellationToken ct = default)
+    {
+        RequireReady(); _session.RequireServerCapability("resources");
+        return SendRequestAsync<ResourcesListResult>(McpMethods.ResourcesList, request, ct, requestOptions: options);
+    }
+    public Task<ResourceTemplatesListResult> ListResourceTemplatesPageAsync(PaginatedRequest? request = null, McpRequestOptions? options = null, CancellationToken ct = default)
+    {
+        RequireReady(); _session.RequireServerCapability("resources");
+        return SendRequestAsync<ResourceTemplatesListResult>(McpMethods.ResourcesTemplatesList, request, ct, requestOptions: options);
+    }
+    public Task<PromptsListResult> ListPromptsPageAsync(PaginatedRequest? request = null, McpRequestOptions? options = null, CancellationToken ct = default)
+    {
+        RequireReady(); _session.RequireServerCapability("prompts");
+        return SendRequestAsync<PromptsListResult>(McpMethods.PromptsList, request, ct, requestOptions: options);
+    }
+    public Task<CallToolResult> CallToolAsync(CallToolRequest request, McpRequestOptions? options = null, CancellationToken ct = default)
+    {
+        RequireReady(); _session.RequireServerCapability("tools");
+        if (request.Task is not null) throw new ArgumentException("Use CallToolAsTaskAsync for task augmentation.", nameof(request));
+        return SendRequestAsync<CallToolResult>(McpMethods.ToolsCall, request, ct, requestOptions: options);
+    }
+
+    public Task PingAsync(McpRequestOptions options, CancellationToken ct = default)
+    {
+        RequireReady(); return SendRequestAsync<JsonElement>(McpMethods.Ping, null, ct, requestOptions: options);
+    }
+    public Task<ReadResourceResult> ReadResourceAsync(string uri, McpRequestOptions options, CancellationToken ct = default)
+    {
+        RequireReady(); _session.RequireServerCapability("resources");
+        return SendRequestAsync<ReadResourceResult>(McpMethods.ResourcesRead, new { uri }, ct, requestOptions: options);
+    }
+    public Task<GetPromptResult> GetPromptAsync(string name, IDictionary<string, string>? arguments, McpRequestOptions options, CancellationToken ct = default)
+    {
+        RequireReady(); _session.RequireServerCapability("prompts");
+        return SendRequestAsync<GetPromptResult>(McpMethods.PromptsGet, new { name, arguments }, ct, requestOptions: options);
+    }
+    public Task<CompletionResult> CompleteAsync(CompletionRequest request, McpRequestOptions options, CancellationToken ct = default)
+    {
+        RequireReady(); _session.RequireServerCapability("completions");
+        return SendRequestAsync<CompletionResult>(McpMethods.CompletionComplete, request, ct, requestOptions: options);
+    }
+    public Task SubscribeResourceAsync(string uri, McpRequestOptions options, CancellationToken ct = default)
+    {
+        RequireReady(); RequireResourceSubscription();
+        return SendRequestAsync<JsonElement>(McpMethods.ResourcesSubscribe, new { uri }, ct, requestOptions: options);
+    }
+    public Task UnsubscribeResourceAsync(string uri, McpRequestOptions options, CancellationToken ct = default)
+    {
+        RequireReady(); RequireResourceSubscription();
+        return SendRequestAsync<JsonElement>(McpMethods.ResourcesUnsubscribe, new { uri }, ct, requestOptions: options);
+    }
+    public Task SetLogLevelAsync(string level, McpRequestOptions options, CancellationToken ct = default)
+    {
+        RequireReady(); _session.RequireServerCapability("logging");
+        return SendRequestAsync<JsonElement>(McpMethods.LoggingSetLevel, new { level }, ct, requestOptions: options);
     }
 
     public Task PingAsync(CancellationToken ct = default) =>
@@ -401,7 +491,7 @@ public sealed class McpClient : IAsyncDisposable
     private RequestId NextId() => (RequestId)Interlocked.Increment(ref _nextId);
 
     private async Task<T> SendRequestAsync<T>(string method, object? @params, CancellationToken ct,
-        IProgress<McpProgress>? progress = null, RequestId? progressToken = null)
+        IProgress<McpProgress>? progress = null, RequestId? progressToken = null, McpRequestOptions? requestOptions = null)
     {
         var id = NextId();
         using var activity = McpDiagnostics.StartClientRequest(
@@ -414,7 +504,14 @@ public sealed class McpClient : IAsyncDisposable
             Params = @params is not null ? ToWire(@params) : null
         };
 
-        var pending = _tracker.Track(id, _options.RequestTimeout, _options.MaximumRequestDuration, _options.TimeProvider);
+        if (requestOptions?.Progress is { } observer)
+        {
+            progress = observer; progressToken ??= (RequestId)Guid.NewGuid().ToString("N");
+            request = request with { Params = ExtensionMethods.WithProgress(request.Params, progressToken.Value) };
+        }
+        ExtensionMethods.ObjectParameters(request.Params);
+        var pending = _tracker.Track(id, requestOptions?.Timeout ?? _options.RequestTimeout,
+            requestOptions?.MaximumDuration ?? _options.MaximumRequestDuration, _options.TimeProvider);
         if (progress is not null && progressToken is { } token)
         {
             pending.ProgressToken = token;
@@ -422,7 +519,14 @@ public sealed class McpClient : IAsyncDisposable
         }
         try
         {
-            await _transport.SendAsync(request, ct);
+            using var sendCancellation = CancellationTokenSource.CreateLinkedTokenSource(ct, pending.CancellationToken);
+            try { await _transport.SendAsync(request, sendCancellation.Token); }
+            catch (OperationCanceledException) when (!ct.IsCancellationRequested && pending.Task.IsCompleted)
+            {
+                // Preserve the tracked timeout error when it interrupted a blocking HTTP POST/write.
+                await pending.Task;
+                throw;
+            }
             var response = await pending.Task.WaitAsync(ct);
 
             if (response.IsError)
@@ -571,6 +675,9 @@ public sealed class McpClient : IAsyncDisposable
             case McpMethods.NotificationsCancelled:
                 HandleCancellation(notification);
                 break;
+            default:
+                if (_session.State == McpSessionState.Ready) CustomNotificationReceived?.Invoke(this, notification);
+                break;
         }
     }
 
@@ -627,6 +734,8 @@ public sealed class McpClient : IAsyncDisposable
 
     private async Task<JsonRpcResponse> DispatchServerRequestAsync(JsonRpcRequest request, CancellationToken ct)
     {
+        if (_session.State != McpSessionState.Ready && request.Method != McpMethods.Ping)
+            return JsonRpcResponse.Failure(request.Id, JsonRpcError.InvalidRequest("The MCP session is not ready."));
         switch (request.Method)
         {
             case McpMethods.Ping:
@@ -683,6 +792,8 @@ public sealed class McpClient : IAsyncDisposable
                 return HandleClientTaskCancel(request);
 
             default:
+                if (_customHandlers.TryGetValue(request.Method, out var handler))
+                    return JsonRpcResponse.Success(request.Id, ExtensionMethods.ObjectResult(await handler(request.Params, ct)));
                 return JsonRpcResponse.Failure(request.Id,
                     JsonRpcError.MethodNotFound($"Client does not handle '{request.Method}'"));
         }
