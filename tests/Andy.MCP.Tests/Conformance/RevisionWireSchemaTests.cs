@@ -31,7 +31,7 @@ public class RevisionWireSchemaTests
         var revision = ProtocolRevision.TryGet(version)!;
         var value = new CreateMessageResult { Role = Role.Assistant, Model = "test", Content = [new TextContent("ok")] };
         var json = RevisionAwareJson.ToElementForRevision(value, revision);
-        Assert.Equal(revision == ProtocolRevision.Latest ? JsonValueKind.Array : JsonValueKind.Object,
+        Assert.Equal(JsonValueKind.Object,
             json.GetProperty("content").ValueKind);
         Valid(version, "CreateMessageResult", json);
     }

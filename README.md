@@ -203,6 +203,8 @@ See the `docs/` directory:
 
 ## Project status
 
+**2026-09-08 conformance update:** pinned independent client/server interop covers stdio and HTTP JSON/SSE, including nested sampling. Official examples and per-surface line/branch coverage now gate CI. See [reproducible conformance](docs/conformance.md).
+
 **2026-09-08 schema audit:** 1,002 schema-derived fixtures cover every definition in the three negotiated revisions. Standard message shapes are checked at both high-level boundaries against frozen official schemas, with network resolution disabled.
 
 **2026-09-08 compatibility correction:** 2025-03-26 is excluded from negotiation because it requires receiving batches. Its schema descriptor remains available for conversion and audit. See the [transport matrix](docs/transports.md).

@@ -14,6 +14,16 @@ public class SamplingContentTests
     private static readonly JsonSerializerOptions Options = McpJsonDefaults.Options;
 
     [Fact]
+    public void MultipleSamplingBlocks_RemainAnArrayWithoutLosingContent()
+    {
+        var message = new SamplingMessage { Role = Role.User, Content = [new TextContent("one"), new TextContent("two")] };
+        var json = JsonSerializer.SerializeToElement(message, Options);
+        Assert.Equal(2, json.GetProperty("content").GetArrayLength());
+        var roundTrip = json.Deserialize<SamplingMessage>(Options)!;
+        Assert.Equal("two", Assert.IsType<TextContent>(roundTrip.Content[1]).Text);
+    }
+
+    [Fact]
     public void SamplingMessage_ScalarContent_Deserializes()
     {
         const string json = """
@@ -42,7 +52,7 @@ public class SamplingContentTests
     }
 
     [Fact]
-    public void SamplingMessage_ScalarContent_ReserializesAsArray()
+    public void SamplingMessage_ScalarContent_ReserializesAsScalarForReferenceSdkCompatibility()
     {
         var message = new SamplingMessage
         {
@@ -52,8 +62,8 @@ public class SamplingContentTests
 
         using var doc = JsonSerializer.SerializeToDocument(message, Options);
         var content = doc.RootElement.GetProperty("content");
-        Assert.Equal(JsonValueKind.Array, content.ValueKind);
-        Assert.Equal(1, content.GetArrayLength());
+        Assert.Equal(JsonValueKind.Object, content.ValueKind);
+        Assert.Equal("hi", content.GetProperty("text").GetString());
     }
 
     [Fact]
