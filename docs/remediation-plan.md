@@ -7,10 +7,10 @@ P1 = security, RPC correctness, release safety; P2 = stable protocol correctness
 P3 = experimental features, ecosystem integrations, and long-term full-compliance epics.
 
 ## P1
-- [ ] #52 Release gating and .NET 10 package maintenance
+- [x] #52 Release gating and .NET 10 package maintenance
   - [x] Require same-commit cross-platform tests, interop and security before pack/publish
   - [x] Run the documented example in CI and upload symbol packages
-  - [ ] Finish dependency, API compatibility and package-content validation
+  - [x] Finish dependency, API compatibility and package-content validation
 - [ ] #42 Strict bidirectional JSON-RPC and lifecycle enforcement
 - [ ] #45 OAuth discovery and token lifecycle security
 - [ ] #46 ASP.NET Core authorization, Origin and principal-bound isolation
