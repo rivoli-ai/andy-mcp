@@ -1,0 +1,10 @@
+{
+  "spec-examples.json": {
+    "url": "https://raw.githubusercontent.com/uri-templates/uritemplate-test/4171dac22aa67fc710b3f6df308a50bd08552986/spec-examples.json",
+    "sha256": "9148100604d25beb4fcc56b9d3a3ed6a0067d5f042bd472918030aff808f77be"
+  },
+  "spec-examples-by-section.json": {
+    "url": "https://raw.githubusercontent.com/uri-templates/uritemplate-test/4171dac22aa67fc710b3f6df308a50bd08552986/spec-examples-by-section.json",
+    "sha256": "0122630fddc249595045baef5122ccf41343c052d8524074920c9dc7bcd99543"
+  }
+}
