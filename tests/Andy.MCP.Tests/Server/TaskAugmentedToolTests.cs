@@ -48,15 +48,17 @@ public class TaskAugmentedToolTests
         Assert.Equal(McpTaskStatus.Working, created.Task.Status);
         Assert.False(string.IsNullOrEmpty(created.Task.TaskId));
 
-        // Result is not available while the tool runs.
-        await Assert.ThrowsAsync<McpException>(() => client.GetTaskResultAsync(created.Task.TaskId, cts.Token));
+        // Retrieval waits without preventing status polling.
+        var pending = client.GetTaskResultAsync(created.Task.TaskId, cts.Token);
+        Assert.Equal(McpTaskStatus.Working, (await client.GetTaskAsync(created.Task.TaskId, cts.Token)).Status);
+        Assert.False(pending.IsCompleted);
 
         // Let the tool finish, then poll to completion and fetch the deferred result.
         release.SetResult();
         var done = await PollUntilAsync(client, created.Task.TaskId, McpTaskStatus.Completed, cts.Token);
         Assert.Equal(McpTaskStatus.Completed, done.Status);
 
-        var payload = await client.GetTaskResultAsync(created.Task.TaskId, cts.Token);
+        var payload = await pending;
         var result = payload.Deserialize<CallToolResult>(McpJsonDefaults.Options)!;
         Assert.Equal("finished", ((TextContent)result.Content[0]).Text);
     }
