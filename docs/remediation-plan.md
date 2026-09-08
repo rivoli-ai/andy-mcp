@@ -49,7 +49,8 @@ P3 = experimental features, ecosystem integrations, and long-term full-complianc
 #49, #72: experimental task lifecycle.
 
 - [x] Enforce terminal-state immutability, exact TTL expiry and detached failed-tool payload retention.
-- [ ] Complete blocking outcome retrieval, cancellation propagation and related-task input routing.
+- [x] Block result retrieval until terminal state and propagate task cancellation to running handlers.
+- [ ] Retain exact RPC errors and route related-task input requests.
 - [ ] Verify task capability negotiation and durable ownership in both directions.
 #39, #68: full-compliance epics; remain open until all children and final gates pass.
 
@@ -129,3 +130,8 @@ TTL boundaries apply to reads and writes, UTC timestamps normalize offset clocks
 failed tool payloads retain their metadata independently of caller-owned JSON documents.
 Transition-matrix and concurrent cancellation/completion tests cover these invariants;
 #49/#72 remain open for end-to-end lifecycle work.
+
+2026-09-08: result retrieval now waits through working/input_required states in both
+directions, keeps independent waiter cancellation, and returns failed tool payloads with
+related-task metadata. Cancelling a task stops its background handler and releases pending
+retrievals without allowing late completion to change the terminal state.

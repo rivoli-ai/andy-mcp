@@ -74,13 +74,15 @@ public class SamplingTaskAugmentationTests
 
         Assert.Equal(McpTaskStatus.Working, created.Task.Status);
 
-        // The result is not available while the client's handler is blocked.
-        await Assert.ThrowsAsync<McpException>(() => server.GetClientTaskResultAsync(created.Task.TaskId, cts.Token));
+        // Retrieval waits without blocking other task operations.
+        var pending = server.GetClientTaskResultAsync(created.Task.TaskId, cts.Token);
+        Assert.Equal(McpTaskStatus.Working, (await server.GetClientTaskAsync(created.Task.TaskId, cts.Token)).Status);
+        Assert.False(pending.IsCompleted);
 
         release.SetResult();
         await PollUntilCompletedAsync(server, created.Task.TaskId, cts.Token);
 
-        var payload = await server.GetClientTaskResultAsync(created.Task.TaskId, cts.Token);
+        var payload = await pending;
         var result = payload.Deserialize<CreateMessageResult>(McpJsonDefaults.Options)!;
         Assert.Equal("assistant-model", result.Model);
     }

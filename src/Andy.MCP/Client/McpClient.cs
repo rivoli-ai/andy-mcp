@@ -834,7 +834,7 @@ public sealed class McpClient : IAsyncDisposable
                 return JsonRpcResponse.Success(request.Id,
                     ToWire(new ListTasksResult { Tasks = _taskStore.List(null) }));
             case McpMethods.TasksResult:
-                return HandleClientTaskResult(request);
+                return await TaskResults.WaitAsync(_taskStore, null, request, ct);
             case McpMethods.TasksCancel:
                 return HandleClientTaskCancel(request);
 
@@ -882,23 +882,11 @@ public sealed class McpClient : IAsyncDisposable
             : JsonRpcResponse.Success(request.Id, ToWire(task));
     }
 
-    private JsonRpcResponse HandleClientTaskResult(JsonRpcRequest request)
-    {
-        var taskId = request.GetParams<TaskIdParams>()!.TaskId;
-        var task = _taskStore.Get(taskId, null);
-        if (task is null)
-            return JsonRpcResponse.Failure(request.Id, JsonRpcError.InvalidParams($"Unknown task: '{taskId}'"));
-        if (task.Status != McpTaskStatus.Completed)
-            return JsonRpcResponse.Failure(request.Id,
-                JsonRpcError.InvalidRequest($"Task '{taskId}' result is not available (status: {task.Status})."));
-        var payload = _taskStore.GetResult(taskId, null);
-        return JsonRpcResponse.Success(request.Id, payload ?? McpJsonDefaults.ToElement(new { }));
-    }
-
     private JsonRpcResponse HandleClientTaskCancel(JsonRpcRequest request)
     {
         var taskId = request.GetParams<TaskIdParams>()!.TaskId;
         var task = _taskStore.Cancel(taskId, null);
+        if (task is not null) _background.Cancel(taskId);
         return task is null
             ? JsonRpcResponse.Failure(request.Id, JsonRpcError.InvalidParams($"Unknown task: '{taskId}'"))
             : JsonRpcResponse.Success(request.Id, ToWire(task));

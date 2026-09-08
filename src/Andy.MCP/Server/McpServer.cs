@@ -454,7 +454,7 @@ public sealed class McpServer : IAsyncDisposable
                 McpMethods.LoggingSetLevel => HandleSetLogLevel(request),
                 McpMethods.TasksGet => HandleTasksGet(request),
                 McpMethods.TasksList => HandleTasksList(request),
-                McpMethods.TasksResult => HandleTasksResult(request),
+                McpMethods.TasksResult => await TaskResults.WaitAsync(_taskStore, TaskOwnerKey, request, ct),
                 McpMethods.TasksCancel => HandleTasksCancel(request),
                 _ => await HandleCustomRequestAsync(request, ct)
             };
@@ -834,24 +834,11 @@ public sealed class McpServer : IAsyncDisposable
     private JsonRpcResponse HandleTasksList(JsonRpcRequest request) =>
         JsonRpcResponse.Success(request.Id, ToWire(new ListTasksResult { Tasks = _taskStore.List(TaskOwnerKey) }));
 
-    private JsonRpcResponse HandleTasksResult(JsonRpcRequest request)
-    {
-        var taskId = request.GetParams<TaskIdParams>()!.TaskId;
-        var task = _taskStore.Get(taskId, TaskOwnerKey);
-        if (task is null)
-            return JsonRpcResponse.Failure(request.Id, JsonRpcError.InvalidParams($"Unknown task: '{taskId}'"));
-        if (task.Status != McpTaskStatus.Completed)
-            return JsonRpcResponse.Failure(request.Id,
-                JsonRpcError.InvalidRequest($"Task '{taskId}' result is not available (status: {task.Status})."));
-
-        var payload = _taskStore.GetResult(taskId, TaskOwnerKey);
-        return JsonRpcResponse.Success(request.Id, payload ?? McpJsonDefaults.ToElement(new { }));
-    }
-
     private JsonRpcResponse HandleTasksCancel(JsonRpcRequest request)
     {
         var taskId = request.GetParams<TaskIdParams>()!.TaskId;
         var task = _taskStore.Cancel(taskId, TaskOwnerKey);
+        if (task is not null) _background.Cancel(taskId);
         return task is null
             ? JsonRpcResponse.Failure(request.Id, JsonRpcError.InvalidParams($"Unknown task: '{taskId}'"))
             : JsonRpcResponse.Success(request.Id, ToWire(task));
