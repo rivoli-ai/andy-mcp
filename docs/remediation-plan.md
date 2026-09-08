@@ -32,7 +32,7 @@ P3 = experimental features, ecosystem integrations, and long-term full-complianc
 - [ ] #48 Complete high-level client/server operations
 - [ ] #50 Conformance gates and coverage
 - [ ] #51 Evidence-backed documentation
-- [ ] #71 URI-template resolution
+- [x] #71 URI-template resolution
 - [x] #73 SSE stream closure and polling
 - [ ] #74 Official-schema corpus and independent client/server interop
 - [x] #75 Attribute schema generation (PR96; merged-state 769 tests passed)
@@ -60,6 +60,9 @@ stream identity/capacity enforcement, retry hints and independent POST SSE resum
 revision-specific validation errors, output-schema enforcement and structured text fallback.
 Pinned official JSON Schema fixtures supplement adversarial validation tests.
 
+2026-09-08: resource templates recognize all RFC6570 operators, prefixes and composite expansions,
+reject malformed templates before registration, and retain static-resource precedence.
+Upstream RFC example corpus and multi-content/error-channel integration tests verify matching.
 2026-09-08: verified two simultaneously active HTTP GET streams route live notifications once,
 retain independent stream identities, and release reservations after polling. Resumption and
 explicit server closure are covered by SseReplayTests and SsePollingTests.

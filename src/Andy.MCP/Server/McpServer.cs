@@ -146,6 +146,7 @@ public sealed class McpServer : IAsyncDisposable
 
     public McpServer AddResourceTemplate(string uriTemplate, string name, string? description = null, string? mimeType = null)
     {
+        _ = new UriTemplate(uriTemplate); // Validate before publishing the descriptor.
         _resourceTemplates.Add(new ResourceTemplate
         {
             UriTemplate = uriTemplate,
