@@ -1,5 +1,4 @@
 using System.Text.Json;
-using System.Text.Json.Nodes;
 using Andy.MCP.Client;
 using Andy.MCP.Protocol;
 using Json.Schema;
@@ -29,10 +28,11 @@ public class ElicitationRevisionTests
         Assert.Equal("First", fields.GetProperty("choice").GetProperty("enumNames")[0].GetString());
         var text = File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "Conformance", "schemas", "schema-2025-06-18.json"));
         var options = new EvaluationOptions { OutputFormat = OutputFormat.List };
-        options.SchemaRegistry.Register(new Uri("https://mcp.test/old"), JsonSchema.FromText(text));
-        var validator = new JsonSchemaBuilder().Ref("https://mcp.test/old#/definitions/ElicitRequest").Build();
+        var build = new BuildOptions { Dialect = Dialect.Draft202012, SchemaRegistry = new() };
+        build.SchemaRegistry.Register(new Uri("https://mcp.test/old"), JsonSchema.FromText(text, build));
+        var validator = new JsonSchemaBuilder().Ref("https://mcp.test/old#/definitions/ElicitRequest").Build(build);
         var envelope = McpJsonDefaults.ToElement(new JsonRpcRequest { Id = 1, Method = "elicitation/create", Params = old });
-        var result = validator.Evaluate(JsonNode.Parse(envelope.GetRawText()), options);
+        var result = validator.Evaluate(envelope, options);
         Assert.True(result.IsValid, JsonSerializer.Serialize(result));
         var current = RevisionAwareJson.ToElementForRevision(ElicitRequest.Form("input", schema), ProtocolRevision.Latest);
         Assert.True(current.GetProperty("requestedSchema").GetProperty("properties").GetProperty("choice").TryGetProperty("oneOf", out _));

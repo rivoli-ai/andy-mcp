@@ -13,14 +13,15 @@ public class RevisionWireSchemaTests
     private static void Valid(string version, string definition, JsonElement instance)
     {
         var text = File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "Conformance", "schemas", $"schema-{version}.json"));
-        var schema = JsonSchema.FromText(text);
+        var build = new BuildOptions { Dialect = Dialect.Draft202012, SchemaRegistry = new() };
+        var schema = JsonSchema.FromText(text, build);
         var root = JsonNode.Parse(text)!;
         var prefix = root["$defs"] is null ? "definitions" : "$defs";
         var uri = new Uri($"https://mcp.test/{version}/schema");
         var options = new EvaluationOptions { OutputFormat = OutputFormat.List };
-        options.SchemaRegistry.Register(uri, schema);
-        var wrapper = new JsonSchemaBuilder().Ref($"{uri}#/{prefix}/{definition}").Build();
-        var result = wrapper.Evaluate(JsonNode.Parse(instance.GetRawText()), options);
+        build.SchemaRegistry.Register(uri, schema);
+        var wrapper = new JsonSchemaBuilder().Ref($"{uri}#/{prefix}/{definition}").Build(build);
+        var result = wrapper.Evaluate(instance, options);
         Assert.True(result.IsValid, JsonSerializer.Serialize(result));
     }
 

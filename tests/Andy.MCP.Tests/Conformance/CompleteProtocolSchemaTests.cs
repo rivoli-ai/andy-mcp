@@ -30,15 +30,16 @@ public class CompleteProtocolSchemaTests
             if (prefix == "definitions") definitions = root.RootElement.GetProperty(prefix);
             Names = definitions.EnumerateObject().Select(p => p.Name).ToArray();
             var uri = new Uri($"https://mcp.test/{version}/schema");
-            _options.SchemaRegistry.Register(uri, JsonSchema.FromText(text));
-            _options.SchemaRegistry.Fetch = uri => throw new InvalidOperationException("Unexpected schema fetch: " + uri);
-            foreach (var name in Names) _definitions[name] = new JsonSchemaBuilder().Ref($"{uri}#/{prefix}/{name}").Build();
+            var build = new BuildOptions { Dialect = Dialect.Draft202012, SchemaRegistry = new() };
+            build.SchemaRegistry.Register(uri, JsonSchema.FromText(text, build, uri));
+            build.SchemaRegistry.Fetch = (uri, _) => throw new InvalidOperationException("Unexpected schema fetch: " + uri);
+            foreach (var name in Names) _definitions[name] = new JsonSchemaBuilder().Ref($"{uri}#/{prefix}/{name}").Build(build);
         }
         public void Valid(string name, string json)
         {
             lock (_gate)
             {
-                var result = _definitions[name].Evaluate(JsonNode.Parse(json), _options);
+                var result = _definitions[name].Evaluate(JsonSerializer.Deserialize<JsonElement>(json), _options);
                 Assert.True(result.IsValid, JsonSerializer.Serialize(result));
             }
         }

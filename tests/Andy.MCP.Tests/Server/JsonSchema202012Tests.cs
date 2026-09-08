@@ -35,4 +35,14 @@ public class JsonSchema202012Tests
         var errors = JsonSchemaValidator.Validate(JsonDocument.Parse("{}").RootElement, schema);
         Assert.Contains(errors, e => e.Contains("External schema reference"));
     }
+    [Fact]
+    public void RepeatedSchemaIds_AreIsolatedAcrossCalls()
+    {
+        var first = JsonSerializer.Deserialize<JsonElement>("""{"$id":"https://mcp.test/same","type":"string"}""");
+        var second = JsonSerializer.Deserialize<JsonElement>("""{"$id":"https://mcp.test/same","type":"integer"}""");
+        Assert.Empty(JsonSchemaValidator.Validate(JsonSerializer.SerializeToElement("value"), first));
+        Assert.Empty(JsonSchemaValidator.Validate(JsonSerializer.SerializeToElement(42), second));
+        Assert.NotEmpty(JsonSchemaValidator.Validate(JsonSerializer.SerializeToElement("value"), second));
+    }
+
 }

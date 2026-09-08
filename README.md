@@ -10,6 +10,12 @@ Feature support is granular (stable / experimental / partial) and documented wit
 
 The library is designed for integration with the Andy ecosystem (Andy Engine, Andy MCP Gateway, Andy Containers) but can be used independently in any .NET application.
 
+## Integration update — 2026-09-08
+
+Schema validation uses JsonSchema.Net 9.3.0 to match Andy CLI. Protocol and remote
+tool schemas use local registries, preserving offline validation and isolation when
+servers reuse schema IDs. The broader Engine/Tools integration remains in progress (#19).
+
 ## Packages
 
 | Package | Description |

@@ -1,6 +1,5 @@
 using System.Collections.Concurrent;
 using System.Text.Json;
-using System.Text.Json.Nodes;
 using Json.Schema;
 namespace Andy.MCP.Protocol;
 
@@ -80,17 +79,18 @@ internal static class ProtocolShapeValidation
             var prefix = document.RootElement.TryGetProperty("$defs", out var definitions) ? "$defs" : "definitions";
             if (prefix == "definitions") definitions = document.RootElement.GetProperty(prefix);
             var uri = new Uri($"https://schemas.andy-mcp.invalid/{version}/schema");
-            _options.SchemaRegistry.Register(uri, JsonSchema.FromText(text));
-            _options.SchemaRegistry.Fetch = uri => throw new InvalidOperationException($"External protocol schema fetch is prohibited: {uri}");
+            var build = new BuildOptions { Dialect = Dialect.Draft202012, SchemaRegistry = new() };
+            build.SchemaRegistry.Register(uri, JsonSchema.FromText(text, build, uri));
+            build.SchemaRegistry.Fetch = (uri, _) => throw new InvalidOperationException($"External protocol schema fetch is prohibited: {uri}");
             foreach (var definition in definitions.EnumerateObject())
-                _definitions.Add(definition.Name, new JsonSchemaBuilder().Ref($"{uri}#/{prefix}/{definition.Name}").Build());
+                _definitions.Add(definition.Name, new JsonSchemaBuilder().Ref($"{uri}#/{prefix}/{definition.Name}").Build(build));
         }
         public void Validate(string definition, JsonElement? value)
         {
             lock (_gate)
             {
                 if (!_definitions.TryGetValue(definition, out var schema)) throw new JsonException($"{definition} is unavailable in revision {_version}.");
-                var result = schema.Evaluate(value is { } element ? JsonNode.Parse(element.GetRawText()) : null, _options);
+                var result = schema.Evaluate(value ?? JsonSerializer.SerializeToElement<object?>(null), _options);
                 if (!result.IsValid) throw new JsonException($"Invalid {definition} for {_version}: {string.Join("; ", Errors(result).Take(5))}");
             }
         }

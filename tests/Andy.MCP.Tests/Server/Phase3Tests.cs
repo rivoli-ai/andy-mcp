@@ -314,8 +314,7 @@ public class JsonSchemaValidatorTests
         var args = McpJsonDefaults.ToElement(new { age = "not a number" });
 
         var errors = JsonSchemaValidator.Validate(args, schema);
-        Assert.Single(errors);
-        Assert.Contains("wrong type", errors[0]);
+        Assert.Contains(errors, error => error.Contains("wrong type") && error.Contains("/age"));
     }
 
     [Fact]
