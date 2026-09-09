@@ -182,3 +182,8 @@ revision/capability evidence, real ASP.NET Core tests and same-commit release de
 Expanded the platform matrix to run the full official-SDK interop suite on all three OSes.
 Replaced obsolete library-wide alpha/incomplete statements with the verified scope and
 preserved protocol-experimental tasks, unsupported legacy transports and host responsibilities.
+
+2026-09-09: added bounded container pools with minimum warm capacity, maximum demand capacity,
+idle scale-down, unhealthy idle replacement, fresh MCP sessions on lease return and hosted
+shutdown cleanup. Tests exercise the pool through real MCP client/server sessions; catalog
+image update policy and durable container TTL remain control-plane responsibilities.
