@@ -1,0 +1,17 @@
+code: mcp-server
+name: MCP .NET 10 example
+description: Streamable HTTP MCP echo server on port 3000
+version: "1.0.0"
+base_image: andy-mcp-example:local
+catalog_scope: global
+resources:
+  cpu_cores: 1
+  memory_mb: 512
+  disk_gb: 5
+environment:
+  ASPNETCORE_URLS: "http://+:3000"
+ports:
+  3000: mcp
+tags:
+  - mcp
+  - dotnet

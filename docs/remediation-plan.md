@@ -159,6 +159,11 @@ that prevented current MCP clients from initializing in Andy CLI. Migrated valid
 to 9.3.0 with local build registries and explicit Draft 2020-12 selection. Added
 repeated-schema-ID isolation coverage; ecosystem adapter acceptance remains open.
 
+2026-09-09: implemented the Andy Containers REST/MCP adapter: bounded provisioning,
+published-port resolution, handshake/ping readiness, filtered paginated discovery, tracked
+client leases, idle cleanup and optional catalog hooks. Added a .NET 10 HTTP container
+example and template. Pool/autoscaling and durable ownership remain outside this increment;
+#21/#30 remain open until their remaining acceptance is verified.
 2026-09-09: shared tool registry/executor adapter implementation merged in andy-tools#117
 with 1,126 passing tests across macOS, Linux and Windows, 35 MCP adapter regressions,
 and synchronized package publication. Implemented the current gateway registry client,
