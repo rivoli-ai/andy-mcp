@@ -1,4 +1,4 @@
-# Requirements and acceptance status — 2026-09-08
+# Requirements and acceptance status — 2026-09-09
 
 The current target is MCP 2025-11-25 on .NET 10. Supported older negotiations are
 2025-06-18, plus 2024-11-05 over stdio. This is a requirements ledger, not a declaration
@@ -23,7 +23,7 @@ of 100% compliance. The [revision-specific matrix](compliance.md) is the status 
 | Legacy 2024 HTTP+SSE; 2025-03-26 required batch reception | Unsupported; excluded from applicable transport negotiation |
 | Native AOT and trimming certification | Unsupported; [maintenance limitations](package-maintenance.md) |
 | Andy Engine, Gateway and Containers integration | Open P3 issues #19/#20/#21 under #30 |
-| Full MCP compliance | Open P3 epics #39/#68; stable remediation is not phase-wide completion |
+| MCP 2025-11-25 library compliance | Phase 7/8 audit complete: [dated acceptance record](implementation.md#phase-78-completion-audit--2026-09-09); supported revisions and host responsibilities remain explicit |
 
 All production source changes require .NET tests. Builds restore locked central NuGet
 dependencies; release requires same-commit three-platform tests, independent interop,
