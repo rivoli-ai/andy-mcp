@@ -251,7 +251,31 @@ HTTP server, Dockerfile and Andy Containers YAML template. Build from the reposi
 `docker build -f examples/Andy.MCP.ContainerServer/Dockerfile -t andy-mcp-example:local .`.
 Import the template through your existing container catalog workflow. The example is an
 anonymous echo server; production endpoints should use the existing MCP authorization setup.
-Pool/autoscaling policy and durable ownership across provider restarts are not implemented.
+`AddContainerMcpPool` adds bounded, instance-local pooling: pre-warm `MinimumSize`, rent
+exclusive capacity with `RentAsync`, grow on demand to `MaximumSize`, and reclaim excess
+idle containers after `IdleTimeout`. Capacity exhaustion returns a clear error. Returning a
+lease creates a fresh MCP session; container filesystem/application state persists, so use
+separate pools for callers that need isolation. Host shutdown destroys the pool's containers.
+Durable ownership across provider restarts is not implemented; use control-plane TTLs.
+
+```csharp
+services.AddContainerMcpPool(new ContainerMcpPoolOptions
+{
+    TemplateCode = "mcp-server",
+    ProvisionOptions = new() { Name = "mcp-worker", ExpiresAfter = TimeSpan.FromHours(2) },
+    MinimumSize = 1,
+    MaximumSize = 4,
+    IdleTimeout = TimeSpan.FromMinutes(5)
+});
+// Start the host, then resolve ContainerMcpPool from its services.
+await using var lease = await pool.RentAsync(cancellationToken);
+var result = await lease.Client.CallToolAsync("echo", cancellationToken: cancellationToken);
+```
+
+Image rebuild policy belongs to the Andy Containers template catalog. Its dependency records
+support `auto_update` and `update_policy` (`manual`, `patch`, `minor`, `major`, or
+`security-only`). The local pre-built example is updated by rebuilding its Docker image;
+configure catalog dependency policies when publishing a managed template.
 ### Gateway registry integration — 2026-09-09
 
 `Andy.MCP.Gateway` connects to the current Andy MCP Gateway registry's
