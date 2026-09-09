@@ -280,6 +280,9 @@ The current gateway repository is a registry, without the `/api/adapters` manage
 `/adapters/{name}/mcp` proxy routes originally described in #20. Legacy SSE proxying is
 also unavailable. This integration does not advertise those absent server features.
 
+Container cleanup polling also probes owned active sessions: a stopped/crashed container or
+failed MCP health check closes its tracked clients. Transport disconnect releases the active
+lease guard. Restarted containers can acquire a fresh session; stale clients are not reused.
 ### Shared tool execution and connection recovery — 2026-09-09
 
 The published `Andy.Tools.Mcp` adapter (2026.9.9-rc.103 or later) supplies MCP tools through

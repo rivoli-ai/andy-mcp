@@ -170,6 +170,9 @@ and synchronized package publication. Implemented the current gateway registry c
 name resolution and health-aware discovery; #20's obsolete adapter/proxy API requirements
 remain separate from the verified registry contract. No ecosystem epic is marked complete.
 
+2026-09-09: added container stop/crash health coupling and transport-disconnect lease release.
+Tests verify stopped clients close, stopped containers reject new sessions, and restart opens
+a fresh working MCP connection before final destruction.
 2026-09-09: wired connection-manager recovery to the existing AutoReconnect/ReconnectPolicy
 configuration. Added real MCP client/server regressions for replacement, disabled recovery,
 retry limits, removal preventing resurrection, cancellation and disposal. Shared registry/
