@@ -164,3 +164,8 @@ published-port resolution, handshake/ping readiness, filtered paginated discover
 client leases, idle cleanup and optional catalog hooks. Added a .NET 10 HTTP container
 example and template. Pool/autoscaling and durable ownership remain outside this increment;
 #21/#30 remain open until their remaining acceptance is verified.
+2026-09-09: shared tool registry/executor adapter implementation merged in andy-tools#117
+with 1,126 passing tests across macOS, Linux and Windows, 35 MCP adapter regressions,
+and synchronized package publication. Implemented the current gateway registry client,
+name resolution and health-aware discovery; #20's obsolete adapter/proxy API requirements
+remain separate from the verified registry contract. No ecosystem epic is marked complete.
