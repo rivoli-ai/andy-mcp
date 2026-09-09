@@ -169,3 +169,7 @@ with 1,126 passing tests across macOS, Linux and Windows, 35 MCP adapter regress
 and synchronized package publication. Implemented the current gateway registry client,
 name resolution and health-aware discovery; #20's obsolete adapter/proxy API requirements
 remain separate from the verified registry contract. No ecosystem epic is marked complete.
+
+2026-09-09: added container stop/crash health coupling and transport-disconnect lease release.
+Tests verify stopped clients close, stopped containers reject new sessions, and restart opens
+a fresh working MCP connection before final destruction.

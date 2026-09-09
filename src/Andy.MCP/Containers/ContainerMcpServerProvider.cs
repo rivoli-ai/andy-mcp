@@ -53,13 +53,24 @@ public sealed class ContainerMcpSession : IAsyncDisposable
 {
     private readonly Action _release;
     private int _disposed;
+    private int _released;
     public McpClient Client { get; }
-    internal ContainerMcpSession(McpClient client, Action release) { Client = client; _release = release; }
+    internal ContainerMcpSession(McpClient client, Action release)
+    {
+        Client = client;
+        _release = release;
+        Client.Disconnected += OnDisconnected;
+    }
+    private void OnDisconnected(object? sender, TransportDisconnectedEventArgs args) => Release();
+    private void Release()
+    {
+        if (Interlocked.Exchange(ref _released, 1) == 0) _release();
+    }
     public async ValueTask DisposeAsync()
     {
         if (Interlocked.Exchange(ref _disposed, 1) != 0) return;
         try { await Client.DisposeAsync().ConfigureAwait(false); }
-        finally { _release(); }
+        finally { Client.Disconnected -= OnDisconnected; Release(); }
     }
 }
 
@@ -73,6 +84,7 @@ public sealed class ContainerMcpServerProvider : IContainerMcpServerProvider
     {
         public ContainerMcpServer Server { get; } = server;
         public int Sessions;
+        public HashSet<ContainerMcpSession> Leases { get; } = [];
         public long LastUsedTicks = DateTimeOffset.UtcNow.UtcTicks;
     }
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
@@ -108,8 +120,15 @@ public sealed class ContainerMcpServerProvider : IContainerMcpServerProvider
         {
             var container = await SendAsync<Container>(HttpMethod.Post, "", new
             {
-                options.Name, TemplateCode = templateCode, options.ProviderCode, options.WorkspaceId, options.OwnerId,
-                options.Resources, options.EnvironmentVariables, options.ExpiresAfter, Source = "Mcp"
+                options.Name,
+                TemplateCode = templateCode,
+                options.ProviderCode,
+                options.WorkspaceId,
+                options.OwnerId,
+                options.Resources,
+                options.EnvironmentVariables,
+                options.ExpiresAfter,
+                Source = "Mcp"
             }, ct).ConfigureAwait(false);
             if (container.Id == Guid.Empty) throw new JsonException("Container creation returned an empty id.");
             created = container.Id;
@@ -151,14 +170,26 @@ public sealed class ContainerMcpServerProvider : IContainerMcpServerProvider
             if (!_owned.TryGetValue(id, out var owned)) throw new InvalidOperationException("Only containers provisioned by this provider can acquire tracked sessions.");
             using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
             timeout.CancelAfter(_options.RequestTimeout);
+            var state = await SendAsync<Container>(HttpMethod.Get, id.ToString(), null, timeout.Token).ConfigureAwait(false);
+            if (!state.Status.Equals("Running", StringComparison.OrdinalIgnoreCase)) throw new InvalidOperationException("Container is not running.");
             var endpoint = await EndpointAsync(id, timeout.Token).ConfigureAwait(false);
             var client = await ConnectAsync(endpoint, timeout.Token).ConfigureAwait(false);
-            Interlocked.Increment(ref owned.Sessions);
-            return new ContainerMcpSession(client, () =>
+            lock (owned)
             {
-                Interlocked.Exchange(ref owned.LastUsedTicks, DateTimeOffset.UtcNow.UtcTicks);
-                Interlocked.Decrement(ref owned.Sessions);
-            });
+                Interlocked.Increment(ref owned.Sessions);
+                ContainerMcpSession? lease = null;
+                lease = new ContainerMcpSession(client, () =>
+                {
+                    lock (owned)
+                    {
+                        if (lease is not null) owned.Leases.Remove(lease);
+                        Interlocked.Exchange(ref owned.LastUsedTicks, DateTimeOffset.UtcNow.UtcTicks);
+                        Interlocked.Decrement(ref owned.Sessions);
+                    }
+                });
+                owned.Leases.Add(lease);
+                return lease;
+            }
         }
         finally { _gate.Release(); }
     }
@@ -200,6 +231,12 @@ public sealed class ContainerMcpServerProvider : IContainerMcpServerProvider
         {
             foreach (var (id, owned) in _owned.ToArray())
             {
+                if (Volatile.Read(ref owned.Sessions) > 0 && !await GetHealthAsync(id, cancellationToken).ConfigureAwait(false))
+                {
+                    ContainerMcpSession[] leases;
+                    lock (owned) leases = owned.Leases.ToArray();
+                    foreach (var lease in leases) await lease.DisposeAsync().ConfigureAwait(false);
+                }
                 if (Volatile.Read(ref owned.Sessions) != 0 || DateTimeOffset.UtcNow.UtcTicks - Interlocked.Read(ref owned.LastUsedTicks) < _options.IdleTimeout.Ticks) continue;
                 await DestroyCoreAsync(id, cancellationToken).ConfigureAwait(false);
                 _owned.Remove(id);
@@ -235,9 +272,13 @@ public sealed class ContainerMcpServerProvider : IContainerMcpServerProvider
 
     public async Task<bool> GetHealthAsync(Guid id, CancellationToken cancellationToken = default)
     {
-        var container = await SendAsync<Container>(HttpMethod.Get, id.ToString(), null, cancellationToken).ConfigureAwait(false);
-        return container.Status.Equals("Running", StringComparison.OrdinalIgnoreCase)
-            && await ProbeAsync(await EndpointAsync(id, cancellationToken).ConfigureAwait(false), cancellationToken).ConfigureAwait(false);
+        try
+        {
+            var container = await SendAsync<Container>(HttpMethod.Get, id.ToString(), null, cancellationToken).ConfigureAwait(false);
+            return container.Status.Equals("Running", StringComparison.OrdinalIgnoreCase)
+                && await ProbeAsync(await EndpointAsync(id, cancellationToken).ConfigureAwait(false), cancellationToken).ConfigureAwait(false);
+        }
+        catch (HttpRequestException ex) when (ex.StatusCode == HttpStatusCode.NotFound) { return false; }
     }
 
     private async Task<Uri> EndpointAsync(Guid id, CancellationToken ct)
@@ -260,8 +301,15 @@ public sealed class ContainerMcpServerProvider : IContainerMcpServerProvider
             throw new ArgumentException("An absolute HTTP(S) endpoint without credentials or fragment is required.", nameof(endpoint));
     }
 
+    /// <summary>Creates a caller-owned MCP transport for a resolved container endpoint.</summary>
+    public static IClientTransport CreateTransport(Uri endpoint)
+    {
+        ValidateEndpoint(endpoint);
+        return new StreamableHttpClientTransport(new() { Endpoint = endpoint, EnableServerSseStream = false });
+    }
+
     private static Task<McpClient> ConnectAsync(Uri endpoint, CancellationToken ct) => McpClient.ConnectAsync(
-        new StreamableHttpClientTransport(new() { Endpoint = endpoint, EnableServerSseStream = false }), cancellationToken: ct);
+        CreateTransport(endpoint), cancellationToken: ct);
 
     private async Task<bool> ProbeAsync(Uri endpoint, CancellationToken ct)
     {

@@ -277,3 +277,7 @@ registry credentials are never forwarded to it. Configure endpoint authenticatio
 The current gateway repository is a registry, without the `/api/adapters` management or
 `/adapters/{name}/mcp` proxy routes originally described in #20. Legacy SSE proxying is
 also unavailable. This integration does not advertise those absent server features.
+
+Container cleanup polling also probes owned active sessions: a stopped/crashed container or
+failed MCP health check closes its tracked clients. Transport disconnect releases the active
+lease guard. Restarted containers can acquire a fresh session; stale clients are not reused.
