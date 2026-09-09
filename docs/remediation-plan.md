@@ -170,6 +170,10 @@ and synchronized package publication. Implemented the current gateway registry c
 name resolution and health-aware discovery; #20's obsolete adapter/proxy API requirements
 remain separate from the verified registry contract. No ecosystem epic is marked complete.
 
+2026-09-09: wired connection-manager recovery to the existing AutoReconnect/ReconnectPolicy
+configuration. Added real MCP client/server regressions for replacement, disabled recovery,
+retry limits, removal preventing resurrection, cancellation and disposal. Shared registry/
+executor integration is published as Andy.Tools.Mcp 2026.9.9-rc.103 (andy-tools#117).
 2026-09-09: completed the Phase 7/8 library-wide audit after verifying every child issue,
 revision/capability evidence, real ASP.NET Core tests and same-commit release dependencies.
 Expanded the platform matrix to run the full official-SDK interop suite on all three OSes.

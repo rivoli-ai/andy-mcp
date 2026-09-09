@@ -279,3 +279,19 @@ registry credentials are never forwarded to it. Configure endpoint authenticatio
 The current gateway repository is a registry, without the `/api/adapters` management or
 `/adapters/{name}/mcp` proxy routes originally described in #20. Legacy SSE proxying is
 also unavailable. This integration does not advertise those absent server features.
+
+### Shared tool execution and connection recovery — 2026-09-09
+
+The published `Andy.Tools.Mcp` adapter (2026.9.9-rc.103 or later) supplies MCP tools through
+Andy.Tools' existing `IToolRegistry` and `IToolExecutor`, which Andy Engine already consumes.
+It supports full-schema input validation, structured/error payload retention, conservative
+permissions, manual/notification refresh and cancellation statistics. Registry filtering and
+executor running-call tracking use the existing framework interfaces.
+
+`McpClientOptions.AutoReconnect = true` now activates recovery after a connected server
+reports a transport disconnect. `ReconnectPolicy` bounds attempts and delays (fixed, linear,
+exponential, or exponential with jitter). A recovered client replaces the disconnected one;
+shared tool discovery observes the replacement. Explicit removal/disposal cancels and drains
+recovery, preventing removed servers from being recreated. Initial startup connection failures
+are logged; they do not silently turn a failed AddServerAsync into a later connection.
+The manager propagates caller cancellation during connection and discovery.
