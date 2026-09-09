@@ -1,4 +1,4 @@
-# Implementation — 2026-09-08
+# Implementation — 2026-09-09
 
 ## Structure and contracts
 
@@ -38,11 +38,28 @@ The suite contains 2,830 tests before the final documentation/example additions,
 1,002 schema-derived fixtures, 66 sourced official examples and six independent SDK cases.
 Use CI artifacts for the exact current count and measured coverage.
 
-**Phase 7 and Phase 8 full-compliance epics remain in progress.** Experimental tasks (#49/#72)
-and the outstanding full-compliance acceptance under #39/#68 remain open. Phase 6 ecosystem
-integration (#19/#20/#21/#30) is also open. This is a completion record for stable remediation,
-not a claim that every phase task or experimental protocol requirement is complete.
-The [prioritized plan](remediation-plan.md) retains the main/sub-task checklist.
+## Phase 7/8 completion audit — 2026-09-09
+
+Reviewed every main/sub-task in #39 and #68 against merged child issues, current code,
+linked conformance tests, and the release workflow. All children #40–#52 and #69–#76 are
+closed with implementation evidence. The latest pre-audit verification is [PR #124](https://github.com/rivoli-ai/andy-mcp/pull/124):
+2,902 passing tests, no skips, all platform/coverage/security/interop/API/package gates green.
+The audit additionally makes the full suite, including the pinned independent SDK cases,
+mandatory on Linux, macOS and Windows; its own PR must pass these gates before merge.
+
+- [x] Every Phase 7 and Phase 8 implementation child is merged and closed.
+- [x] Full .NET suite and independent SDK interop are required on all three platforms.
+- [x] ASP.NET Core Streamable HTTP has real end-to-end JSON/SSE/bidirectional tests.
+- [x] Every negotiated schema definition/revision and advertised capability has linked evidence in the compliance matrix.
+- [x] README and requirements distinguish library compliance, upstream experimental status and host responsibilities.
+- [x] Implementation plan and README contain this dated completion record.
+- [x] Same-commit build, security, coverage, conformance, API and package checks gate release.
+
+Phase 8's original instruction to mark experimental tasks stable is reconciled as
+**implementation complete, protocol-experimental**. The November 2025 specification still
+labels tasks experimental; removing the library-wide alpha warning does not change that.
+Optional Phase 6 ecosystem integration (#19/#20/#21/#30) remains independently tracked.
+The [prioritized plan](remediation-plan.md) retains the historical implementation record.
 
 ## Verification and release
 
@@ -54,5 +71,5 @@ No browser, live identity provider or production credentials are needed for CI.
 
 The reusable validation workflow must pass on the same commit before packaging. Release
 builds additionally check public API compatibility and both NuGet packages' contents.
-Publishing follows configured tag/main prerelease rules and does not assert full compliance.
+Publishing follows configured tag/main prerelease rules. Compliance is scoped by the verified feature/transport matrix.
 See [package maintenance](package-maintenance.md) for runtime, dependency and trimming policy.
