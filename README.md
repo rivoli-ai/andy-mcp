@@ -226,3 +226,27 @@ See [migration/API guidance](docs/high-level-apis.md), [HTTP security](docs/http
 ## License
 
 Licensed under the Apache License, Version 2.0. See [LICENSE](LICENSE) for details.
+
+### Container MCP provisioning — 2026-09-09
+
+`Andy.MCP.Containers` provides `IContainerMcpServerProvider` over the current Andy Containers
+REST API. `ProvisionAsync` maps template/provider/workspace/owner, resources, environment and
+expiry settings, waits for Running and a successful MCP handshake/ping, and cleans up failed
+or cancelled provisioning. `ListRunningAsync` supports owner/workspace/template filters and
+pagination, excluding containers without the configured published MCP port.
+
+Register `AddContainerMcpServers(options, sp => authenticatedContainersHttpClient)` alongside
+logging. The caller owns this HTTP client. API credentials are never forwarded to MCP endpoints.
+The default endpoint uses the API host, the template's published MCP port (3000), plain HTTP
+and `/mcp`. Set `ResolveEndpoint` for remote Docker hosts, HTTPS or provider-specific routing.
+Use `OpenSessionAsync` and dispose its returned lease to protect active clients from idle
+cleanup. Only containers provisioned by this provider instance are eligible for idle cleanup;
+server-side `ExpiresAfter` remains useful across application restarts. Optional register and
+unregister callbacks connect provisioning to a gateway or other catalog.
+
+The [container example](examples/Andy.MCP.ContainerServer) includes a runnable .NET 10 MCP
+HTTP server, Dockerfile and Andy Containers YAML template. Build from the repository root:
+`docker build -f examples/Andy.MCP.ContainerServer/Dockerfile -t andy-mcp-example:local .`.
+Import the template through your existing container catalog workflow. The example is an
+anonymous echo server; production endpoints should use the existing MCP authorization setup.
+Pool/autoscaling policy and durable ownership across provider restarts are not implemented.
