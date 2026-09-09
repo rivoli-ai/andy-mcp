@@ -226,3 +226,31 @@ See [migration/API guidance](docs/high-level-apis.md), [HTTP security](docs/http
 ## License
 
 Licensed under the Apache License, Version 2.0. See [LICENSE](LICENSE) for details.
+
+### Gateway registry integration — 2026-09-09
+
+`Andy.MCP.Gateway` connects to the current Andy MCP Gateway registry's
+`/api/GatewayRegistry` API. `IMcpGatewayClient` supports list/get/search/create/update/delete,
+HTTP status errors and optional registry bearer-token refresh (one retry after 401).
+`AddMcpGatewayDiscovery()` connects active entries, probes MCP ping, removes inactive or
+unhealthy clients, and retries them on later refreshes. Registry outages use a bounded cache.
+
+```csharp
+services.AddMcpClient(_ => { });
+services.AddMcpGateway(new McpGatewayOptions
+{
+    RegistryUri = new Uri("https://registry.example"),
+    RefreshInterval = TimeSpan.FromSeconds(30)
+});
+services.AddMcpGatewayDiscovery();
+```
+
+Import `Andy.MCP.Configuration` and `Andy.MCP.Gateway`. Discovery registers connections as
+`gateway:<registration-id>`; use those names with `IMcpConnectionManager`. Alternatively,
+`AddGatewayServer("name", "https://registry.example", "registered-name")` resolves exactly
+one active registration at startup. MCP connections use the registered endpoint directly;
+registry credentials are never forwarded to it. Configure endpoint authentication separately.
+
+The current gateway repository is a registry, without the `/api/adapters` management or
+`/adapters/{name}/mcp` proxy routes originally described in #20. Legacy SSE proxying is
+also unavailable. This integration does not advertise those absent server features.
