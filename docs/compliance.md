@@ -1,9 +1,11 @@
-# MCP compliance matrix — 2026-09-08
+# MCP compliance matrix — 2026-09-09
 
-Andy.MCP remains **alpha**. Stable means a reachable, tested library surface; it does not
-certify every application behavior or declare full MCP compliance. Task lifecycle implementation is verified, while
-the final full-compliance audits #39/#68 remain open. Application policy, model execution and user
-approval belong to the host.
+The Phase 7/8 library compliance audit is complete for MCP 2025-11-25 and the supported
+negotiations below. All implementation children of #39/#68 are merged. Stable denotes a
+reachable, tested library surface; application policy, model execution, user approval and
+identity-provider configuration remain host responsibilities. Tasks are implemented and
+verified but remain [experimental in the MCP specification](https://modelcontextprotocol.io/specification/2025-11-25/basic/utilities/tasks).
+This audit does not reclassify the upstream protocol or turn a NuGet prerelease into a stable package release.
 
 ## Negotiated revisions
 
@@ -94,8 +96,7 @@ examples, malformed messages, pinned independent client/server interop and per-s
 line/branch coverage. The independent SDK cases cover stdio and HTTP JSON/SSE with nested
 sampling. Platform-sensitive tests run on Linux, macOS and Windows. All gates must pass for
 the same commit before packaging; package-content and API compatibility checks also gate release.
-Publication is separately restricted to configured release triggers. Passing CI does not
-change the alpha/full-compliance boundary or complete experimental task work.
+Publication is separately restricted to configured release triggers. The dated [completion audit](implementation.md#phase-78-completion-audit--2026-09-09) records the acceptance evidence; ecosystem work remains tracked independently.
 
 ## Migration
 

@@ -54,7 +54,7 @@ P3 = experimental features, ecosystem integrations, and long-term full-complianc
 - [x] Retain exact RPC errors through durable stores and verify disk-backed store recreation.
 - [x] Isolate default owners and inject stores in both directions.
 - [x] Complete the task capability and pagination audit.
-#39, #68: full-compliance epics; remain open until all children and final gates pass.
+#39, #68: Phase 7/8 library implementation and completion audit finished on 2026-09-09; see the dated record in implementation.md. Tasks retain their upstream experimental label.
 
 ## Completion record
 2026-09-08: verified the merged ancestors behind closures #40 (e10e6e6), #69 (98042ae)
@@ -174,3 +174,8 @@ remain separate from the verified registry contract. No ecosystem epic is marked
 configuration. Added real MCP client/server regressions for replacement, disabled recovery,
 retry limits, removal preventing resurrection, cancellation and disposal. Shared registry/
 executor integration is published as Andy.Tools.Mcp 2026.9.9-rc.103 (andy-tools#117).
+2026-09-09: completed the Phase 7/8 library-wide audit after verifying every child issue,
+revision/capability evidence, real ASP.NET Core tests and same-commit release dependencies.
+Expanded the platform matrix to run the full official-SDK interop suite on all three OSes.
+Replaced obsolete library-wide alpha/incomplete statements with the verified scope and
+preserved protocol-experimental tasks, unsupported legacy transports and host responsibilities.
