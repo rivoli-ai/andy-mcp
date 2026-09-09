@@ -1,6 +1,6 @@
 # Andy.MCP
 
-> **ALPHA** -- This library is in early development. APIs may change without notice. Not recommended for production use. Use at your own risk.
+> **MCP 2025-11-25:** library implementation and Phase 7/8 compliance audit completed. See the [verified feature and transport matrix](docs/compliance.md) for supported revisions and host responsibilities. NuGet prereleases remain identified by their package versions; MCP tasks remain protocol-experimental.
 
 ## Overview
 
@@ -56,7 +56,7 @@ case-sensitive union of existing and challenged scopes, coordinates an upgrade p
 retries the original request once only after a new token covers that set. Failed interactions leave
 the existing token and original `403` intact.
 
-> **Alpha:** task lifecycle implementation is verified; full-compliance release audits remain open. Model/tool execution, user approval and identity-provider integration belong to the application. See the [evidence-backed matrix](docs/compliance.md).
+> Task lifecycle implementation is verified and remains experimental in the MCP specification. Model/tool execution, user approval and identity-provider integration belong to the application. See the [evidence-backed matrix](docs/compliance.md).
 
 ## Quick Start
 
@@ -217,9 +217,11 @@ official examples and per-surface line/branch coverage thresholds. The
 The 2,894-test suite covers both directions, HTTP input flows, ownership and disk-backed
 store recreation. Tasks remain experimental in the MCP specification.
 
-**Phase 7/8 full compliance remains in progress; the project remains alpha.** Remaining P3
-work covers ecosystem integration (#19/#20/#21/#30) and the final release/compliance audits
-(#39/#68). Legacy HTTP+SSE and March 2025 batch reception are unsupported.
+**Phase 7/8 library compliance audit completed on 2026-09-09.** All child implementations
+are merged, supported capabilities/revisions have linked conformance evidence, and release
+requires same-commit platform, interoperability, coverage, security, API and package gates.
+Ecosystem integration (#19/#20/#21/#30) remains independently tracked. Legacy HTTP+SSE and
+March 2025 batch reception are unsupported; experimental tasks retain their upstream status.
 See [migration/API guidance](docs/high-level-apis.md), [HTTP security](docs/http-security.md),
 [OAuth examples](docs/oauth.md) and [runtime maintenance](docs/package-maintenance.md).
 

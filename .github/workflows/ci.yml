@@ -24,6 +24,13 @@ jobs:
       with:
         python-version: "3.x"
 
+    - uses: actions/setup-node@v4
+      with:
+        node-version: '24'
+
+    - name: Install pinned reference SDK
+      run: npm ci --ignore-scripts --no-fund --prefix tests/interop
+
     - name: Restore dependencies
       run: dotnet restore --locked-mode
 
@@ -31,7 +38,7 @@ jobs:
       run: dotnet build --configuration Release --no-restore
 
     - name: Test
-      run: dotnet test --configuration Release --no-build --verbosity normal --filter "Category!=Interop" --collect:"XPlat Code Coverage" --results-directory ./TestResults
+      run: dotnet test --configuration Release --no-build --verbosity normal --collect:"XPlat Code Coverage" --results-directory ./TestResults
 
     - name: Enforce critical coverage
       run: |
