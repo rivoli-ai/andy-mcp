@@ -54,7 +54,7 @@ P3 = experimental features, ecosystem integrations, and long-term full-complianc
 - [x] Retain exact RPC errors through durable stores and verify disk-backed store recreation.
 - [x] Isolate default owners and inject stores in both directions.
 - [x] Complete the task capability and pagination audit.
-#39, #68: full-compliance epics; remain open until all children and final gates pass.
+#39, #68: Phase 7/8 library implementation and completion audit finished on 2026-09-09; see the dated record in implementation.md. Tasks retain their upstream experimental label.
 
 ## Completion record
 2026-09-08: verified the merged ancestors behind closures #40 (e10e6e6), #69 (98042ae)
@@ -159,8 +159,31 @@ that prevented current MCP clients from initializing in Andy CLI. Migrated valid
 to 9.3.0 with local build registries and explicit Draft 2020-12 selection. Added
 repeated-schema-ID isolation coverage; ecosystem adapter acceptance remains open.
 
+2026-09-09: implemented the Andy Containers REST/MCP adapter: bounded provisioning,
+published-port resolution, handshake/ping readiness, filtered paginated discovery, tracked
+client leases, idle cleanup and optional catalog hooks. Added a .NET 10 HTTP container
+example and template. Pool/autoscaling and durable ownership remain outside this increment;
+#21/#30 remain open until their remaining acceptance is verified.
 2026-09-09: shared tool registry/executor adapter implementation merged in andy-tools#117
 with 1,126 passing tests across macOS, Linux and Windows, 35 MCP adapter regressions,
 and synchronized package publication. Implemented the current gateway registry client,
 name resolution and health-aware discovery; #20's obsolete adapter/proxy API requirements
 remain separate from the verified registry contract. No ecosystem epic is marked complete.
+
+2026-09-09: added container stop/crash health coupling and transport-disconnect lease release.
+Tests verify stopped clients close, stopped containers reject new sessions, and restart opens
+a fresh working MCP connection before final destruction.
+2026-09-09: wired connection-manager recovery to the existing AutoReconnect/ReconnectPolicy
+configuration. Added real MCP client/server regressions for replacement, disabled recovery,
+retry limits, removal preventing resurrection, cancellation and disposal. Shared registry/
+executor integration is published as Andy.Tools.Mcp 2026.9.9-rc.103 (andy-tools#117).
+2026-09-09: completed the Phase 7/8 library-wide audit after verifying every child issue,
+revision/capability evidence, real ASP.NET Core tests and same-commit release dependencies.
+Expanded the platform matrix to run the full official-SDK interop suite on all three OSes.
+Replaced obsolete library-wide alpha/incomplete statements with the verified scope and
+preserved protocol-experimental tasks, unsupported legacy transports and host responsibilities.
+
+2026-09-09: added bounded container pools with minimum warm capacity, maximum demand capacity,
+idle scale-down, unhealthy idle replacement, fresh MCP sessions on lease return and hosted
+shutdown cleanup. Tests exercise the pool through real MCP client/server sessions; catalog
+image update policy and durable container TTL remain control-plane responsibilities.

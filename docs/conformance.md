@@ -1,7 +1,6 @@
 # Conformance gates
 
-Verified surfaces are described in [compliance.md](compliance.md). Passing these gates
-does not declare full MCP compliance: experimental tasks and ecosystem work remain open.
+Verified surfaces and the completed Phase 7/8 audit are described in [compliance.md](compliance.md). Tasks retain their upstream experimental status; ecosystem integrations have separate acceptance.
 
 ## Reproducible validation
 
@@ -14,8 +13,8 @@ python3 scripts/check-coverage.py "TestResults/**/coverage.cobertura.xml"
 
 Use an empty results directory for each coverage run. The gate requires exactly one
 report and fails on missing surfaces or missing branch data. Full solution coverage
-includes both core and ASP.NET Core libraries. Three-platform CI runs all non-interop
-tests with coverage; a separate mandatory Node 24 job runs the six independent SDK cases.
+includes both core and ASP.NET Core libraries. Three-platform CI runs the full suite with coverage, including the six independent SDK
+cases using Node 24. A separate mandatory Node 24 job also isolates interop failures.
 Both jobs gate the same-commit build/package workflow. Missing prerequisites fail interop.
 
 | Surface | Minimum lines | Minimum branches |

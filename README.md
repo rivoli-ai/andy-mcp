@@ -1,6 +1,6 @@
 # Andy.MCP
 
-> **ALPHA** -- This library is in early development. APIs may change without notice. Not recommended for production use. Use at your own risk.
+> **MCP 2025-11-25:** library implementation and Phase 7/8 compliance audit completed. See the [verified feature and transport matrix](docs/compliance.md) for supported revisions and host responsibilities. NuGet prereleases remain identified by their package versions; MCP tasks remain protocol-experimental.
 
 ## Overview
 
@@ -56,7 +56,7 @@ case-sensitive union of existing and challenged scopes, coordinates an upgrade p
 retries the original request once only after a new token covers that set. Failed interactions leave
 the existing token and original `403` intact.
 
-> **Alpha:** task lifecycle implementation is verified; full-compliance release audits remain open. Model/tool execution, user approval and identity-provider integration belong to the application. See the [evidence-backed matrix](docs/compliance.md).
+> Task lifecycle implementation is verified and remains experimental in the MCP specification. Model/tool execution, user approval and identity-provider integration belong to the application. See the [evidence-backed matrix](docs/compliance.md).
 
 ## Quick Start
 
@@ -217,9 +217,11 @@ official examples and per-surface line/branch coverage thresholds. The
 The 2,894-test suite covers both directions, HTTP input flows, ownership and disk-backed
 store recreation. Tasks remain experimental in the MCP specification.
 
-**Phase 7/8 full compliance remains in progress; the project remains alpha.** Remaining P3
-work covers ecosystem integration (#19/#20/#21/#30) and the final release/compliance audits
-(#39/#68). Legacy HTTP+SSE and March 2025 batch reception are unsupported.
+**Phase 7/8 library compliance audit completed on 2026-09-09.** All child implementations
+are merged, supported capabilities/revisions have linked conformance evidence, and release
+requires same-commit platform, interoperability, coverage, security, API and package gates.
+Ecosystem integration (#19/#20/#21/#30) remains independently tracked. Legacy HTTP+SSE and
+March 2025 batch reception are unsupported; experimental tasks retain their upstream status.
 See [migration/API guidance](docs/high-level-apis.md), [HTTP security](docs/http-security.md),
 [OAuth examples](docs/oauth.md) and [runtime maintenance](docs/package-maintenance.md).
 
@@ -227,6 +229,53 @@ See [migration/API guidance](docs/high-level-apis.md), [HTTP security](docs/http
 
 Licensed under the Apache License, Version 2.0. See [LICENSE](LICENSE) for details.
 
+### Container MCP provisioning — 2026-09-09
+
+`Andy.MCP.Containers` provides `IContainerMcpServerProvider` over the current Andy Containers
+REST API. `ProvisionAsync` maps template/provider/workspace/owner, resources, environment and
+expiry settings, waits for Running and a successful MCP handshake/ping, and cleans up failed
+or cancelled provisioning. `ListRunningAsync` supports owner/workspace/template filters and
+pagination, excluding containers without the configured published MCP port.
+
+Register `AddContainerMcpServers(options, sp => authenticatedContainersHttpClient)` alongside
+logging. The caller owns this HTTP client. API credentials are never forwarded to MCP endpoints.
+The default endpoint uses the API host, the template's published MCP port (3000), plain HTTP
+and `/mcp`. Set `ResolveEndpoint` for remote Docker hosts, HTTPS or provider-specific routing.
+Use `OpenSessionAsync` and dispose its returned lease to protect active clients from idle
+cleanup. Only containers provisioned by this provider instance are eligible for idle cleanup;
+server-side `ExpiresAfter` remains useful across application restarts. Optional register and
+unregister callbacks connect provisioning to a gateway or other catalog.
+
+The [container example](examples/Andy.MCP.ContainerServer) includes a runnable .NET 10 MCP
+HTTP server, Dockerfile and Andy Containers YAML template. Build from the repository root:
+`docker build -f examples/Andy.MCP.ContainerServer/Dockerfile -t andy-mcp-example:local .`.
+Import the template through your existing container catalog workflow. The example is an
+anonymous echo server; production endpoints should use the existing MCP authorization setup.
+`AddContainerMcpPool` adds bounded, instance-local pooling: pre-warm `MinimumSize`, rent
+exclusive capacity with `RentAsync`, grow on demand to `MaximumSize`, and reclaim excess
+idle containers after `IdleTimeout`. Capacity exhaustion returns a clear error. Returning a
+lease creates a fresh MCP session; container filesystem/application state persists, so use
+separate pools for callers that need isolation. Host shutdown destroys the pool's containers.
+Durable ownership across provider restarts is not implemented; use control-plane TTLs.
+
+```csharp
+services.AddContainerMcpPool(new ContainerMcpPoolOptions
+{
+    TemplateCode = "mcp-server",
+    ProvisionOptions = new() { Name = "mcp-worker", ExpiresAfter = TimeSpan.FromHours(2) },
+    MinimumSize = 1,
+    MaximumSize = 4,
+    IdleTimeout = TimeSpan.FromMinutes(5)
+});
+// Start the host, then resolve ContainerMcpPool from its services.
+await using var lease = await pool.RentAsync(cancellationToken);
+var result = await lease.Client.CallToolAsync("echo", cancellationToken: cancellationToken);
+```
+
+Image rebuild policy belongs to the Andy Containers template catalog. Its dependency records
+support `auto_update` and `update_policy` (`manual`, `patch`, `minor`, `major`, or
+`security-only`). The local pre-built example is updated by rebuilding its Docker image;
+configure catalog dependency policies when publishing a managed template.
 ### Gateway registry integration — 2026-09-09
 
 `Andy.MCP.Gateway` connects to the current Andy MCP Gateway registry's
@@ -254,3 +303,22 @@ registry credentials are never forwarded to it. Configure endpoint authenticatio
 The current gateway repository is a registry, without the `/api/adapters` management or
 `/adapters/{name}/mcp` proxy routes originally described in #20. Legacy SSE proxying is
 also unavailable. This integration does not advertise those absent server features.
+
+Container cleanup polling also probes owned active sessions: a stopped/crashed container or
+failed MCP health check closes its tracked clients. Transport disconnect releases the active
+lease guard. Restarted containers can acquire a fresh session; stale clients are not reused.
+### Shared tool execution and connection recovery — 2026-09-09
+
+The published `Andy.Tools.Mcp` adapter (2026.9.9-rc.103 or later) supplies MCP tools through
+Andy.Tools' existing `IToolRegistry` and `IToolExecutor`, which Andy Engine already consumes.
+It supports full-schema input validation, structured/error payload retention, conservative
+permissions, manual/notification refresh and cancellation statistics. Registry filtering and
+executor running-call tracking use the existing framework interfaces.
+
+`McpClientOptions.AutoReconnect = true` now activates recovery after a connected server
+reports a transport disconnect. `ReconnectPolicy` bounds attempts and delays (fixed, linear,
+exponential, or exponential with jitter). A recovered client replaces the disconnected one;
+shared tool discovery observes the replacement. Explicit removal/disposal cancels and drains
+recovery, preventing removed servers from being recreated. Initial startup connection failures
+are logged; they do not silently turn a failed AddServerAsync into a later connection.
+The manager propagates caller cancellation during connection and discovery.
