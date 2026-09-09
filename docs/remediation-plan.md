@@ -158,3 +158,9 @@ all coverage gates and both API checks passed. Phase 7/8 release/compliance audi
 that prevented current MCP clients from initializing in Andy CLI. Migrated validation
 to 9.3.0 with local build registries and explicit Draft 2020-12 selection. Added
 repeated-schema-ID isolation coverage; ecosystem adapter acceptance remains open.
+
+2026-09-09: shared tool registry/executor adapter implementation merged in andy-tools#117
+with 1,126 passing tests across macOS, Linux and Windows, 35 MCP adapter regressions,
+and synchronized package publication. Implemented the current gateway registry client,
+name resolution and health-aware discovery; #20's obsolete adapter/proxy API requirements
+remain separate from the verified registry contract. No ecosystem epic is marked complete.

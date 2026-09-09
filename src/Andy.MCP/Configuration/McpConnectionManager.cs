@@ -145,7 +145,9 @@ public sealed class McpConnectionManager : IMcpConnectionManager
 
     private async Task ConnectServerAsync(McpServerConfig config, CancellationToken cancellationToken)
     {
-        var transport = CreateTransport(config);
+        var transport = config.Transport.Equals("gateway", StringComparison.OrdinalIgnoreCase)
+            ? await CreateGatewayTransportAsync(config, cancellationToken).ConfigureAwait(false)
+            : CreateTransport(config);
         var clientOptions = new Client.McpClientOptions
         {
             ClientInfo = _options.ToImplementation(),
@@ -159,6 +161,22 @@ public sealed class McpConnectionManager : IMcpConnectionManager
             await client.DisposeAsync();
             throw new InvalidOperationException($"Server '{config.Name}' is already connected.");
         }
+    }
+
+    private static async Task<IClientTransport> CreateGatewayTransportAsync(McpServerConfig config, CancellationToken ct)
+    {
+        using var http = new HttpClient();
+        var registry = new Gateway.McpGatewayClient(http, new Gateway.McpGatewayOptions
+        {
+            RegistryUri = new Uri(config.GatewayUrl ?? throw new InvalidOperationException("GatewayUrl is required."))
+        });
+        var entries = await registry.ListAsync(ct).ConfigureAwait(false);
+        var matches = entries.Where(entry => entry.Status == Gateway.GatewayStatus.Active
+            && string.Equals(entry.Name, config.AdapterName, StringComparison.Ordinal)).ToArray();
+        if (matches.Length != 1) throw new InvalidOperationException($"Expected one active gateway registration named '{config.AdapterName}', found {matches.Length}.");
+        var endpoint = new Uri(matches[0].Endpoint);
+        Gateway.McpGatewayClient.ValidateEndpoint(endpoint);
+        return new StreamableHttpClientTransport(new StreamableHttpClientTransportOptions { Endpoint = endpoint });
     }
 
     private static IClientTransport CreateTransport(McpServerConfig config)
@@ -176,7 +194,6 @@ public sealed class McpConnectionManager : IMcpConnectionManager
             {
                 Endpoint = new Uri(config.Url ?? throw new InvalidOperationException($"Server '{config.Name}': 'Url' is required for http transport.")),
             }),
-            "gateway" => throw new NotSupportedException($"Gateway transport not yet implemented. Server: '{config.Name}'"),
             _ => throw new InvalidOperationException($"Unknown transport type '{config.Transport}' for server '{config.Name}'.")
         };
     }
