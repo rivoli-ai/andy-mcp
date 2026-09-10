@@ -22,7 +22,7 @@ of 100% compliance. The [revision-specific matrix](compliance.md) is the status 
 | Experimental task lifecycle and task-capability advertisement | Implemented and verified; remains experimental in the protocol. See [task guide](tasks.md) |
 | Legacy 2024 HTTP+SSE; 2025-03-26 required batch reception | Explicit legacy client supported; automatic fallback and March batch reception unsupported |
 | Native AOT and trimming certification | Unsupported; [maintenance limitations](package-maintenance.md) |
-| Andy Engine, Gateway and Containers integration | #19/#21 complete; typed adapter/proxy client for #20 with gateway-side acceptance under #30 |
+| Andy Engine, Gateway and Containers integration | #19/#20/#21 complete; ecosystem #30 verified through shared adapters, real gateway proxies and container lifecycle tests |
 | MCP 2025-11-25 library compliance | Phase 7/8 audit complete: [dated acceptance record](implementation.md#phase-78-completion-audit--2026-09-09); supported revisions and host responsibilities remain explicit |
 
 All production source changes require .NET tests. Builds restore locked central NuGet

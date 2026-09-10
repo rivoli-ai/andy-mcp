@@ -192,3 +192,20 @@ image update policy and durable container TTL remain control-plane responsibilit
 proxy transport with bounded 401 refresh, explicit legacy SSE compatibility and proxy-aware
 connection discovery. Preserved registry-only behavior. Gateway-side contract and end-to-end
 acceptance are tracked in andy-mcp-gateway#29 before closing #20/#30.
+
+
+## Ecosystem completion — 2026-09-09
+
+- [x] Reviewed all #19 Engine acceptance, including shared adapters and actual SimpleAgent execution.
+- [x] Reviewed all #20 Gateway discovery, proxy, health, configuration, authentication and error tests.
+- [x] Reviewed all #21 Containers provisioning, lifecycle, health and cleanup acceptance.
+- [x] Verified #30 has no remaining child implementation dependency.
+
+MCP PR130 adds the adapter API client, authenticated proxy transport and explicit legacy SSE
+client. Gateway PR30 (andy-mcp-gateway#29) supplies the actual authenticated
+API and session-aware proxies; its 45 tests run against published library packages
+2026.9.10-rc.183. The MCP suite passes 2,936 tests with all critical coverage gates, three
+platforms, official interoperability, API compatibility and package validation. Prior Engine
+and Tools evidence remains 413 and 1,127 passing tests respectively. README and requirements
+now reflect the completed ecosystem scope. Historical dependency notes above describe earlier
+checkpoints and are superseded by this verification.
