@@ -36,6 +36,10 @@ public sealed record GatewaySearch
 public sealed class McpGatewayOptions
 {
     public required Uri RegistryUri { get; set; }
+    /// <summary>Use the authenticated adapter API and proxy instead of direct registry endpoints.</summary>
+    public bool UseAdapterProxy { get; set; }
+    /// <summary>Require a bearer credential for adapter API and proxy requests.</summary>
+    public bool RequireAuthentication { get; set; } = true;
     public TimeSpan RequestTimeout { get; set; } = TimeSpan.FromSeconds(30);
     public TimeSpan RefreshInterval { get; set; } = TimeSpan.FromSeconds(30);
     public TimeSpan MaximumCacheAge { get; set; } = TimeSpan.FromMinutes(2);
@@ -46,7 +50,7 @@ public sealed class McpGatewayOptions
 public sealed class McpGatewayException(HttpStatusCode status, string message) : HttpRequestException(message, null, status);
 
 /// <summary>Typed access to the current Andy gateway registry contract.</summary>
-public interface IMcpGatewayClient
+public partial interface IMcpGatewayClient
 {
     Task<IReadOnlyList<GatewayRegistration>> ListAsync(CancellationToken cancellationToken = default);
     Task<GatewayRegistration> GetAsync(string id, CancellationToken cancellationToken = default);
@@ -57,7 +61,7 @@ public interface IMcpGatewayClient
 }
 
 /// <summary>HTTP registry client. The supplied HttpClient remains owned by its caller.</summary>
-public sealed class McpGatewayClient : IMcpGatewayClient, IDisposable
+public sealed partial class McpGatewayClient : IMcpGatewayClient, IDisposable
 {
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
     private readonly HttpClient _http;
@@ -88,19 +92,21 @@ public sealed class McpGatewayClient : IMcpGatewayClient, IDisposable
     public async Task DeleteAsync(string id, CancellationToken cancellationToken = default) =>
         _ = await SendAsync<object>(HttpMethod.Delete, Segment(id), null, cancellationToken).ConfigureAwait(false);
 
-    private async Task<T> SendAsync<T>(HttpMethod method, string path, object? body, CancellationToken ct)
+    private async Task<T> SendAsync<T>(HttpMethod method, string path, object? body, CancellationToken ct, bool adapters = false)
     {
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
         timeout.CancelAfter(_options.RequestTimeout);
         for (var attempt = 0; ; attempt++)
         {
-            using var request = new HttpRequestMessage(method, new Uri(_endpoint, path));
+            using var request = new HttpRequestMessage(method, new Uri(adapters ? new Uri(_options.RegistryUri.AbsoluteUri.TrimEnd('/') + "/api/adapters/") : _endpoint, path));
             if (body is not null) request.Content = JsonContent.Create(body, options: Json);
             if (_options.TokenProvider is { } tokenProvider)
             {
                 var token = await tokenProvider(attempt > 0, timeout.Token).ConfigureAwait(false);
                 if (!string.IsNullOrEmpty(token)) request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
             }
+            if (adapters && _options.RequireAuthentication && request.Headers.Authorization is null && _http.DefaultRequestHeaders.Authorization is null)
+                throw new McpGatewayException(HttpStatusCode.Unauthorized, "No gateway bearer token configured.");
             using var response = await _http.SendAsync(request, timeout.Token).ConfigureAwait(false);
             if (response.StatusCode == HttpStatusCode.Unauthorized && attempt == 0 && _options.TokenProvider is not null) continue;
             if (!response.IsSuccessStatusCode)

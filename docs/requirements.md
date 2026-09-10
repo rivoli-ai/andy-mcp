@@ -20,9 +20,9 @@ of 100% compliance. The [revision-specific matrix](compliance.md) is the status 
 | Official schemas/examples, independent client/server interoperability, critical coverage | Implemented CI gates: [reproduction and thresholds](conformance.md) |
 | Dependency injection, hosted connections, tracing and attributes | Implemented: [configuration tests](../tests/Andy.MCP.Tests/Configuration), [attribute tests](../tests/Andy.MCP.Tests/Server/AttributeRegistrationTests.cs), [tracing tests](../tests/Andy.MCP.Tests/Protocol/McpDiagnosticsTests.cs) |
 | Experimental task lifecycle and task-capability advertisement | Implemented and verified; remains experimental in the protocol. See [task guide](tasks.md) |
-| Legacy 2024 HTTP+SSE; 2025-03-26 required batch reception | Unsupported; excluded from applicable transport negotiation |
+| Legacy 2024 HTTP+SSE; 2025-03-26 required batch reception | Explicit legacy client supported; automatic fallback and March batch reception unsupported |
 | Native AOT and trimming certification | Unsupported; [maintenance limitations](package-maintenance.md) |
-| Andy Engine, Gateway and Containers integration | Open P3 issues #19/#20/#21 under #30 |
+| Andy Engine, Gateway and Containers integration | #19/#21 complete; typed adapter/proxy client for #20 with gateway-side acceptance under #30 |
 | MCP 2025-11-25 library compliance | Phase 7/8 audit complete: [dated acceptance record](implementation.md#phase-78-completion-audit--2026-09-09); supported revisions and host responsibilities remain explicit |
 
 All production source changes require .NET tests. Builds restore locked central NuGet

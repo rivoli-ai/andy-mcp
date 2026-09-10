@@ -73,6 +73,9 @@ public sealed class McpServerConfig
     // Gateway options
     public string? GatewayUrl { get; set; }
     public string? AdapterName { get; set; }
+    [System.Text.Json.Serialization.JsonIgnore]
+    public Gateway.McpGatewayOptions? GatewayOptions { get; set; }
+    public Gateway.McpAdapterType GatewayAdapterType { get; set; } = Gateway.McpAdapterType.StreamableHttp;
 }
 
 /// <summary>

@@ -251,6 +251,8 @@ public sealed class McpConnectionManager : IMcpConnectionManager
 
     private static async Task<IClientTransport> CreateGatewayTransportAsync(McpServerConfig config, CancellationToken ct)
     {
+        if (config.GatewayOptions is { UseAdapterProxy: true } proxy)
+            return new Gateway.McpGatewayTransport(proxy, config.AdapterName ?? throw new InvalidOperationException("AdapterName is required."), config.GatewayAdapterType);
         using var http = new HttpClient();
         var registry = new Gateway.McpGatewayClient(http, new Gateway.McpGatewayOptions
         {

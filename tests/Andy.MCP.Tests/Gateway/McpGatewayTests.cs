@@ -39,10 +39,13 @@ public class McpGatewayTests
             if (paths.Count == 2) Assert.Equal("new", request.Headers.Authorization!.Parameter);
             if (request.Method == HttpMethod.Delete) return new(HttpStatusCode.NoContent);
             if (request.Content is not null) Assert.NotEmpty(await request.Content.ReadAsStringAsync(ct));
-            return new(HttpStatusCode.OK) { Content = JsonContent.Create(
+            return new(HttpStatusCode.OK)
+            {
+                Content = JsonContent.Create(
                 request.RequestUri!.AbsolutePath.EndsWith('/') || request.RequestUri.AbsolutePath.EndsWith("search")
                     ? (object)new[] { new GatewayRegistration { Id = "id", Name = "server" } }
-                    : new GatewayRegistration { Id = "id", Name = "server" }) };
+                    : new GatewayRegistration { Id = "id", Name = "server" })
+            };
         }));
         var options = new McpGatewayOptions { RegistryUri = new Uri("https://registry.example/base"), TokenProvider = (refresh, _) => { tokens.Add(refresh); return Task.FromResult<string?>(refresh ? "new" : "old"); } };
         var client = new McpGatewayClient(http, options);
@@ -91,7 +94,12 @@ public class McpGatewayTests
         await using var app = builder.Build();
         var registrations = new List<GatewayRegistration>();
         var registryAvailable = true;
-        app.MapGet("/api/GatewayRegistry/", () => registryAvailable ? Results.Json(registrations) : Results.StatusCode(503));
+        var registryStalled = false;
+        app.MapGet("/api/GatewayRegistry/", async (HttpContext context) =>
+        {
+            if (registryStalled) await Task.Delay(Timeout.Infinite, context.RequestAborted);
+            return registryAvailable ? Results.Json(registrations) : Results.StatusCode(503);
+        });
         app.Use(async (context, next) =>
         {
             if (context.Request.Path.StartsWithSegments("/mcp")) Assert.False(context.Request.Headers.ContainsKey("Authorization"));
@@ -112,6 +120,12 @@ public class McpGatewayTests
         Assert.Single(await client.ListToolsAsync(timeout.Token));
         Assert.Equal("gateway result", ((TextContent)(await client.CallToolAsync("echo", ct: timeout.Token)).Content[0]).Text);
         Assert.True(await McpGatewayClient.CheckHealthAsync(registrations[0], TimeSpan.FromSeconds(3), timeout.Token));
+        registryStalled = true;
+        options.RequestTimeout = TimeSpan.FromMilliseconds(150);
+        await discovery.RefreshAsync(timeout.Token);
+        Assert.Same(client, manager.GetClient("gateway:one"));
+        registryStalled = false;
+        options.RequestTimeout = TimeSpan.FromSeconds(30);
         registryAvailable = false;
         await discovery.RefreshAsync(timeout.Token);
         Assert.Same(client, manager.GetClient("gateway:one"));

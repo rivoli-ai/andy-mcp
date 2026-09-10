@@ -5,7 +5,7 @@
 | 2025-11-25 | Supported | Supported |
 | 2025-06-18 | Supported | Supported |
 | 2025-03-26 | Unsupported: mandatory batching is not implemented | Unsupported: mandatory batching is not implemented |
-| 2024-11-05 | Supported | Unsupported; legacy HTTP+SSE fallback is not implemented |
+| 2024-11-05 | Supported | Unsupported by Streamable HTTP; use the explicit legacy client transport |
 
 The [March 2025 batching requirement](https://modelcontextprotocol.io/specification/2025-03-26/basic#batching)
 is not implemented. That revision remains a known serialization descriptor but is excluded from
@@ -54,3 +54,11 @@ old-handler cancellation and deadlines. `HttpBoundedSessionTests`, `SseReplayTes
 `StdioFramingTests`, `StdioShutdownTests` and `StdioServerTransportTests` cover framing, graceful
 shutdown and malformed input. The suite runs on Linux, Windows and macOS in CI. Independent official SDK client/server
 checks also cover stdio and both HTTP response modes; see [conformance gates](conformance.md).
+
+## Explicit legacy SSE compatibility
+
+`LegacySseClientTransport` implements the 2024 HTTP+SSE endpoint/message pattern. It accepts
+only message endpoints on the configured SSE origin, bounds initial connection and POST
+requests, and closes on stream failure. It does not automatically replay or reconnect requests.
+`McpGatewayTransport` selects it for `McpAdapterType.Sse` and adds gateway authentication.
+This is a client compatibility surface, separate from the ASP.NET Core Streamable HTTP server.
