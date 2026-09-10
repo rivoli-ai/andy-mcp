@@ -13,7 +13,7 @@ This audit does not reclassify the upstream protocol or turn a NuGet prerelease 
 |---|---|---|---|
 | 2025-11-25 | Supported; default | Supported | [Complete schema corpus](../tests/Andy.MCP.Tests/Conformance/CompleteProtocolSchemaTests.cs), [real HTTP matrix](../tests/Andy.MCP.Tests/Transport/HttpRevisionIntegrationTests.cs) |
 | 2025-06-18 | Supported | Supported | [Schema corpus](../tests/Andy.MCP.Tests/Conformance/CompleteProtocolSchemaTests.cs) and [HTTP matrix](../tests/Andy.MCP.Tests/Transport/HttpRevisionIntegrationTests.cs); newer fields are removed or rejected |
-| 2024-11-05 | Supported | Unsupported | [Revision replies](../tests/Andy.MCP.Tests/Client/ClientRevisionReplyTests.cs); legacy HTTP+SSE is absent |
+| 2024-11-05 | Supported | Unsupported | [Revision replies](../tests/Andy.MCP.Tests/Client/ClientRevisionReplyTests.cs); explicit legacy HTTP+SSE client is separate from Streamable HTTP |
 | 2025-03-26 | Unsupported | Unsupported | Receiving batches is mandatory in this revision and absent; its descriptor is retained only for conversion/audit |
 
 Every definition in the three negotiated revisions is exercised against frozen official
@@ -63,7 +63,9 @@ under that revision; unknown vendor extension data is retained independently.
 | Bounded queues, overload, session expiry and coordinated recovery | Stable; expired in-flight outcomes are not replayed | [HttpBoundedSessionTests](../tests/Andy.MCP.Tests/Transport/HttpBoundedSessionTests.cs), [HttpSessionRecoveryTests](../tests/Andy.MCP.Tests/Transport/HttpSessionRecoveryTests.cs) |
 
 See [transport behavior](transports.md) for headers, queue limits, replay, recovery and
-unknown-outcome handling. Neither legacy HTTP+SSE fallback nor JSON-RPC batches are implemented.
+unknown-outcome handling. Automatic legacy HTTP+SSE fallback and JSON-RPC batches are not implemented.
+An explicit `LegacySseClientTransport` supports compatibility endpoints, with origin checks
+and bounded connection waits verified in [LegacySseClientTests](../tests/Andy.MCP.Tests/Gateway/LegacySseClientTests.cs).
 
 ## Security
 

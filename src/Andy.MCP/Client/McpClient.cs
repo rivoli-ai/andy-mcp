@@ -169,6 +169,7 @@ public sealed class McpClient : IAsyncDisposable
         await _transport.ConnectAsync(_cts.Token);
         _transport.Disconnected += OnTransportDisconnected;
         if (_transport is StreamableHttpClientTransport http) http.SessionReinitialized += OnSessionReinitialized;
+        if (_transport is Gateway.McpGatewayTransport gateway) gateway.SessionReinitialized += OnSessionReinitialized;
 
         _session.Transition(McpSessionState.Initializing);
 
@@ -994,6 +995,7 @@ public sealed class McpClient : IAsyncDisposable
             _options.RootProvider.RootsChanged -= _rootsChangedHandler;
 
         if (_transport is StreamableHttpClientTransport http) http.SessionReinitialized -= OnSessionReinitialized;
+        if (_transport is Gateway.McpGatewayTransport gateway) gateway.SessionReinitialized -= OnSessionReinitialized;
         _tracker.CancelAll("Client disposing");
         _cts?.Cancel();
 

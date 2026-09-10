@@ -187,3 +187,8 @@ preserved protocol-experimental tasks, unsupported legacy transports and host re
 idle scale-down, unhealthy idle replacement, fresh MCP sessions on lease return and hosted
 shutdown cleanup. Tests exercise the pool through real MCP client/server sessions; catalog
 image update policy and durable container TTL remain control-plane responsibilities.
+
+2026-09-09: implemented typed gateway adapter CRUD/discovery/health/import/export, authenticated
+proxy transport with bounded 401 refresh, explicit legacy SSE compatibility and proxy-aware
+connection discovery. Preserved registry-only behavior. Gateway-side contract and end-to-end
+acceptance are tracked in andy-mcp-gateway#29 before closing #20/#30.

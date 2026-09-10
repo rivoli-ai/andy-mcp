@@ -4,7 +4,7 @@
 
 ## Overview
 
-Andy.MCP is a .NET 10 library implementing the [Model Context Protocol](https://modelcontextprotocol.io/) (MCP). It negotiates **2025-11-25** (the latest revision) by default and negotiates down to 2025-06-18 and 2024-11-05 over stdio. Streamable HTTP supports 2025-11-25 and 2025-06-18. Legacy 2024-11-05 HTTP+SSE and the mandatory JSON-RPC batching in 2025-03-26 are not implemented; those revisions are not offered by the applicable transport. It provides both client and server capabilities for building MCP-compatible applications.
+Andy.MCP is a .NET 10 library implementing the [Model Context Protocol](https://modelcontextprotocol.io/) (MCP). It negotiates **2025-11-25** (the library’s default revision) by default and negotiates down to 2025-06-18 and 2024-11-05 over stdio. Streamable HTTP supports 2025-11-25 and 2025-06-18. Legacy HTTP+SSE is available through an explicit compatibility client transport; automatic HTTP fallback and the mandatory JSON-RPC batching in 2025-03-26 are not implemented. It provides both client and server capabilities for building MCP-compatible applications.
 
 Feature support is granular (stable / experimental / partial) and documented with test evidence in the **[compliance matrix](docs/compliance.md)** — please read it before relying on any specific capability.
 
@@ -220,8 +220,8 @@ store recreation. Tasks remain experimental in the MCP specification.
 **Phase 7/8 library compliance audit completed on 2026-09-09.** All child implementations
 are merged, supported capabilities/revisions have linked conformance evidence, and release
 requires same-commit platform, interoperability, coverage, security, API and package gates.
-Ecosystem integration (#19/#20/#21/#30) remains independently tracked. Legacy HTTP+SSE and
-March 2025 batch reception are unsupported; experimental tasks retain their upstream status.
+Engine and container integration (#19/#21) are complete; gateway/epic acceptance (#20/#30)
+is tracked independently. Automatic legacy HTTP fallback and March 2025 batch reception are unsupported; experimental tasks retain their upstream status.
 See [migration/API guidance](docs/high-level-apis.md), [HTTP security](docs/http-security.md),
 [OAuth examples](docs/oauth.md) and [runtime maintenance](docs/package-maintenance.md).
 
@@ -300,9 +300,34 @@ Import `Andy.MCP.Configuration` and `Andy.MCP.Gateway`. Discovery registers conn
 one active registration at startup. MCP connections use the registered endpoint directly;
 registry credentials are never forwarded to it. Configure endpoint authentication separately.
 
-The current gateway repository is a registry, without the `/api/adapters` management or
-`/adapters/{name}/mcp` proxy routes originally described in #20. Legacy SSE proxying is
-also unavailable. This integration does not advertise those absent server features.
+### Gateway adapter proxy — 2026-09-09
+
+The typed client also supports `/api/adapters` list/enabled/name/search, CRUD, individual and
+bulk health checks, reload, export and import. Set `UseAdapterProxy = true` to discover
+healthy enabled adapters through the proxy instead of connecting to upstream URLs. The gateway
+must expose this adapter contract (andy-mcp-gateway#29); existing registry-only installations
+continue to use the default mode.
+
+```csharp
+services.AddMcpGateway(new McpGatewayOptions
+{
+    RegistryUri = new Uri("https://gateway.example"),
+    UseAdapterProxy = true,
+    TokenProvider = (refresh, ct) => tokenSource.GetAccessTokenAsync(refresh, ct)
+});
+services.AddMcpGatewayDiscovery();
+```
+
+`McpGatewayTransport` targets `/adapters/{name}/mcp` or, for `McpAdapterType.Sse`,
+`/adapters/{name}/sse`. Gateway credentials are required by default and refreshed once after
+401; caller cancellation and request deadlines are honored. Registry mode retains its
+optional authentication behavior. Gateways distinguish user access from administrator-only
+configuration/export operations. Never configure a gateway token as an upstream credential.
+
+`LegacySseClientTransport` supports the older SSE endpoint event plus message POST pattern.
+It rejects message endpoints on another origin and closes on stream failure; it does not
+silently fall back from Streamable HTTP or replay tool calls. Use explicit transport selection
+and connection-manager recovery when compatibility with older servers is required.
 
 Container cleanup polling also probes owned active sessions: a stopped/crashed container or
 failed MCP health check closes its tracked clients. Transport disconnect releases the active

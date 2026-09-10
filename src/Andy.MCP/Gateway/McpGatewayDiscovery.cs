@@ -39,11 +39,26 @@ public sealed class McpGatewayDiscovery : BackgroundService
             IReadOnlyList<GatewayRegistration> entries;
             try
             {
-                entries = await _registry.ListAsync(cancellationToken).ConfigureAwait(false);
+                if (_options.UseAdapterProxy)
+                {
+                    await _registry.CheckAdaptersHealthAsync(cancellationToken).ConfigureAwait(false);
+                    var adapters = await _registry.ListAdaptersAsync(cancellationToken).ConfigureAwait(false);
+                    entries = adapters.Adapters.Select(a => new GatewayRegistration
+                    {
+                        Id = a.Id.ToString(),
+                        Name = a.Name,
+                        Endpoint = McpGatewayTransport.GetProxyEndpoint(_options.RegistryUri, a.Name, a.Type).AbsoluteUri,
+                        Status = a.Enabled && a.IsHealthy ? GatewayStatus.Active : GatewayStatus.Inactive,
+                        Version = a.Revision.ToString(),
+                        Metadata = new() { ["adapterType"] = ((int)a.Type).ToString() }
+                    }).ToArray();
+                }
+                else entries = await _registry.ListAsync(cancellationToken).ConfigureAwait(false);
                 _cache = entries;
                 _cachedAt = DateTimeOffset.UtcNow;
             }
-            catch (HttpRequestException ex) when (ex.StatusCode is null || (int)ex.StatusCode >= 500)
+            catch (Exception ex) when ((ex is HttpRequestException httpError && (httpError.StatusCode is null || (int)httpError.StatusCode >= 500))
+                || (ex is OperationCanceledException && !cancellationToken.IsCancellationRequested))
             {
                 _logger.LogWarning(ex, "Gateway registry unavailable; using bounded discovery cache.");
                 entries = _cache is not null && DateTimeOffset.UtcNow - _cachedAt <= _options.MaximumCacheAge ? _cache : [];
@@ -63,7 +78,7 @@ public sealed class McpGatewayDiscovery : BackgroundService
                     if (_owned.TryGetValue(name, out var previous))
                     {
                         if (!ReferenceEquals(_manager.GetClient(name), previous.Client)) _owned.Remove(name);
-                        else if (previous.Endpoint != entry.Endpoint) await RemoveAsync(name).ConfigureAwait(false);
+                        else if (previous.Endpoint != entry.Endpoint + "|" + entry.Version) await RemoveAsync(name).ConfigureAwait(false);
                         else
                         {
                             await previous.Client.PingAsync(timeout.Token).ConfigureAwait(false);
@@ -72,9 +87,18 @@ public sealed class McpGatewayDiscovery : BackgroundService
                     }
                     // This service only disconnects clients that it created.
                     if (_manager.GetClient(name) is not null) continue;
-                    await _manager.AddServerAsync(new McpServerConfig { Name = name, Transport = "http", Url = entry.Endpoint }, timeout.Token).ConfigureAwait(false);
+                    await _manager.AddServerAsync(new McpServerConfig
+                    {
+                        Name = name,
+                        Transport = _options.UseAdapterProxy ? "gateway" : "http",
+                        Url = entry.Endpoint,
+                        GatewayUrl = _options.RegistryUri.AbsoluteUri,
+                        AdapterName = entry.Name,
+                        GatewayOptions = _options,
+                        GatewayAdapterType = entry.Metadata.TryGetValue("adapterType", out var type) ? (McpAdapterType)int.Parse(type) : McpAdapterType.StreamableHttp
+                    }, timeout.Token).ConfigureAwait(false);
                     var client = _manager.GetClient(name) ?? throw new InvalidOperationException("Connection manager did not retain the new client.");
-                    _owned.Add(name, (entry.Endpoint, client));
+                    _owned.Add(name, (entry.Endpoint + "|" + entry.Version, client));
                     await client.PingAsync(timeout.Token).ConfigureAwait(false);
                 }
                 catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { throw; }
@@ -126,6 +150,15 @@ public sealed class McpGatewayDiscovery : BackgroundService
 
 public static class McpGatewayServiceCollectionExtensions
 {
+    /// <summary>Adds a gateway client with an explicit base URI and options configuration.</summary>
+    public static IServiceCollection AddMcpGateway(this IServiceCollection services, Uri gatewayUri,
+        Action<McpGatewayOptions> configure, Func<IServiceProvider, HttpClient>? httpClientFactory = null)
+    {
+        var options = new McpGatewayOptions { RegistryUri = gatewayUri };
+        configure(options);
+        return services.AddMcpGateway(options, httpClientFactory);
+    }
+
     /// <summary>Adds a registry client. Customize its HttpClient for registry-specific authentication.</summary>
     public static IServiceCollection AddMcpGateway(this IServiceCollection services, McpGatewayOptions options,
         Func<IServiceProvider, HttpClient>? httpClientFactory = null)
