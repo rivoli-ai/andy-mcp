@@ -220,8 +220,8 @@ store recreation. Tasks remain experimental in the MCP specification.
 **Phase 7/8 library compliance audit completed on 2026-09-09.** All child implementations
 are merged, supported capabilities/revisions have linked conformance evidence, and release
 requires same-commit platform, interoperability, coverage, security, API and package gates.
-Engine and container integration (#19/#21) are complete; gateway/epic acceptance (#20/#30)
-is tracked independently. Automatic legacy HTTP fallback and March 2025 batch reception are unsupported; experimental tasks retain their upstream status.
+Engine, gateway and container integration (#19/#20/#21), including ecosystem epic #30,
+are complete. The gateway adapter API and both proxy transports are verified against the published library. Automatic legacy HTTP fallback and March 2025 batch reception are unsupported; experimental tasks retain their upstream status.
 See [migration/API guidance](docs/high-level-apis.md), [HTTP security](docs/http-security.md),
 [OAuth examples](docs/oauth.md) and [runtime maintenance](docs/package-maintenance.md).
 
@@ -269,7 +269,7 @@ services.AddContainerMcpPool(new ContainerMcpPoolOptions
 });
 // Start the host, then resolve ContainerMcpPool from its services.
 await using var lease = await pool.RentAsync(cancellationToken);
-var result = await lease.Client.CallToolAsync("echo", cancellationToken: cancellationToken);
+var result = await lease.Client.CallToolAsync("echo", ct: cancellationToken);
 ```
 
 Image rebuild policy belongs to the Andy Containers template catalog. Its dependency records
@@ -305,8 +305,9 @@ registry credentials are never forwarded to it. Configure endpoint authenticatio
 The typed client also supports `/api/adapters` list/enabled/name/search, CRUD, individual and
 bulk health checks, reload, export and import. Set `UseAdapterProxy = true` to discover
 healthy enabled adapters through the proxy instead of connecting to upstream URLs. The gateway
-must expose this adapter contract (andy-mcp-gateway#29); existing registry-only installations
-continue to use the default mode.
+exposes this adapter contract through its adapter integration
+([gateway PR30](https://github.com/rivoli-ai/andy-mcp-gateway/pull/30)); existing registry-only
+installations continue to use the default mode.
 
 ```csharp
 services.AddMcpGateway(new McpGatewayOptions
@@ -347,3 +348,16 @@ shared tool discovery observes the replacement. Explicit removal/disposal cancel
 recovery, preventing removed servers from being recreated. Initial startup connection failures
 are logged; they do not silently turn a failed AddServerAsync into a later connection.
 The manager propagates caller cancellation during connection and discovery.
+
+### Ecosystem integration completion — 2026-09-09
+
+- [x] Engine: shared `Andy.Tools.Mcp` adapters and real SimpleAgent tool execution (#19).
+- [x] Gateway: authenticated adapter management, Streamable HTTP/legacy SSE proxies,
+  session ownership and health-driven discovery recovery (#20).
+- [x] Containers: provisioning, lifecycle health, reconnect and bounded warm pools (#21).
+
+MCP PR130 passed 2,936 tests and the platform, interoperability, coverage, security,
+API and package gates. Gateway acceptance uses published `Andy.MCP` and
+`Andy.MCP.AspNetCore` 2026.9.10-rc.183 and 45 real-server/unit tests. Gateway authentication
+requires a configured Azure AD/Andy Auth authority; in-memory sessions require sticky routing
+across replicas. See the gateway [operator guide](https://github.com/rivoli-ai/andy-mcp-gateway/blob/main/docs/mcp-adapters.md).
